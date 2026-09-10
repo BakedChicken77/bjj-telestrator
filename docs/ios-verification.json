@@ -1,0 +1,47 @@
+{
+  "applicationVersion": "1.1.0",
+  "checkedOn": "2026-09-10",
+  "desktopWindows": {
+    "status": "user_reported_pass",
+    "platform": "Windows 11 / Docker Desktop"
+  },
+  "backend": {
+    "passed": 74,
+    "runner": "Pytest, including actual FFmpeg exports"
+  },
+  "frontend": {
+    "passed": 60,
+    "files": 8,
+    "runner": "Vitest; bridge mocks limited to contract/unit tests"
+  },
+  "browser": {
+    "passed": 9,
+    "engine": "Chromium 149 / Playwright 1.63.0",
+    "media": "actual FFmpeg/MediaRecorder/Web Audio",
+    "nativeIOS": false
+  },
+  "quality": [
+    "Ruff",
+    "ESLint",
+    "strict TypeScript",
+    "Prettier",
+    "Vite production build",
+    "Capacitor iOS sync"
+  ],
+  "nativeProject": {
+    "swiftFilesSyntaxParsed": 11,
+    "openStepObjects": 65,
+    "plistAndSchemeChecks": "passed",
+    "sdkCompilation": "not_run_no_macOS_Xcode",
+    "xctestMethodsAuthored": 9,
+    "xctestResult": "not_run",
+    "signedIPA": false,
+    "physicalIPhone": "not_run"
+  },
+  "limits": [
+    "Native iOS implementation requires an actual Xcode build and simulator/device acceptance before use.",
+    "No signed installable iPhone binary was produced.",
+    "Touch browser tests use the desktop backend, not the native Swift renderer.",
+    "Long-video iPhone performance is not benchmarked."
+  ]
+}

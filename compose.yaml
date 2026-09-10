@@ -1,0 +1,19 @@
+services:
+  app:
+    build: .
+    ports:
+      - "127.0.0.1:${BJJ_PORT:-8000}:8000"
+    environment:
+      BJJ_DATA_DIR: /data
+      BJJ_FRONTEND_DIR: /app/frontend/dist
+      BJJ_MAX_UPLOAD_BYTES: ${BJJ_MAX_UPLOAD_BYTES:-4294967296}
+      BJJ_MAX_VOICEOVER_BYTES: ${BJJ_MAX_VOICEOVER_BYTES:-536870912}
+      BJJ_FFMPEG_THREADS: ${BJJ_FFMPEG_THREADS:-2}
+    volumes:
+      - bjj-projects:/data
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+
+volumes:
+  bjj-projects:

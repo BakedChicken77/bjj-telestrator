@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "projectId": "00000000-0000-4000-8000-000000000001",
+  "projectName": "Guard retention review",
+  "createdAt": "2026-09-05T12:00:00Z",
+  "updatedAt": "2026-09-05T12:00:00Z",
+  "source": {
+    "asset": "source/00000000-0000-4000-8000-000000000002.mp4",
+    "videoStartSec": 0.0,
+    "videoStreamIndex": 0,
+    "audioStreamIndex": null,
+    "originalFilename": "rolling.mp4",
+    "durationSec": 20.0,
+    "codec": "h264",
+    "audioCodec": "aac",
+    "hasAudio": true,
+    "codedWidth": 1920,
+    "codedHeight": 1080,
+    "displayWidth": 1920,
+    "displayHeight": 1080,
+    "sampleAspectRatio": "1:1",
+    "displayAspectRatio": "16:9",
+    "rotation": 0.0,
+    "avgFrameRate": 30.0
+  },
+  "proxy": {
+    "asset": "proxy/00000000-0000-4000-8000-000000000003.mp4",
+    "videoStartSec": 0.0,
+    "videoStreamIndex": 0,
+    "audioStreamIndex": null,
+    "originalFilename": "rolling.mp4",
+    "durationSec": 20.0,
+    "codec": "h264",
+    "audioCodec": "aac",
+    "hasAudio": true,
+    "codedWidth": 1920,
+    "codedHeight": 1080,
+    "displayWidth": 1920,
+    "displayHeight": 1080,
+    "sampleAspectRatio": "1:1",
+    "displayAspectRatio": "16:9",
+    "rotation": 0.0,
+    "avgFrameRate": 30.0
+  },
+  "settings": {
+    "defaultAnnotationDuration": 5.0,
+    "seekStepSec": 0.1,
+    "largeSeekStepSec": 1.0,
+    "originalAudioGain": 1.0,
+    "originalAudioMuted": false,
+    "voiceoverMasterGain": 1.0
+  },
+  "exportSettings": {
+    "fps": 30.0,
+    "crf": 18,
+    "preset": "medium"
+  },
+  "annotations": [
+    {
+      "id": "00000000-0000-4000-8000-000000000004",
+      "startSec": 5.0,
+      "endSec": 10.0,
+      "zIndex": 1,
+      "strokeColor": "#ff3333",
+      "strokeWidth": 0.006,
+      "strokeOpacity": 1.0,
+      "fillColor": "#ff3333",
+      "fillOpacity": 0.0,
+      "createdAt": "2026-09-05T12:00:00Z",
+      "updatedAt": "2026-09-05T12:00:00Z",
+      "type": "arrow",
+      "geometry": {
+        "x1": 0.25,
+        "y1": 0.5,
+        "x2": 0.75,
+        "y2": 0.5,
+        "arrowheadSize": 0.025
+      }
+    }
+  ],
+  "voiceovers": []
+}

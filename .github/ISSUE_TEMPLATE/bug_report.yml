@@ -1,0 +1,29 @@
+name: Bug report
+description: Report a reproducible editor, media or export failure.
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Application version or commit
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options: [Windows Docker, Desktop development, iPhone, iOS Simulator, GitHub Actions]
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps, expected result and actual result
+      description: Include source codec, orientation and relevant annotation times. Avoid private footage.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs and test evidence
+      description: Remove secrets, signing information and personal file paths before attaching logs.

@@ -1,0 +1,100 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fixture } from './testFixtures';
+
+const harness = vi.hoisted(() => ({
+  native: false,
+  plugin: {
+    listProjects: vi.fn(),
+    getProject: vi.fn(),
+    importVideo: vi.fn(),
+    saveProject: vi.fn(),
+    deleteProject: vi.fn(),
+    getAssetURL: vi.fn(),
+    listExports: vi.fn(),
+    createExport: vi.fn(),
+    getExport: vi.fn(),
+    cancelExport: vi.fn(),
+    stopRecording: vi.fn(),
+  },
+}));
+vi.mock('@capacitor/core', () => ({
+  Capacitor: {
+    isNativePlatform: () => harness.native,
+    getPlatform: () => (harness.native ? 'ios' : 'web'),
+    convertFileSrc: (url: string) => url,
+  },
+  registerPlugin: () => harness.plugin,
+}));
+import { api } from './api';
+import { mediaURL, nativeAPI, voiceoverURL } from './native';
+
+beforeEach(() => {
+  harness.native = false;
+  vi.clearAllMocks();
+  vi.unstubAllGlobals();
+});
+
+describe('desktop / standalone iPhone API routing', () => {
+  it('keeps browser media on the desktop HTTP routes', async () => {
+    expect(await mediaURL('example')).toBe('/api/projects/example/video');
+    expect(await voiceoverURL('example', 'clip')).toBe(
+      '/api/projects/example/voiceovers/clip/audio',
+    );
+    expect(harness.plugin.getAssetURL).not.toHaveBeenCalled();
+  });
+  it('loads and validates a native project without an HTTP server', async () => {
+    harness.native = true;
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    harness.plugin.getProject.mockResolvedValue({ project: fixture() });
+    expect((await api.project(fixture().projectId)).projectId).toBe(fixture().projectId);
+    expect(harness.plugin.getProject).toHaveBeenCalledWith({ projectId: fixture().projectId });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it('rejects invalid native data before it enters the editor', async () => {
+    harness.native = true;
+    harness.plugin.getProject.mockResolvedValue({ project: { ...fixture(), schemaVersion: 9 } });
+    await expect(api.project(fixture().projectId)).rejects.toThrow();
+  });
+  it('validates edits before calling native storage', async () => {
+    harness.native = true;
+    await expect(api.save({ ...fixture(), projectName: '' })).rejects.toThrow();
+    expect(harness.plugin.saveProject).not.toHaveBeenCalled();
+  });
+  it('treats cancelled Photos selection as a normal cancellation', async () => {
+    harness.plugin.importVideo.mockResolvedValue({ cancelled: true });
+    expect(await nativeAPI.importVideo('photos')).toBeNull();
+    expect(harness.plugin.importVideo).toHaveBeenCalledWith({ source: 'photos' });
+  });
+  it('retrieves media URLs through UUID references and caches duplicate requests', async () => {
+    harness.native = true;
+    const id = '11111111-1111-4111-8111-123456789abc';
+    harness.plugin.getAssetURL.mockResolvedValue({
+      url: `capacitor://localhost/bjj-media/${id}/video.mp4`,
+    });
+    const [first, second] = await Promise.all([mediaURL(id), mediaURL(id)]);
+    expect(first).toBe(second);
+    expect(harness.plugin.getAssetURL).toHaveBeenCalledTimes(1);
+    expect(harness.plugin.getAssetURL).toHaveBeenCalledWith({
+      projectId: id,
+      kind: 'video',
+      clipId: undefined,
+    });
+  });
+  it('retries an asset lookup after a transient native error', async () => {
+    harness.native = true;
+    harness.plugin.getAssetURL
+      .mockRejectedValueOnce(new Error('locked'))
+      .mockResolvedValueOnce({ url: 'capacitor://localhost/bjj-media/retry/video.mp4' });
+    await expect(mediaURL('retry')).rejects.toThrow('locked');
+    await expect(mediaURL('retry')).resolves.toContain('retry/video.mp4');
+  });
+  it('returns native export progress and cancellation without HTTP calls', async () => {
+    harness.native = true;
+    const job = { jobId: 'job', status: 'queued' };
+    harness.plugin.createExport.mockResolvedValue({ job });
+    expect(await api.export('project')).toEqual(job);
+    harness.plugin.cancelExport.mockResolvedValue({ job: { ...job, status: 'cancelled' } });
+    expect((await api.cancelExport('job')).status).toBe('cancelled');
+  });
+});

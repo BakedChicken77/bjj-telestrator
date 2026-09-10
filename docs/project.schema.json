@@ -1,0 +1,1166 @@
+{
+  "$defs": {
+    "Arrow": {
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "startSec": {
+          "minimum": 0,
+          "title": "Startsec",
+          "type": "number"
+        },
+        "endSec": {
+          "exclusiveMinimum": 0,
+          "title": "Endsec",
+          "type": "number"
+        },
+        "zIndex": {
+          "maximum": 100000,
+          "minimum": 0,
+          "title": "Zindex",
+          "type": "integer"
+        },
+        "strokeColor": {
+          "default": "#ff3333",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "title": "Strokecolor",
+          "type": "string"
+        },
+        "strokeWidth": {
+          "default": 0.006,
+          "exclusiveMinimum": 0,
+          "maximum": 0.1,
+          "title": "Strokewidth",
+          "type": "number"
+        },
+        "strokeOpacity": {
+          "default": 1,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Strokeopacity",
+          "type": "number"
+        },
+        "fillColor": {
+          "default": "#ff3333",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "title": "Fillcolor",
+          "type": "string"
+        },
+        "fillOpacity": {
+          "default": 0,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Fillopacity",
+          "type": "number"
+        },
+        "createdAt": {
+          "title": "Createdat",
+          "type": "string"
+        },
+        "updatedAt": {
+          "title": "Updatedat",
+          "type": "string"
+        },
+        "type": {
+          "const": "arrow",
+          "title": "Type",
+          "type": "string"
+        },
+        "geometry": {
+          "$ref": "#/$defs/ArrowGeometry"
+        }
+      },
+      "required": [
+        "id",
+        "startSec",
+        "endSec",
+        "zIndex",
+        "createdAt",
+        "updatedAt",
+        "type",
+        "geometry"
+      ],
+      "title": "Arrow",
+      "type": "object"
+    },
+    "ArrowGeometry": {
+      "additionalProperties": true,
+      "properties": {
+        "x1": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "X1",
+          "type": "number"
+        },
+        "y1": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Y1",
+          "type": "number"
+        },
+        "x2": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "X2",
+          "type": "number"
+        },
+        "y2": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Y2",
+          "type": "number"
+        },
+        "arrowheadSize": {
+          "default": 0.025,
+          "exclusiveMinimum": 0,
+          "maximum": 0.5,
+          "title": "Arrowheadsize",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x1",
+        "y1",
+        "x2",
+        "y2"
+      ],
+      "title": "ArrowGeometry",
+      "type": "object"
+    },
+    "Ellipse": {
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "startSec": {
+          "minimum": 0,
+          "title": "Startsec",
+          "type": "number"
+        },
+        "endSec": {
+          "exclusiveMinimum": 0,
+          "title": "Endsec",
+          "type": "number"
+        },
+        "zIndex": {
+          "maximum": 100000,
+          "minimum": 0,
+          "title": "Zindex",
+          "type": "integer"
+        },
+        "strokeColor": {
+          "default": "#ff3333",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "title": "Strokecolor",
+          "type": "string"
+        },
+        "strokeWidth": {
+          "default": 0.006,
+          "exclusiveMinimum": 0,
+          "maximum": 0.1,
+          "title": "Strokewidth",
+          "type": "number"
+        },
+        "strokeOpacity": {
+          "default": 1,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Strokeopacity",
+          "type": "number"
+        },
+        "fillColor": {
+          "default": "#ff3333",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "title": "Fillcolor",
+          "type": "string"
+        },
+        "fillOpacity": {
+          "default": 0,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Fillopacity",
+          "type": "number"
+        },
+        "createdAt": {
+          "title": "Createdat",
+          "type": "string"
+        },
+        "updatedAt": {
+          "title": "Updatedat",
+          "type": "string"
+        },
+        "type": {
+          "const": "ellipse",
+          "title": "Type",
+          "type": "string"
+        },
+        "geometry": {
+          "$ref": "#/$defs/EllipseGeometry"
+        }
+      },
+      "required": [
+        "id",
+        "startSec",
+        "endSec",
+        "zIndex",
+        "createdAt",
+        "updatedAt",
+        "type",
+        "geometry"
+      ],
+      "title": "Ellipse",
+      "type": "object"
+    },
+    "EllipseGeometry": {
+      "additionalProperties": true,
+      "properties": {
+        "centerX": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Centerx",
+          "type": "number"
+        },
+        "centerY": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Centery",
+          "type": "number"
+        },
+        "radiusX": {
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Radiusx",
+          "type": "number"
+        },
+        "radiusY": {
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Radiusy",
+          "type": "number"
+        }
+      },
+      "required": [
+        "centerX",
+        "centerY",
+        "radiusX",
+        "radiusY"
+      ],
+      "title": "EllipseGeometry",
+      "type": "object"
+    },
+    "ExportSettings": {
+      "additionalProperties": true,
+      "properties": {
+        "fps": {
+          "default": 30,
+          "exclusiveMinimum": 0,
+          "maximum": 120,
+          "title": "Fps",
+          "type": "number"
+        },
+        "crf": {
+          "default": 18,
+          "maximum": 40,
+          "minimum": 0,
+          "title": "Crf",
+          "type": "integer"
+        },
+        "preset": {
+          "default": "medium",
+          "enum": [
+            "ultrafast",
+            "superfast",
+            "veryfast",
+            "faster",
+            "fast",
+            "medium",
+            "slow",
+            "slower",
+            "veryslow"
+          ],
+          "title": "Preset",
+          "type": "string"
+        }
+      },
+      "title": "ExportSettings",
+      "type": "object"
+    },
+    "Freehand": {
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "startSec": {
+          "minimum": 0,
+          "title": "Startsec",
+          "type": "number"
+        },
+        "endSec": {
+          "exclusiveMinimum": 0,
+          "title": "Endsec",
+          "type": "number"
+        },
+        "zIndex": {
+          "maximum": 100000,
+          "minimum": 0,
+          "title": "Zindex",
+          "type": "integer"
+        },
+        "strokeColor": {
+          "default": "#ff3333",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "title": "Strokecolor",
+          "type": "string"
+        },
+        "strokeWidth": {
+          "default": 0.006,
+          "exclusiveMinimum": 0,
+          "maximum": 0.1,
+          "title": "Strokewidth",
+          "type": "number"
+        },
+        "strokeOpacity": {
+          "default": 1,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Strokeopacity",
+          "type": "number"
+        },
+        "fillColor": {
+          "default": "#ff3333",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "title": "Fillcolor",
+          "type": "string"
+        },
+        "fillOpacity": {
+          "default": 0,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Fillopacity",
+          "type": "number"
+        },
+        "createdAt": {
+          "title": "Createdat",
+          "type": "string"
+        },
+        "updatedAt": {
+          "title": "Updatedat",
+          "type": "string"
+        },
+        "type": {
+          "const": "freehand",
+          "title": "Type",
+          "type": "string"
+        },
+        "geometry": {
+          "$ref": "#/$defs/FreehandGeometry"
+        }
+      },
+      "required": [
+        "id",
+        "startSec",
+        "endSec",
+        "zIndex",
+        "createdAt",
+        "updatedAt",
+        "type",
+        "geometry"
+      ],
+      "title": "Freehand",
+      "type": "object"
+    },
+    "FreehandGeometry": {
+      "additionalProperties": true,
+      "properties": {
+        "points": {
+          "items": {
+            "$ref": "#/$defs/Point"
+          },
+          "maxItems": 20000,
+          "minItems": 2,
+          "title": "Points",
+          "type": "array"
+        },
+        "smoothing": {
+          "const": 0,
+          "default": 0,
+          "title": "Smoothing",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "points"
+      ],
+      "title": "FreehandGeometry",
+      "type": "object"
+    },
+    "Line": {
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "startSec": {
+          "minimum": 0,
+          "title": "Startsec",
+          "type": "number"
+        },
+        "endSec": {
+          "exclusiveMinimum": 0,
+          "title": "Endsec",
+          "type": "number"
+        },
+        "zIndex": {
+          "maximum": 100000,
+          "minimum": 0,
+          "title": "Zindex",
+          "type": "integer"
+        },
+        "strokeColor": {
+          "default": "#ff3333",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "title": "Strokecolor",
+          "type": "string"
+        },
+        "strokeWidth": {
+          "default": 0.006,
+          "exclusiveMinimum": 0,
+          "maximum": 0.1,
+          "title": "Strokewidth",
+          "type": "number"
+        },
+        "strokeOpacity": {
+          "default": 1,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Strokeopacity",
+          "type": "number"
+        },
+        "fillColor": {
+          "default": "#ff3333",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "title": "Fillcolor",
+          "type": "string"
+        },
+        "fillOpacity": {
+          "default": 0,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Fillopacity",
+          "type": "number"
+        },
+        "createdAt": {
+          "title": "Createdat",
+          "type": "string"
+        },
+        "updatedAt": {
+          "title": "Updatedat",
+          "type": "string"
+        },
+        "type": {
+          "const": "line",
+          "title": "Type",
+          "type": "string"
+        },
+        "geometry": {
+          "$ref": "#/$defs/LineGeometry"
+        }
+      },
+      "required": [
+        "id",
+        "startSec",
+        "endSec",
+        "zIndex",
+        "createdAt",
+        "updatedAt",
+        "type",
+        "geometry"
+      ],
+      "title": "Line",
+      "type": "object"
+    },
+    "LineGeometry": {
+      "additionalProperties": true,
+      "properties": {
+        "x1": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "X1",
+          "type": "number"
+        },
+        "y1": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Y1",
+          "type": "number"
+        },
+        "x2": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "X2",
+          "type": "number"
+        },
+        "y2": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Y2",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x1",
+        "y1",
+        "x2",
+        "y2"
+      ],
+      "title": "LineGeometry",
+      "type": "object"
+    },
+    "Media": {
+      "additionalProperties": true,
+      "properties": {
+        "asset": {
+          "title": "Asset",
+          "type": "string"
+        },
+        "videoStartSec": {
+          "default": 0,
+          "title": "Videostartsec",
+          "type": "number"
+        },
+        "videoStreamIndex": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Videostreamindex",
+          "type": "integer"
+        },
+        "audioStreamIndex": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Audiostreamindex"
+        },
+        "originalFilename": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Originalfilename",
+          "type": "string"
+        },
+        "durationSec": {
+          "exclusiveMinimum": 0,
+          "maximum": 86400,
+          "title": "Durationsec",
+          "type": "number"
+        },
+        "codec": {
+          "title": "Codec",
+          "type": "string"
+        },
+        "audioCodec": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Audiocodec"
+        },
+        "hasAudio": {
+          "title": "Hasaudio",
+          "type": "boolean"
+        },
+        "codedWidth": {
+          "exclusiveMinimum": 0,
+          "maximum": 32768,
+          "title": "Codedwidth",
+          "type": "integer"
+        },
+        "codedHeight": {
+          "exclusiveMinimum": 0,
+          "maximum": 32768,
+          "title": "Codedheight",
+          "type": "integer"
+        },
+        "displayWidth": {
+          "exclusiveMinimum": 0,
+          "maximum": 32768,
+          "title": "Displaywidth",
+          "type": "integer"
+        },
+        "displayHeight": {
+          "exclusiveMinimum": 0,
+          "maximum": 32768,
+          "title": "Displayheight",
+          "type": "integer"
+        },
+        "sampleAspectRatio": {
+          "title": "Sampleaspectratio",
+          "type": "string"
+        },
+        "displayAspectRatio": {
+          "title": "Displayaspectratio",
+          "type": "string"
+        },
+        "rotation": {
+          "title": "Rotation",
+          "type": "number"
+        },
+        "avgFrameRate": {
+          "exclusiveMinimum": 0,
+          "maximum": 1000,
+          "title": "Avgframerate",
+          "type": "number"
+        }
+      },
+      "required": [
+        "asset",
+        "originalFilename",
+        "durationSec",
+        "codec",
+        "hasAudio",
+        "codedWidth",
+        "codedHeight",
+        "displayWidth",
+        "displayHeight",
+        "sampleAspectRatio",
+        "displayAspectRatio",
+        "rotation",
+        "avgFrameRate"
+      ],
+      "title": "Media",
+      "type": "object"
+    },
+    "Point": {
+      "additionalProperties": true,
+      "properties": {
+        "x": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "title": "Point",
+      "type": "object"
+    },
+    "Rectangle": {
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "startSec": {
+          "minimum": 0,
+          "title": "Startsec",
+          "type": "number"
+        },
+        "endSec": {
+          "exclusiveMinimum": 0,
+          "title": "Endsec",
+          "type": "number"
+        },
+        "zIndex": {
+          "maximum": 100000,
+          "minimum": 0,
+          "title": "Zindex",
+          "type": "integer"
+        },
+        "strokeColor": {
+          "default": "#ff3333",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "title": "Strokecolor",
+          "type": "string"
+        },
+        "strokeWidth": {
+          "default": 0.006,
+          "exclusiveMinimum": 0,
+          "maximum": 0.1,
+          "title": "Strokewidth",
+          "type": "number"
+        },
+        "strokeOpacity": {
+          "default": 1,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Strokeopacity",
+          "type": "number"
+        },
+        "fillColor": {
+          "default": "#ff3333",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "title": "Fillcolor",
+          "type": "string"
+        },
+        "fillOpacity": {
+          "default": 0,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Fillopacity",
+          "type": "number"
+        },
+        "createdAt": {
+          "title": "Createdat",
+          "type": "string"
+        },
+        "updatedAt": {
+          "title": "Updatedat",
+          "type": "string"
+        },
+        "type": {
+          "const": "rectangle",
+          "title": "Type",
+          "type": "string"
+        },
+        "geometry": {
+          "$ref": "#/$defs/RectangleGeometry"
+        }
+      },
+      "required": [
+        "id",
+        "startSec",
+        "endSec",
+        "zIndex",
+        "createdAt",
+        "updatedAt",
+        "type",
+        "geometry"
+      ],
+      "title": "Rectangle",
+      "type": "object"
+    },
+    "RectangleGeometry": {
+      "additionalProperties": true,
+      "properties": {
+        "x": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Y",
+          "type": "number"
+        },
+        "width": {
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Width",
+          "type": "number"
+        },
+        "height": {
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Height",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
+      "title": "RectangleGeometry",
+      "type": "object"
+    },
+    "Settings": {
+      "additionalProperties": true,
+      "properties": {
+        "defaultAnnotationDuration": {
+          "default": 5,
+          "exclusiveMinimum": 0,
+          "maximum": 3600,
+          "title": "Defaultannotationduration",
+          "type": "number"
+        },
+        "seekStepSec": {
+          "default": 0.1,
+          "exclusiveMinimum": 0,
+          "maximum": 60,
+          "title": "Seekstepsec",
+          "type": "number"
+        },
+        "largeSeekStepSec": {
+          "default": 1,
+          "exclusiveMinimum": 0,
+          "maximum": 3600,
+          "title": "Largeseekstepsec",
+          "type": "number"
+        },
+        "originalAudioGain": {
+          "default": 1,
+          "maximum": 2,
+          "minimum": 0,
+          "title": "Originalaudiogain",
+          "type": "number"
+        },
+        "originalAudioMuted": {
+          "default": false,
+          "title": "Originalaudiomuted",
+          "type": "boolean"
+        },
+        "voiceoverMasterGain": {
+          "default": 1,
+          "maximum": 2,
+          "minimum": 0,
+          "title": "Voiceovermastergain",
+          "type": "number"
+        }
+      },
+      "title": "Settings",
+      "type": "object"
+    },
+    "Text": {
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "startSec": {
+          "minimum": 0,
+          "title": "Startsec",
+          "type": "number"
+        },
+        "endSec": {
+          "exclusiveMinimum": 0,
+          "title": "Endsec",
+          "type": "number"
+        },
+        "zIndex": {
+          "maximum": 100000,
+          "minimum": 0,
+          "title": "Zindex",
+          "type": "integer"
+        },
+        "strokeColor": {
+          "default": "#ff3333",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "title": "Strokecolor",
+          "type": "string"
+        },
+        "strokeWidth": {
+          "default": 0.006,
+          "exclusiveMinimum": 0,
+          "maximum": 0.1,
+          "title": "Strokewidth",
+          "type": "number"
+        },
+        "strokeOpacity": {
+          "default": 1,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Strokeopacity",
+          "type": "number"
+        },
+        "fillColor": {
+          "default": "#ff3333",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "title": "Fillcolor",
+          "type": "string"
+        },
+        "fillOpacity": {
+          "default": 0,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Fillopacity",
+          "type": "number"
+        },
+        "createdAt": {
+          "title": "Createdat",
+          "type": "string"
+        },
+        "updatedAt": {
+          "title": "Updatedat",
+          "type": "string"
+        },
+        "type": {
+          "const": "text",
+          "title": "Type",
+          "type": "string"
+        },
+        "geometry": {
+          "$ref": "#/$defs/TextGeometry"
+        }
+      },
+      "required": [
+        "id",
+        "startSec",
+        "endSec",
+        "zIndex",
+        "createdAt",
+        "updatedAt",
+        "type",
+        "geometry"
+      ],
+      "title": "Text",
+      "type": "object"
+    },
+    "TextGeometry": {
+      "additionalProperties": true,
+      "properties": {
+        "x": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Y",
+          "type": "number"
+        },
+        "text": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "fontSize": {
+          "default": 0.04,
+          "exclusiveMinimum": 0,
+          "maximum": 0.5,
+          "title": "Fontsize",
+          "type": "number"
+        },
+        "alignment": {
+          "default": "left",
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ],
+          "title": "Alignment",
+          "type": "string"
+        },
+        "backgroundColor": {
+          "default": "#000000",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "title": "Backgroundcolor",
+          "type": "string"
+        },
+        "backgroundOpacity": {
+          "default": 0,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Backgroundopacity",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "text"
+      ],
+      "title": "TextGeometry",
+      "type": "object"
+    },
+    "Voiceover": {
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "asset": {
+          "title": "Asset",
+          "type": "string"
+        },
+        "startSec": {
+          "minimum": 0,
+          "title": "Startsec",
+          "type": "number"
+        },
+        "durationSec": {
+          "exclusiveMinimum": 0,
+          "title": "Durationsec",
+          "type": "number"
+        },
+        "endSec": {
+          "exclusiveMinimum": 0,
+          "title": "Endsec",
+          "type": "number"
+        },
+        "gain": {
+          "default": 1,
+          "maximum": 2,
+          "minimum": 0,
+          "title": "Gain",
+          "type": "number"
+        },
+        "muted": {
+          "default": false,
+          "title": "Muted",
+          "type": "boolean"
+        },
+        "timingOffsetMs": {
+          "default": 0,
+          "maximum": 60000,
+          "minimum": -60000,
+          "title": "Timingoffsetms",
+          "type": "number"
+        },
+        "recordedAt": {
+          "title": "Recordedat",
+          "type": "string"
+        },
+        "codec": {
+          "title": "Codec",
+          "type": "string"
+        },
+        "sampleRate": {
+          "exclusiveMinimum": 0,
+          "maximum": 384000,
+          "title": "Samplerate",
+          "type": "integer"
+        },
+        "channels": {
+          "exclusiveMinimum": 0,
+          "maximum": 8,
+          "title": "Channels",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "asset",
+        "startSec",
+        "durationSec",
+        "endSec",
+        "recordedAt",
+        "codec",
+        "sampleRate",
+        "channels"
+      ],
+      "title": "Voiceover",
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "properties": {
+    "schemaVersion": {
+      "const": 1,
+      "default": 1,
+      "title": "Schemaversion",
+      "type": "integer"
+    },
+    "projectId": {
+      "title": "Projectid",
+      "type": "string"
+    },
+    "projectName": {
+      "maxLength": 160,
+      "minLength": 1,
+      "title": "Projectname",
+      "type": "string"
+    },
+    "createdAt": {
+      "title": "Createdat",
+      "type": "string"
+    },
+    "updatedAt": {
+      "title": "Updatedat",
+      "type": "string"
+    },
+    "source": {
+      "$ref": "#/$defs/Media"
+    },
+    "proxy": {
+      "$ref": "#/$defs/Media"
+    },
+    "settings": {
+      "$ref": "#/$defs/Settings"
+    },
+    "exportSettings": {
+      "$ref": "#/$defs/ExportSettings"
+    },
+    "annotations": {
+      "items": {
+        "discriminator": {
+          "mapping": {
+            "arrow": "#/$defs/Arrow",
+            "ellipse": "#/$defs/Ellipse",
+            "freehand": "#/$defs/Freehand",
+            "line": "#/$defs/Line",
+            "rectangle": "#/$defs/Rectangle",
+            "text": "#/$defs/Text"
+          },
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/Line"
+          },
+          {
+            "$ref": "#/$defs/Arrow"
+          },
+          {
+            "$ref": "#/$defs/Rectangle"
+          },
+          {
+            "$ref": "#/$defs/Ellipse"
+          },
+          {
+            "$ref": "#/$defs/Freehand"
+          },
+          {
+            "$ref": "#/$defs/Text"
+          }
+        ]
+      },
+      "maxItems": 2000,
+      "title": "Annotations",
+      "type": "array"
+    },
+    "voiceovers": {
+      "items": {
+        "$ref": "#/$defs/Voiceover"
+      },
+      "maxItems": 200,
+      "title": "Voiceovers",
+      "type": "array"
+    }
+  },
+  "required": [
+    "projectId",
+    "projectName",
+    "createdAt",
+    "updatedAt",
+    "source",
+    "proxy"
+  ],
+  "title": "Project",
+  "type": "object"
+}
