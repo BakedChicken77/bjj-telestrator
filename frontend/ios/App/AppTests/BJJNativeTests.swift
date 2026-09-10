@@ -78,6 +78,12 @@ import CryptoKit
         source["codedWidth"] = 42; changed["source"] = source
         XCTAssertThrowsError(try store.save(BJJProject(changed)))
     }
+    func testCoreAudioAACIdentifierIsCanonicalized() {
+        XCTAssertEqual(BJJMedia.fourCC(kAudioFormatMPEG4AAC), "aac ")
+        XCTAssertEqual(BJJMedia.audioCodecName(kAudioFormatMPEG4AAC), "aac")
+        XCTAssertEqual(BJJMedia.audioCodecName(kAudioFormatLinearPCM), "lpcm")
+    }
+
     func testByteRangeParsing() throws {
         XCTAssertEqual(try BJJByteRange.parse("bytes=20-29", size: 100), BJJByteRange(first: 20, last: 29))
         XCTAssertEqual(try BJJByteRange.parse("bytes=-10", size: 100), BJJByteRange(first: 90, last: 99))
@@ -193,7 +199,7 @@ import CryptoKit
         let output = try service.exportedFile(job.jobId)
         let result = try await BJJMedia.inspect(output, reference: "exports/result.mp4", originalName: "result.mp4")
         XCTAssertEqual(result.json.s("codec"), "avc1")
-        XCTAssertEqual(result.json["audioCodec"] as? String, "mp4a")
+        XCTAssertEqual(result.json["audioCodec"] as? String, "aac")
         XCTAssertEqual(result.orientedSize, CGSize(width: 320, height: 180))
         XCTAssertEqual(result.videoRange.duration.seconds, 4, accuracy: 0.1)
         XCTAssertEqual(try redPixels(output, time: 0.5), 0)

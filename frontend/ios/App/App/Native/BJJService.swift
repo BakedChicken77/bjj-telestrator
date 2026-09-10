@@ -154,7 +154,8 @@ struct BJJExportJob: Codable {
                 guard probe.json.s("codec") == "avc1", abs(probe.videoRange.duration.seconds - project.duration) <= tolerance,
                       probe.orientedSize == BJJRenderer.outputSize(media.orientedSize),
                       (probe.json["hasAudio"] as? Bool) == expectedAudio,
-                      !expectedAudio || probe.json["audioCodec"] as? String == "mp4a" else {
+                      !expectedAudio || probe.json["audioCodec"] as? String == "aac" else {
+                    logger.error("Export validation: video=\(probe.json.s("codec"), privacy: .public), audio=\(String(describing: probe.json["audioCodec"]), privacy: .public), duration=\(probe.videoRange.duration.seconds), expected=\(project.duration), width=\(probe.orientedSize.width), height=\(probe.orientedSize.height)")
                     throw BJJError.invalid("The completed MP4 failed its codec, dimensions, audio or duration check. Try exporting again.")
                 }
                 let target = try store.directory(project.id).appendingPathComponent("exports/\(jobs[id]!.filename!)")

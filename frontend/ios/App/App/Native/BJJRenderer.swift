@@ -56,7 +56,7 @@ struct BJJMedia {
         var audioCodec: Any = NSNull()
         if let first = audio.first {
             let descriptions = try await first.load(.formatDescriptions)
-            if let description = descriptions.first { audioCodec = fourCC(CMFormatDescriptionGetMediaSubType(description)) }
+            if let description = descriptions.first { audioCodec = audioCodecName(CMFormatDescriptionGetMediaSubType(description)) }
         }
         let metadata: BJJJSON = [
             "asset": reference, "originalFilename": String(originalName.prefix(240)),
@@ -72,6 +72,12 @@ struct BJJMedia {
         return BJJMedia(asset: asset, video: video, videoRange: range, naturalSize: size,
                         orientedSize: oriented, transform: normalized, fps: fps, json: metadata)
     }
+    static func audioCodecName(_ value: AudioFormatID) -> String {
+        // Core Audio identifies AAC as 'aac ', not the MP4 sample-entry 'mp4a'.
+        // Use the same canonical codec name as FFprobe in desktop projects.
+        value == kAudioFormatMPEG4AAC ? "aac" : fourCC(value)
+    }
+    
     static func fourCC(_ value: FourCharCode) -> String {
         String(bytes: [24, 16, 8, 0].map { UInt8((value >> $0) & 255) }, encoding: .ascii) ?? "unknown"
     }
