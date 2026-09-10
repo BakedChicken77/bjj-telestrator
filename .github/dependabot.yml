@@ -5,6 +5,9 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
     groups:
       capacitor:
         patterns: ['@capacitor/*']
@@ -13,6 +16,11 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      pydantic:
+        patterns: ['pydantic', 'pydantic-core']
+    ignore:
+      - dependency-name: pydantic-core
   - package-ecosystem: github-actions
     directory: /
     schedule:
