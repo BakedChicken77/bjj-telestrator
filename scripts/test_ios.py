@@ -66,7 +66,7 @@ def main() -> None:
             "-default-test-execution-time-allowance",
             "120",
             "-maximum-test-execution-time-allowance",
-            "180",
+            "600",
             "-parallel-testing-enabled",
             "NO",
             *(["-derivedDataPath", str(args.derived_data)] if args.derived_data else []),

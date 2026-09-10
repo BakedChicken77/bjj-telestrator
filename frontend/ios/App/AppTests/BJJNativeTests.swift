@@ -185,6 +185,8 @@ import CryptoKit
         }
     }
     func testRealNativeMP4ExportBurnsTimedPixelsAndPreservesSourceAudio() async throws {
+        // Cold simulator codec/graphics initialization measured 158 seconds in CI.
+        executionTimeAllowance = 300
         let source = try await sourceVideo(audio: true)
         let before = SHA256.hash(data: try Data(contentsOf: source))
         let service = try BJJService(store: store)
