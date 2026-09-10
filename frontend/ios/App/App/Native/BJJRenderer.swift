@@ -40,7 +40,7 @@ struct BJJMedia {
         guard abs(angle / 90 - (angle / 90).rounded()) < 0.001 else {
             throw BJJError.invalid("This video has a non-right-angle rotation. Rotate it to 0, 90, 180 or 270 degrees before importing.")
         }
-        let extensions = CMFormatDescriptionGetExtensions(format) as NSDictionary
+        let extensions = (CMFormatDescriptionGetExtensions(format) as NSDictionary?) ?? NSDictionary()
         if let transfer = extensions[kCMFormatDescriptionExtension_TransferFunction] as? String,
            transfer.contains("2084") || transfer.contains("HLG") || transfer.contains("2100") {
             throw BJJError.invalid("HDR footage needs an SDR copy before importing. In iPhone Camera settings, turn off HDR Video for new recordings.")
@@ -56,7 +56,7 @@ struct BJJMedia {
         var audioCodec: Any = NSNull()
         if let first = audio.first {
             let descriptions = try await first.load(.formatDescriptions)
-            if let description = descriptions.first { audioCodec = fourCC(CMFormatDescriptionGetMediaSubType(description)) }
+            if let description = descriptions.first { audioCodec = audioCodecName(CMFormatDescriptionGetMediaSubType(description)) }
         }
         let metadata: BJJJSON = [
             "asset": reference, "originalFilename": String(originalName.prefix(240)),
@@ -72,6 +72,12 @@ struct BJJMedia {
         return BJJMedia(asset: asset, video: video, videoRange: range, naturalSize: size,
                         orientedSize: oriented, transform: normalized, fps: fps, json: metadata)
     }
+    static func audioCodecName(_ value: AudioFormatID) -> String {
+        // Core Audio identifies AAC as 'aac ', not the MP4 sample-entry 'mp4a'.
+        // Use the same canonical codec name as FFprobe in desktop projects.
+        value == kAudioFormatMPEG4AAC ? "aac" : fourCC(value)
+    }
+    
     static func fourCC(_ value: FourCharCode) -> String {
         String(bytes: [24, 16, 8, 0].map { UInt8((value >> $0) & 255) }, encoding: .ascii) ?? "unknown"
     }
@@ -209,13 +215,11 @@ final class BJJRenderer {
         finished = true
         completion = nil
         let reader = self.reader, writer = self.writer
-        let inputs = self.inputs
         self.reader = nil; self.writer = nil; self.inputs = []
         let monitor = self.monitor
         self.monitor = nil
         lock.unlock()
         monitor?.cancel()
-        for input in inputs { input.stopRequestingMediaData() }
         if case .failure = result { reader?.cancelReading(); writer?.cancelWriting() }
         handler(result)
     }
@@ -263,7 +267,7 @@ final class BJJRenderer {
         let originalTracks = try await media.asset.loadTracks(withMediaType: .audio)
         for sourceAudio in originalTracks.prefix(1) {
             let range = try await sourceAudio.load(.timeRange)
-            let shared = CMTimeRangeGetIntersection(range, media.videoRange)
+            let shared = CMTimeRangeGetIntersection(range, otherRange: media.videoRange)
             guard shared.isValid, shared.duration.seconds > 0,
                   let track = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else { continue }
             try track.insertTimeRange(shared, of: sourceAudio, at: CMTimeSubtract(shared.start, media.videoRange.start))

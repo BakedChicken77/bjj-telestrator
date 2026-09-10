@@ -36,6 +36,16 @@ import CryptoKit
              "annotations": [annotation()], "voiceovers": [BJJJSON]()])
         return try store.save(result, creating: true)
     }
+    func testBridgeRegistersMediaHandlerOnFreshConfiguration() throws {
+        let controller = BJJViewController()
+        controller.loadViewIfNeeded()
+        let webView = try XCTUnwrap(controller.webView)
+        XCTAssertTrue(webView.configuration.urlSchemeHandler(forURLScheme: "capacitor") is BJJAssetHandler)
+        XCTAssertTrue(webView.configuration.allowsInlineMediaPlayback)
+        XCTAssertFalse(webView.configuration.userContentController.userScripts.isEmpty)
+        XCTAssertNotNil(controller.bridge)
+    }
+
     func testHalfOpenFrameBoundaries() {
         let a = annotation()
         XCTAssertFalse(BJJProject.visible(a, time: 29.0 / 30, fps: 30))
@@ -68,6 +78,12 @@ import CryptoKit
         source["codedWidth"] = 42; changed["source"] = source
         XCTAssertThrowsError(try store.save(BJJProject(changed)))
     }
+    func testCoreAudioAACIdentifierIsCanonicalized() {
+        XCTAssertEqual(BJJMedia.fourCC(kAudioFormatMPEG4AAC), "aac ")
+        XCTAssertEqual(BJJMedia.audioCodecName(kAudioFormatMPEG4AAC), "aac")
+        XCTAssertEqual(BJJMedia.audioCodecName(kAudioFormatLinearPCM), "lpcm")
+    }
+
     func testByteRangeParsing() throws {
         XCTAssertEqual(try BJJByteRange.parse("bytes=20-29", size: 100), BJJByteRange(first: 20, last: 29))
         XCTAssertEqual(try BJJByteRange.parse("bytes=-10", size: 100), BJJByteRange(first: 90, last: 99))
@@ -169,6 +185,8 @@ import CryptoKit
         }
     }
     func testRealNativeMP4ExportBurnsTimedPixelsAndPreservesSourceAudio() async throws {
+        // Cold simulator codec/graphics initialization measured 158 seconds in CI.
+        executionTimeAllowance = 300
         let source = try await sourceVideo(audio: true)
         let before = SHA256.hash(data: try Data(contentsOf: source))
         let service = try BJJService(store: store)
@@ -178,11 +196,12 @@ import CryptoKit
         let job = try service.createExport(project.id)
         let deadline = Date().addingTimeInterval(90)
         while ["queued", "running"].contains(try service.job(job.jobId).status) && Date() < deadline { try await Task.sleep(nanoseconds: 100_000_000) }
-        XCTAssertEqual(try service.job(job.jobId).status, "completed", try service.job(job.jobId).error ?? "")
+        let completedJob = try service.job(job.jobId)
+        XCTAssertEqual(completedJob.status, "completed", completedJob.error ?? "")
         let output = try service.exportedFile(job.jobId)
         let result = try await BJJMedia.inspect(output, reference: "exports/result.mp4", originalName: "result.mp4")
         XCTAssertEqual(result.json.s("codec"), "avc1")
-        XCTAssertEqual(result.json["audioCodec"] as? String, "mp4a")
+        XCTAssertEqual(result.json["audioCodec"] as? String, "aac")
         XCTAssertEqual(result.orientedSize, CGSize(width: 320, height: 180))
         XCTAssertEqual(result.videoRange.duration.seconds, 4, accuracy: 0.1)
         XCTAssertEqual(try redPixels(output, time: 0.5), 0)
