@@ -178,7 +178,8 @@ import CryptoKit
         let job = try service.createExport(project.id)
         let deadline = Date().addingTimeInterval(90)
         while ["queued", "running"].contains(try service.job(job.jobId).status) && Date() < deadline { try await Task.sleep(nanoseconds: 100_000_000) }
-        XCTAssertEqual(try service.job(job.jobId).status, "completed", try service.job(job.jobId).error ?? "")
+        let completedJob = try service.job(job.jobId)
+        XCTAssertEqual(completedJob.status, "completed", completedJob.error ?? "")
         let output = try service.exportedFile(job.jobId)
         let result = try await BJJMedia.inspect(output, reference: "exports/result.mp4", originalName: "result.mp4")
         XCTAssertEqual(result.json.s("codec"), "avc1")
