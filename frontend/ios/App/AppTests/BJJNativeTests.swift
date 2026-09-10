@@ -36,6 +36,16 @@ import CryptoKit
              "annotations": [annotation()], "voiceovers": [BJJJSON]()])
         return try store.save(result, creating: true)
     }
+    func testBridgeRegistersMediaHandlerOnFreshConfiguration() throws {
+        let controller = BJJViewController()
+        controller.loadViewIfNeeded()
+        let webView = try XCTUnwrap(controller.webView)
+        XCTAssertTrue(webView.configuration.urlSchemeHandler(forURLScheme: "capacitor") is BJJAssetHandler)
+        XCTAssertTrue(webView.configuration.allowsInlineMediaPlayback)
+        XCTAssertFalse(webView.configuration.userContentController.userScripts.isEmpty)
+        XCTAssertNotNil(controller.bridge)
+    }
+
     func testHalfOpenFrameBoundaries() {
         let a = annotation()
         XCTAssertFalse(BJJProject.visible(a, time: 29.0 / 30, fps: 30))
