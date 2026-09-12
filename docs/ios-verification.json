@@ -43,11 +43,15 @@
       "xctestPassed": 11,
       "unsignedArchive": "passed"
     },
-    "candidateSDKCompilation": "pending_public_push_approval_and_macos_CI",
-    "candidateXCTestMethodsAuthored": 15
+    "candidateSDKCompilation": "passed: Xcode 26.6",
+    "candidateXCTestMethodsAuthored": 15,
+    "candidateXCTestPassed": 15,
+    "candidateUnsignedArchive": "passed",
+    "candidateCommit": "06ca668eeadce6ce383d98c4c107e3998bd1434a",
+    "candidateCI": "https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34718055711"
   },
   "limits": [
-    "The baseline native SDK/XCTest/archive passed in GitHub CI. New candidate SDK tests, signing, and physical hardware acceptance remain pending.",
+    "Baseline and fresh candidate native SDK/XCTest/archive passed in GitHub CI. Signed installation, physical hardware acceptance and a fresh Windows 11 run remain pending.",
     "No signed installable iPhone binary was produced.",
     "Touch browser tests use the desktop backend, not the native Swift renderer.",
     "Long-video iPhone performance is not benchmarked."
@@ -62,6 +66,11 @@
     "repositoryPassed": 12,
     "browserPassed": 11,
     "capacitorSync": "passed",
-    "nativeSDKAndXCTest": "not run; public push authorization required for macOS CI"
+    "nativeSDKAndXCTest": "passed: 15 tests, zero failures",
+    "pullRequest": "https://github.com/BakedChicken77/bjj-telestrator/pull/8",
+    "ciRun": "https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34718055711",
+    "unsignedArchive": "passed",
+    "publishedCommit": "06ca668eeadce6ce383d98c4c107e3998bd1434a",
+    "dockerLinux": "passed"
   }
 }

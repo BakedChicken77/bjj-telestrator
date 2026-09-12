@@ -37,17 +37,19 @@ TypeScript, ESLint, Ruff, build and formatting passed. Shared TypeScript/Python/
 Swift fixtures include 22 validation cases and an exact expected migration.
 The native suite now contains 15 authored test methods, including revision
 conflicts, retained original JSON, recovery copies/journals and fixture conformance.
-Its runner was invoked here and truthfully refused because macOS/Xcode are absent.
+Its runner was invoked locally and truthfully refused because macOS/Xcode are absent. Fresh macOS CI subsequently compiled the candidate, passed all 15 tests and produced the unsigned archive, as recorded below.
 
-**Publication blocker:** automatic approval review rejected the public branch
-push because public repository publication needs explicit user authorization.
-No remote code was changed, no PR was created, and no new native CI run was
-started. Do not substitute the old native CI result for the new candidate.
-The next external action is pushing the reviewed local branch and creating a draft
-PR to run the existing CI, after authorization. No release tag, signing credential,
-TestFlight upload, publication, paid service, or customer charge was configured.
+**Publication update:** Steve explicitly authorized publishing the branch and
+opening a draft PR on September 12. [Draft PR #8](https://github.com/BakedChicken77/bjj-telestrator/pull/8) is open and
+[CI run 34718055711](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34718055711) passed all six jobs, including the aggregate gate. Command-line Git had no credentials;
+the connected GitHub account published the same four file trees and commit
+sequence. Each GitHub commit records its original local commit in a trailer.
+The published head is `06ca668eeadce6ce383d98c4c107e3998bd1434a`; its tree is
+`f7b679210a80b0d2cba28625667f68083ec020f8`, exactly matching local `5919039`.
+The earlier automatic approval rejection is resolved. No merge, release tag,
+signing, TestFlight upload, paid service or customer charge was performed.
 
-Exact remaining acceptance: fresh native SDK/XCTest/archive; signed install over
+Exact remaining acceptance: signed install over
 populated projects; physical iPhone recovery/export/share/VoiceOver; Windows 11/
 Docker on this candidate; realistic 20-minute and lower-resource-device results.
 Native recovery-copy responsiveness on large projects remains unmeasured. Source
@@ -61,7 +63,7 @@ The complete unchanged-production-code gate passed at
 `349567c730c74b46da46a7545a917cab5d3f988a` extends the existing real export tests
 with version-1 disk migration, an edit, revision-aware save/export and reopen;
 it changes tests only. The enhanced FFmpeg scenario passed separately. The
-native counterpart remains authored and unrun. Later report-only commits do not
+native counterpart passed in fresh macOS CI. Later report-only commits do not
 change the tested application. Full file inventory and structured evidence are in
 [p1-save-recovery-verification.json](p1-save-recovery-verification.json).
 
@@ -75,8 +77,42 @@ change the tested application. Full file inventory and structured evidence are i
 | Ruff / ESLint / TypeScript / build / Prettier | Passed using the repository configuration. |
 | Enhanced migration-to-real-export test at `349567c` | 1 passed, 4.33 seconds; existing timed pixels/audio assertions retained. |
 | `npm run ios:sync` at `349567c` | Passed; rebuilt and copied the editor and updated Capacitor plugin configuration. This does not compile Swift. |
-| Candidate native SDK / 15 XCTest methods / unsigned archive | Not run: Linux host and public branch push awaiting authorization. |
+| Candidate native SDK / 15 XCTest methods / unsigned archive | Passed in [CI run 34718055711](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34718055711); all 15 tests, zero failures, and unsigned archive. |
 | Signed phone / fresh Windows Docker / VoiceOver / 20-minute workload | Not run; explicit acceptance gates remain pending. |
+
+### Fresh GitHub CI and native evidence
+
+[CI run 34718055711](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34718055711) passed for published application head
+`06ca668eeadce6ce383d98c4c107e3998bd1434a` (the same tree as locally verified `5919039`).
+Backend: 100 tests in 18.95 seconds. Frontend: 90 tests. Repository: 12 tests,
+plus actionlint. Browser: 11 scenarios in 1.3 minutes. Production Docker build,
+startup, frontend, storage and FFmpeg health all passed on Ubuntu; this is not a
+Windows 11 execution claim. The aggregate CI gate passed.
+
+Xcode 26.6 on the iPhone 17 Pro **simulator** compiled the actual native target.
+All 15 XCTest methods passed with zero failures in 46.367 seconds of test time;
+build, simulator startup and artifact packaging took additional time. The real
+native MP4 migration/edit/export/reopen scenario passed in 36.550 seconds. It
+asserted H.264 (`avc1`), AAC, 320×180, 4 seconds within 100 ms, annotation pixels
+before/at/after `[1,2)`, original-audio energy, and equality of pre/post source
+SHA-256. Recovery, stale revisions, the 22 canonical fixture cases, rotated silent
+video, voiceover timing/mute and queued cancellation also passed. Numeric native
+file size/source digest were not emitted in this run; no invented values are
+reported. This test evidence does not establish physical-phone timing or thermals.
+
+`ARCHIVE SUCCEEDED` was recorded and the following bounded artifacts were uploaded
+(retention through September 26, 2026):
+
+| Artifact | ID | ZIP bytes |
+| --- | --- | --- |
+| ios-unsigned | 10306075698 | 12492259 |
+| ios-test-results | 10305361516 | 65675900 |
+| browser-results | 10305097614 | 1440970 |
+
+The unsigned archive cannot be installed directly on a phone. No signed IPA,
+TestFlight upload, merge or release was produced. Documentation updates after
+this application head preserve its application code; PR checks identify their own
+run and commit separately.
 
 All four measured outputs below are real finalized MP4s from the clean browser
 run, with H.264/yuv420p at 30 fps and AAC/48 kHz where audio exists. Sources were

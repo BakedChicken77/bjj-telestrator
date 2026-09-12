@@ -1,6 +1,6 @@
 # Architecture
 
-Version 1.1 adds a standalone iOS execution path. The desktop components below remain unchanged; the native implementation is described at the end of this document. Baseline Apple SDK tests/archive passed in GitHub CI; fresh candidate and physical-device acceptance are separate gates.
+Version 1.1 adds a standalone iOS execution path. The desktop components below remain unchanged; the native implementation is described at the end of this document. The baseline and P1.02/P1.03 candidate Apple SDK tests/archive passed in [GitHub CI](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34718055711); signed installation and physical-device acceptance remain separate gates.
 
 ## Components
 
@@ -141,7 +141,7 @@ Jobs persist status/filename/error metadata. Cancellation cancels the reader/wri
 
 ## iPhone build and verification boundary
 
-`frontend/ios/App/App.xcodeproj` is the real SPM-based app project, with a shared App scheme and hosted AppTests target. `scripts/configure_ios.py` reproducibly adds app-owned Swift files without replacing the generated project. `scripts/test_ios.py` invokes Xcode simulator tests and records an `.xcresult`. Linux checks validate the TypeScript bridge and touch editor; Swift syntax/project inspection cannot establish Apple SDK type compatibility or runtime correctness. The baseline macOS build, 11 native tests, and unsigned archive passed in CI. Fresh candidate CI, signing, and physical iPhone acceptance remain required before release.
+`frontend/ios/App/App.xcodeproj` is the real SPM-based app project, with a shared App scheme and hosted AppTests target. `scripts/configure_ios.py` reproducibly adds app-owned Swift files without replacing the generated project. `scripts/test_ios.py` invokes Xcode simulator tests and records an `.xcresult`. Linux checks validate the TypeScript bridge and touch editor; Swift syntax/project inspection cannot establish Apple SDK type compatibility or runtime correctness. The baseline macOS build, 11 native tests, and unsigned archive passed in CI. The P1.02/P1.03 candidate then passed all 15 native tests and an unsigned archive in [run 34718055711](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34718055711). Signing and physical iPhone acceptance remain required before release.
 
 ## Authoritative project saves (schema 2)
 

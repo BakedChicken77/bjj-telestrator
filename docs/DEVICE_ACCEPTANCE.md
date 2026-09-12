@@ -3,7 +3,7 @@
 Status: device/staging verification pending. No signed installation or physical
 phone has been accessed during this work. Baseline `f5323b3` passed 11 native
 XCTest cases and an unsigned archive in CI run 34532184666. That result does not
-accept this candidate or prove installability.
+prove installability. The P1.02/P1.03 candidate `06ca668eeadce6ce383d98c4c107e3998bd1434a` subsequently passed 15 native tests and an unsigned archive in [CI run 34718055711](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34718055711). Its signed-install and physical-device gates remain pending.
 
 ## Signed pilot from Windows
 

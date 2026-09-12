@@ -2,7 +2,7 @@
 
 This repository now includes a standalone iOS application alongside the working Windows/Docker application. The iPhone app bundles the React annotation editor in Capacitor 8.5.1 and uses Swift, AVFoundation, Core Image, and Core Graphics for local files, microphone capture, and H.264/AAC MP4 rendering. It does not connect to the Windows computer or require Docker at runtime.
 
-**Release status:** the baseline native Apple SDK build, 11 XCTest cases, and unsigned archive passed in [CI](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34532184666) at `f5323b3b270e3836d7df10309d1684cf8d98e9ca`. This implementation branch needs fresh CI. Signing, installed updates, physical-iPhone export/share, and a realistic 20-minute workload remain unverified. An unsigned archive is not an installable IPA. GitHub-hosted macOS runners support the Windows-only development route.
+**Release status:** the baseline native Apple SDK build, 11 XCTest cases, and unsigned archive passed in [CI](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34532184666) at `f5323b3b270e3836d7df10309d1684cf8d98e9ca`. The P1.02/P1.03 implementation at `06ca668eeadce6ce383d98c4c107e3998bd1434a` subsequently passed all 15 native tests and an unsigned archive in [fresh CI](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34718055711). Signing, installed updates, physical-iPhone export/share, and a realistic 20-minute workload remain unverified. An unsigned archive is not an installable IPA. GitHub-hosted macOS runners support the Windows-only development route.
 
 ## Windows-only build and distribution route
 
