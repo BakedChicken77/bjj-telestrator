@@ -241,7 +241,7 @@ def test_api_validation_range_and_origin_security(tmp_path: Path) -> None:
         assert client.post('/api/projects/import', files={'file': ('bad.txt', b'bad', 'text/plain')}).status_code == 415
         assert client.post('/api/projects/import', files={'file': ('bad.mp4', b'bad', 'video/mp4')}).status_code == 422
         assert len(application.state.store.list()) == 1  # partial imports removed
-        assert client.delete(f'/api/projects/{project.projectId}').status_code == 204
+        assert client.delete(f'/api/projects/{project.projectId}', headers={'If-Match': f'"{project.revision + 1}"'}).status_code == 204
         assert client.get(f'/api/projects/{project.projectId}').status_code == 404
 
 

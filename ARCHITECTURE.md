@@ -85,7 +85,7 @@ Preview prepares a moving working set (30 seconds ahead and 5 seconds behind), l
 
 Final mixing applies original gain/mute, clip gain/mute and master voiceover gain. Each normalized clip is trimmed to its duration, delayed by an exact sample count to its effective start, and mixed on a 48 kHz stereo timeline. Overlapping clips sum at their explicit gains without automatic normalization or ducking. A latency-compensated 0.98-peak limiter with no makeup gain prevents clipping peaks without changing ordinary-level audio. The final audio is padded/trimmed to video duration and encoded as AAC. A muted original audio stream remains a silent AAC track; a source without audio and without audible voiceovers exports without an audio stream. Waveform editing and pause/resume within a single recording are outside the first voiceover implementation.
 
-Audio registry sidecars (`voiceover/<clip-id>.json`) bind generated WAV assets to immutable sample metadata. They make new recordings available for preview before the next project autosave. Removing a clip from the editor updates the project document while retaining its asset for undo and running export snapshots; unreferenced recordings remain until project deletion. The explicit permanent-delete API removes the recording and sidecar, and rejects deletion while the project has an active export.
+Audio registry sidecars (`voiceover/<clip-id>.json`) bind generated WAV assets to immutable sample metadata. They make new recordings available for preview before the next project autosave. Removing a clip from the editor updates the project document while retaining its asset for undo and running export snapshots; unreferenced recordings remain retained through project trash and checkpoints. The individual recording-delete API returns ASSET_RETAINED; only explicitly confirmed permanent project deletion reclaims them.
 
 ## Boundaries and tradeoffs
 
@@ -161,8 +161,8 @@ committed content, so pending recordings cannot silently change an old revision.
 
 Recovery copies validate source/recording ownership and produce independent local
 files and fresh object IDs. Copy failure removes only the uncommitted destination.
-Native copy work is synchronous and has a remaining responsiveness/device gate for
-large projects; tracked storage jobs are the next P1.06 work package. Edit drafts
+Native copy work now runs off the main actor; the store lock serializes installation
+and copying. Large-copy responsiveness and interruption remain physical-device gates. Edit drafts
 contain project JSON, never source bytes. Support summaries are allowlisted,
 user-initiated and inspectable; no telemetry or automatic transfer was added.
 
@@ -188,3 +188,31 @@ undo/recovery/export inputs may still own it. No new project schema, cloud servi
 media library or state framework is introduced. Disk estimates do not reserve OS
 space or guarantee completion; write failures clean temporary work and retain
 committed inputs. Detailed contracts/limitations: [decision 002](docs/decisions/002-durable-export-inputs.md).
+
+
+## Checkpoints, duplication and retained deletion (P1.06)
+
+`recovery.py` / `BJJProjectVersions.swift` consume the existing immutable render-plan
+and asset contracts. A checkpoint holds a saved project revision and its required
+source/recording checksums. Restore verifies them, writes a durable before-restore
+checkpoint, then uses the normal conditional save to advance the current revision.
+If any write/verification/conflict fails, existing durable edits remain available.
+Source, current proxy metadata and creation identity are never rolled backward.
+Opening the restored review resets in-memory history; its prior state is a durable
+checkpoint rather than a history entry carrying an old storage revision.
+
+Duplicates reuse recovery-copy validation, remap editable UUID references and
+copy/hash required media. Copy failure removes only the new destination. Native
+hash/copy operations run off the main actor; the existing store lock protects
+copy/install/delete from concurrent writers. These operations show an indeterminate
+working state and have no separate cancellation or resumable copy job yet.
+
+Deletion writes versioned metadata before one same-volume directory rename into
+`projects/recently-deleted/<trash UUID>/projects/<project UUID>`. No asset is removed
+at this stage. Restore validates current assets/recording ownership and atomically
+moves the whole directory back. A collision creates an independent current-review
+copy; the complete archived folder stays available. Permanent removal is a distinct
+UUID-scoped action. Export recovery is scoped to the restored project and never
+reclassifies unrelated running jobs. No automatic trash expiry or recording GC is
+introduced. Native pending save transactions and pre-migration files stay inside
+the moved directory. These are local recovery mechanisms, not portable backups.

@@ -130,7 +130,7 @@ same code. Revision is not editable or restored by undo/redo.
 
 Export POST requires the same conditional revision; native `createExport` accepts
 `expectedRevision`. The job's `projectRevision` identifies its immutable in-memory
-input. Durable restart/retry manifests are P1.06, not claimed here.
+input. Durable restart/retry manifests are described in the P1.06 section below.
 
 A recovery draft has `version:1`, generated `writerId`/`draftId`, `savedAt`, and
 validated `project` including its base revision. Desktop drafts use local browser
@@ -183,5 +183,55 @@ Runtime capabilities add `exportRetry`, `storageBreakdown` and
 `exportFileCleanup`. HTTP/native equivalents are project-scoped storage inspection,
 retry by job UUID, and completed-file removal by job UUID. Clients provide no
 asset path. Source/recording files are never reclaimed by this work package;
-manual checkpoints, project trash, portable packages and full reference-based
-collection remain later work.
+portable packages and full reference-based collection remain later work.
+Checkpoints and project trash are described below.
+
+
+### Checkpoint and recently deleted records (storage version 1)
+
+Project schema remains 2. Checkpoints are not user-editable project fields:
+
+```json
+{
+  "version": 1,
+  "checkpointId": "<UUID>",
+  "projectId": "<UUID>",
+  "revision": 7,
+  "label": "Before review",
+  "createdAt": "<UTC timestamp>",
+  "input": "<full version-1 immutable render-plan object>"
+}
+```
+
+`checkpoints/<checkpoint UUID>.json` retains the full input object (the placeholder
+above abbreviates it). IDs, project ownership, schema, required capabilities and
+source/recording identities must validate before restore. No downgrade is attempted.
+The old revision is evidence; restore assigns a newer current revision. A checkpoint
+is never silently overwritten. Labels are 1–120 characters; at most 1,000 versions
+per project are accepted. Required recordings remain retained even after removal
+from the current timeline. The current derived proxy is preserved during restore.
+
+`projects/recently-deleted/<trash UUID>/metadata.json` contains
+`{version:1, trashId, projectId, projectName, revision, deletedAt}`. Its sibling
+`projects/<project UUID>/` holds the complete moved project. Empty metadata-only
+entries from interrupted moves do not hide or replace the still-live project.
+Restore uses the original ID if free. A collision remaps project/annotation/take
+UUIDs and known references in a new copy, leaving old jobs/versions in the retained
+archive. Unknown optional fields survive. Individual unknown required capabilities
+still prevent lossy restore/edit/export. Trash has no automatic retention expiry.
+
+New capability flags: `projectCheckpoints`, `projectDuplicate`, `projectTrash`.
+Desktop interfaces (native bridge exposes the same UUID/revision semantics):
+
+- `GET/POST /api/projects/{id}/checkpoints`; POST carries `{label}` and If-Match.
+- `POST /api/projects/{id}/checkpoints/{checkpointId}/restore`, with If-Match.
+- `POST /api/projects/{id}/duplicate`, with If-Match.
+- `DELETE /api/projects/{id}`, now recoverable and requiring If-Match.
+- `GET /api/recently-deleted`; `POST /api/recently-deleted/{trashId}/restore` returns
+  `{project,copied}`; `DELETE /api/recently-deleted/{trashId}` permanently removes it.
+
+Project summaries include `revision`. Missing/stale revision returns 428/409;
+clients cannot submit paths. Recovery errors retain files and use typed conflict,
+asset/storage or `RECOVERY_INVALID`/`RECOVERY_LIMIT` codes. Old binaries do not know
+these sidecars: preserve the complete new directory before any rollback and use a
+separate prior copy; never remove new versions to simulate a downgrade.

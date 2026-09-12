@@ -1123,3 +1123,65 @@ progress::-webkit-progress-value {
   min-height: 44px;
   margin: 0.25rem 0.5rem 0.25rem 0;
 }
+
+.project-versions {
+  margin: 1rem 0;
+}
+.project-versions details {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.project-versions summary {
+  cursor: pointer;
+  min-height: 44px;
+  overflow-wrap: anywhere;
+}
+.project-versions fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: end;
+  border: 0;
+  padding: 0;
+}
+.project-versions label {
+  display: grid;
+  gap: 0.4rem;
+}
+.project-versions input {
+  max-width: 100%;
+  min-height: 44px;
+}
+.project-versions button {
+  min-height: 44px;
+  padding: 0.5rem 0.75rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.project-versions ul {
+  list-style: none;
+  padding: 0;
+}
+.project-versions li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.project-versions li span {
+  flex: 1 0 100%;
+  overflow-wrap: anywhere;
+}
+.project-versions p,
+.recovery-notice {
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.recovery-notice {
+  margin: 0;
+  padding: 0.5rem 1rem;
+}

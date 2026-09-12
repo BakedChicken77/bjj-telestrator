@@ -1,5 +1,26 @@
 # Verification record
 
+## P1.06 project recovery candidate — 2026-09-12
+
+Start: `04b03a8cac59ae6266b32117ed2a7b797a4f6636`, branch
+`codex/p1-project-recovery`. Both service adapters and the shared UI implement
+checkpoints, before-restore preservation, independent copies and retained deletion.
+Initial backend suite: 138 passed (89.81 s), including 13 new recovery cases.
+Frontend: 92 passed. Fresh native SDK compilation and complete verification are
+pending. The existing real native export test now includes checkpoint restoration,
+project deletion/restoration and retry from the retained input, keeping its pixel,
+audio, codec/duration and source-hash assertions. Four new native recovery tests
+cover stale revisions, checkpoint write failure, copy/collision and unsafe paths.
+
+Local browser checks identified persistent test-project name collisions. Assertions
+now identify each generated project and verify permanent deletion through HTTP and
+again after page reload. A local run still observed a deleted entry returning after
+reload despite an immediate empty scoped result; this remains an unresolved gate
+pending root-cause evidence and the independent CI run. No assertion or timeout is
+disabled. Physical installation, VoiceOver, low-space/interruption and realistic
+long-project performance remain pending; no release or device acceptance is claimed.
+
+
 ## P1.06 storage/export work package — 2026-09-12
 
 Starting commit: `dd0d0843ccc912fb5fa0cdd8e036979e7d9f6262`, whose complete CI
@@ -22,10 +43,11 @@ The source SHA-256 stayed
 Native tests add the shared 16-case input corpus, revision retry after restart,
 retained recording references, cancellation, lease/space/path guards, and real
 H.264/AAC retry with timed pixels and audio energy. `npm run ios:sync` passed.
-The first native CI run compiled successfully and passed the real native retry export (H.264/AAC, 320×180, 4 s, 26,570 bytes), but one recording-journal assertion failed: a just-recovered take could reappear after removal. The assertion is retained; native save now journals the document and recording acknowledgments as one recoverable transaction. A write-failure replay test was added. Fresh CI is required for this fix.
+The first native CI run compiled successfully and passed the real native retry export (H.264/AAC, 320×180, 4 s, 26,570 bytes), but one recording-journal assertion failed: a just-recovered take could reappear after removal. The assertion is retained; native save now journals the document and recording acknowledgments as one recoverable transaction. A write-failure replay test was added. The fix passed fresh CI at `04b03a8cac59ae6266b32117ed2a7b797a4f6636`: [run 34725049253](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34725049253), all six gates including 18 native tests (195.008 s) and the unsigned archive. Its real native retry was H.264/AAC, 320×180, 4 s, 26,558 bytes, source SHA-256 `a4b27a39adf8ddca0e036080f1af375295c28819275d5fc38afca143d9e08555`.
 Physical signed install/update, interrupted recording, low-space/share-sheet
 behavior, thermal/memory/20-minute performance and Windows 11/Docker acceptance
-remain open. No HDR, package transfer, checkpoints or trash recovery is claimed.
+remain open. Checkpoints and trash are the next separately verified work package;
+no HDR or package transfer is claimed by this storage/export slice.
 
 
 ## P1.02 / P1.03 first vertical package — 2026-09-12

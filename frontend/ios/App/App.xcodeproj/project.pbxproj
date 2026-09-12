@@ -30,6 +30,7 @@
 		5D6D9A6272569E0B1BA92C42 = {isa = PBXBuildFile; fileRef = DC533040243815D931B63128;};
 		091E37617DA55412397ACA97 = {isa = PBXBuildFile; fileRef = C3FB81060B2CE2326EB07B55;};
 		4F642E8E2EA8E79AF8A373DC = {isa = PBXBuildFile; fileRef = 611409C32D2003589A19C233;};
+		AE7B7702FDB3AC626938F495 = {isa = PBXBuildFile; fileRef = E844101F5F80837C9418E01C;};
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -59,6 +60,7 @@
 		DC533040243815D931B63128 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJAssets.swift"; sourceTree = "<group>";};
 		C3FB81060B2CE2326EB07B55 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJRenderPlan.swift"; sourceTree = "<group>";};
 		611409C32D2003589A19C233 = {isa = PBXFileReference; lastKnownFileType = text.json; path = "../../../../tests/fixtures/export-plan-conformance.json"; sourceTree = "<group>";};
+		E844101F5F80837C9418E01C = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJProjectVersions.swift"; sourceTree = "<group>";};
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -96,6 +98,7 @@
 		504EC3061FED79650016851F /* App */ = {
 			isa = PBXGroup;
 			children = (
+				E844101F5F80837C9418E01C,
 				C3FB81060B2CE2326EB07B55,
 				DC533040243815D931B63128,
 				624D1D62CAC247172FAB6012,
@@ -216,6 +219,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AE7B7702FDB3AC626938F495,
 				091E37617DA55412397ACA97,
 				5D6D9A6272569E0B1BA92C42,
 				508F2335ED33A61F4DF232CB,

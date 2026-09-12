@@ -42,6 +42,7 @@ struct BJJExportJob: Codable {
         self.store = store
         let folders = try FileManager.default.contentsOfDirectory(at: store.root, includingPropertiesForKeys: nil)
         for folder in folders where UUID(uuidString: folder.lastPathComponent) != nil {
+            if (try? folder.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == true { continue }
             if FileManager.default.fileExists(atPath: folder.appendingPathComponent("save-transaction.json").path) {
                 do { _ = try store.load(folder.lastPathComponent) }
                 catch {
@@ -55,30 +56,36 @@ struct BJJExportJob: Codable {
                 try FileManager.default.removeItem(at: folder)
                 continue
             }
-            let exportFolder = folder.appendingPathComponent("exports")
-            for path in (try? FileManager.default.contentsOfDirectory(at: exportFolder, includingPropertiesForKeys: nil)) ?? [] where path.pathExtension == "json" {
-                do {
-                    var job = try JSONDecoder().decode(BJJExportJob.self, from: Data(contentsOf: path))
-                    try BJJValidate.uuid(job.jobId); try BJJValidate.uuid(job.projectId)
-                    guard job.projectId == folder.lastPathComponent, path.deletingPathExtension().lastPathComponent == job.jobId else { continue }
-                    job.retryAvailable = FileManager.default.fileExists(atPath: try BJJRenderPlan.path(store, job).path)
-                    if ["running", "queued"].contains(job.status) {
-                        job.status = "failed"
-                        job.errorCode = "EXPORT_INTERRUPTED"
-                        job.error = job.retryAvailable == true ? "The app closed before this export finished. Retry this revision from the beginning and keep the app open." : "The app closed before this export finished. Render the current review."
-                        if let name = job.filename, name == URL(fileURLWithPath: name).lastPathComponent {
-                            try? FileManager.default.removeItem(at: exportFolder.appendingPathComponent(name))
-                        }
+            try recoverProject(folder.lastPathComponent, cleanTemporary: true)
+        }
+    }
+    func recoverProject(_ id: String, cleanTemporary: Bool = false) throws {
+        let folder = try store.directory(id)
+        let exportFolder = folder.appendingPathComponent("exports")
+        for path in (try? FileManager.default.contentsOfDirectory(at: exportFolder, includingPropertiesForKeys: nil)) ?? [] where path.pathExtension == "json" {
+            do {
+                var job = try JSONDecoder().decode(BJJExportJob.self, from: Data(contentsOf: path))
+                try BJJValidate.uuid(job.jobId); try BJJValidate.uuid(job.projectId)
+                guard job.projectId == folder.lastPathComponent, path.deletingPathExtension().lastPathComponent == job.jobId else { continue }
+                guard jobs[job.jobId] == nil else { continue }
+                job.retryAvailable = FileManager.default.fileExists(atPath: try BJJRenderPlan.path(store, job).path)
+                if ["running", "queued"].contains(job.status) {
+                    job.status = "failed"
+                    job.errorCode = "EXPORT_INTERRUPTED"
+                    job.error = job.retryAvailable == true ? "The app closed before this export finished. Retry this revision from the beginning and keep the app open." : "The app closed before this export finished. Render the current review."
+                    if let name = job.filename, name == URL(fileURLWithPath: name).lastPathComponent {
+                        try? FileManager.default.removeItem(at: exportFolder.appendingPathComponent(name))
                     }
-                    job.outputAvailable = job.status == "completed" && job.filename.map { $0 == URL(fileURLWithPath: $0).lastPathComponent && FileManager.default.fileExists(atPath: exportFolder.appendingPathComponent($0).path) } == true
-                    jobs[job.jobId] = job
-                    try persist(job)
-                } catch { logger.error("Unreadable export metadata: \(error.localizedDescription, privacy: .public)") }
-            }
-            let temp = folder.appendingPathComponent("temp")
-            for path in (try? FileManager.default.contentsOfDirectory(at: temp, includingPropertiesForKeys: nil)) ?? [] {
-                try? FileManager.default.removeItem(at: path)
-            }
+                }
+                job.outputAvailable = job.status == "completed" && job.filename.map { $0 == URL(fileURLWithPath: $0).lastPathComponent && FileManager.default.fileExists(atPath: exportFolder.appendingPathComponent($0).path) } == true
+                jobs[job.jobId] = job
+                try persist(job)
+            } catch { logger.error("Unreadable export metadata: \(error.localizedDescription, privacy: .public)") }
+        }
+        guard cleanTemporary else { return }
+        let temp = folder.appendingPathComponent("temp")
+        for path in (try? FileManager.default.contentsOfDirectory(at: temp, includingPropertiesForKeys: nil)) ?? [] {
+            try? FileManager.default.removeItem(at: path)
         }
     }
     private func persist(_ job: BJJExportJob) throws {
@@ -176,11 +183,11 @@ struct BJJExportJob: Codable {
         try persist(item)
         return item
     }
-    func deleteProject(_ id: String) throws {
+    func deleteProject(_ id: String, expectedRevision: Int) throws {
         guard !jobs.values.contains(where: { $0.projectId == id && ["queued", "running"].contains($0.status) }) else {
             throw BJJError.invalid("Cancel this project's pending exports before deleting it.")
         }
-        try store.delete(id)
+        try BJJProjectVersions(store: store).trash(id, revision: expectedRevision)
         jobs = jobs.filter { $0.value.projectId != id }
     }
     func exportedFile(_ id: String) throws -> URL {

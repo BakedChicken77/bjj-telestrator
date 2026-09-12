@@ -162,8 +162,31 @@ newer edits exist. **Remove MP4** removes only that completed file; its retry in
 source and recording assets remain. Downloads are protected from concurrent cleanup.
 Older exports created before this feature have no saved retry input.
 
-Removed narration stays available for undo and old exports. Whole-project deletion
-remains permanent in this work package. Checkpoints, recently deleted recovery and
-portable `.bjjproj` backup/restore are not yet implemented. Preserve original media
+Removed narration stays available for undo, checkpoints and old exports. Project deletion
+now moves the complete project to **Recently deleted**. Portable `.bjjproj` backup/restore
+is not yet implemented. Preserve original media
 and existing project folders before updating. Physical iPhone/Windows acceptance
 remains separate from automated CI.
+
+
+### Checkpoints, copies and recently deleted projects
+
+Open **Projects → Checkpoints and copies** for the current review. Enter a label
+and choose **Save checkpoint** after pending edits save. **Restore checkpoint**
+verifies the referenced media and saves a **Before restoring …** checkpoint before
+replacing editable fields. It opens a fresh undo history and advances the current
+revision; the previous review remains recoverable from that checkpoint.
+
+**Duplicate project** opens an independent copy of the saved review with new
+project/annotation/recording IDs and verified local media copies. Existing exports,
+checkpoints and removed takes remain with the original. Allow enough free space
+for the required source, proxy and recordings plus a safety margin; keep the app
+open during copying.
+
+**Delete project** moves the entire project to **Recently deleted**, retaining all
+media, versions and export inputs. **Restore project** brings it back. If its ID
+already exists, restoration opens a fresh copy and keeps the full deleted project.
+**Permanently delete** requires a separate confirmation and cannot be undone.
+There is no automatic expiry. Checkpoints and deleted projects use local storage;
+they are not a backup against device loss. Up to 1,000 checkpoints per project and
+1,000 deleted projects are supported. Active media jobs/share operations prevent deletion.

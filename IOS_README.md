@@ -129,7 +129,8 @@ flush while execution is available; a final lifecycle callback is not guaranteed
 Recording recovery has its own asset journal and commits a revision when reopened.
 Use **Recover draft as a copy** to preserve both the saved review and pending edits.
 A completed copy has independent media files and object IDs. Keep the app open
-while large media is copied; progressive/cancellable storage jobs belong to P1.06.
+while large media is copied. Copying and checksums run off the main actor; there is
+no separate copy-cancel control yet. The editor shows an indeterminate working state.
 
 Use [DEVICE_ACCEPTANCE.md](docs/DEVICE_ACCEPTANCE.md) for the exact signed-build
 checklist and result fields. Retain the same bundle identity when installing an
@@ -148,6 +149,22 @@ large media through JavaScript.
 **Remove MP4** reclaims a completed output and retains its retry input and all source
 and recording assets. An active share sheet protects that file until dismissed.
 Old jobs without saved inputs cannot retry their old edits. Whole-project deletion
-is still permanent; recently deleted recovery, checkpoints and Files `.bjjproj`
-transfer remain later work. Simulator/CI verification does not establish physical
+now retains the project in **Recently deleted**. Files `.bjjproj` transfer remains
+later work. Simulator/CI verification does not establish physical
 low-space, share-sheet, thermal or 20-minute performance acceptance.
+
+
+### Local project versions
+
+In **Projects**, expand **Checkpoints and copies** for the current review. Save a
+named checkpoint, restore a previous one, or duplicate the saved project. Restore
+first preserves the current revision as a checkpoint; source and recording files
+stay immutable. A duplicate has fresh IDs and copied media, with no shared hard links.
+
+Deleted projects remain in **Recently deleted** with all their recordings,
+checkpoints and exports until separate permanent deletion. Restore retains the
+original ID when available; a collision creates a new review and leaves the full
+deleted project intact. These local copies do not protect against uninstall or
+phone loss. Keep the same bundle identity for updates and never uninstall as a
+routine rollback. Physical suspension, large copies, VoiceOver and low-space
+behavior still require the candidate-specific device checklist.

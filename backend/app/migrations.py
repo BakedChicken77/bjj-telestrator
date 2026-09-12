@@ -50,4 +50,5 @@ def migrate_document(value: object) -> dict:
 def runtime_capabilities() -> dict:
     return {'schemaVersion': SCHEMA_VERSION, 'requiredCapabilities': list(CAPABILITIES),
             'conditionalSave': True, 'conditionalExport': True, 'recoveryCopy': True,
-            'exportRetry': True, 'storageBreakdown': True, 'exportFileCleanup': True}
+            'exportRetry': True, 'storageBreakdown': True, 'exportFileCleanup': True,
+            'projectCheckpoints': True, 'projectDuplicate': True, 'projectTrash': True}

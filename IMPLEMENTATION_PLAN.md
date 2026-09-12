@@ -19,8 +19,8 @@ is authorized by mentioning those modules.
 | P1.01 | device/staging verification pending | Baseline and fresh candidate CI verified; candidate-specific signing/device template and release gate prepared. Run fresh signed-install/update and Windows/Docker acceptance. |
 | P1.02 | automatically verified | TypeScript, Python and Swift conformance plus migration/edit/export/reopen passed. Physical-device migration/reopen is still part of release acceptance. |
 | P1.03 | automatically verified | Local and native CI recovery/revision tests pass. Physical interruption, storage failure and VoiceOver acceptance remain pending. |
-| P1.06 — storage/export slice | implemented | Full local regression and native CI in progress. |
-| P1.06 — remaining recovery work | not started | Durable checkpoints, recently deleted projects, general duplication and broader reference-aware cleanup remain a separate vertical change. |
+| P1.06 — storage/export slice | automatically verified | All CI gates passed at 04b03a8 in run 34725049253, including 18 native tests and unsigned archive. Physical gates remain pending. |
+| P1.06 — project recovery | implemented | Checkpoints, independent duplication and project trash implemented on both adapters. Full verification and fresh native CI pending; broad media GC remains conservative retention. |
 | P1.04–P1.05, P1.07–P1.08 | not started | Continue after the P1.06 storage/reference foundations. |
 | P2.01–P2.08 | not started | Follow Phase 1 save/media/asset contracts and the brief's batch order. |
 | P3.01–P3.07 | not started | Requires Phase 2 transport/timeline/export contracts. |
@@ -32,10 +32,9 @@ Evidence and commands: [verification](docs/VERIFICATION.md).
 Hardware/signing checklist: [device acceptance](docs/DEVICE_ACCEPTANCE.md).
 
 Limits: only the existing six visual types and linear audio are persisted. No
-HDR conversion, portable ZIP, asset garbage collection, restartable export
-manifest, broad accessibility audit, 20-minute benchmark or cloud feature is
-claimed. Native recovery-copy currently copies synchronously; large-media
-responsiveness/progress belongs to the next storage work package. Draft storage
+HDR conversion, portable ZIP, audio-asset garbage collection, broad accessibility
+audit, 20-minute benchmark or cloud feature is claimed. Large-copy responsiveness
+and interruption still need physical-device evidence. Draft storage
 is bounded and cannot preserve an edit before it has actually been journaled.
 
 ### Completion record — P1.02 / P1.03
@@ -80,10 +79,24 @@ This work package does not complete P1.06 or authorize a release.
 
 Implementation now includes Python/Swift immutable job inputs and shared fixture
 validation, source/recording retention, safe output cleanup and real shared editor
-controls. Automated verification is in progress. The first backend run passed
-123 tests, and the focused browser storage/retry workflow passed; final results
-and native CI will be recorded before the work package is declared verified.
+controls. Automated verification passed: 125 backend, 91 frontend, 12 repository and 12
+browser tests; CI run 34725049253 also passed all 18 native tests and its unsigned
+archive at 04b03a8. The native recording-receipt regression caught by the first run
+was fixed without removing its assertion.
 No physical device, signed installation or Windows/Docker acceptance is claimed.
+
+
+### Current work package — P1.06 project recovery
+
+Authorized by Steve's “Continue”. Starting commit:
+`04b03a8cac59ae6266b32117ed2a7b797a4f6636`, isolated branch
+`codex/p1-project-recovery`, stacked on draft PR #9. Selected scope: named durable
+checkpoints, restore with a preserved before-restore checkpoint, independent
+project duplication, recently deleted projects with explicit permanent deletion,
+and restore of retained export attempts. Source/recording files remain immutable;
+no automatic expiration or media garbage collection is introduced. Native work
+runs off the UI thread; hardware interruption and large-media tests remain open.
+Status: implementation in progress, not accepted.
 
 
 ## Historical delivery records

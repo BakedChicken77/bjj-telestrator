@@ -28,14 +28,17 @@ extension BJJStore {
             try FileManager.default.removeItem(at: path)
         }
     }
-    func recoverCopy(_ draft: BJJProject) throws -> BJJProject {
-        let original = try load(draft.id)
+    func recoverCopy(_ draft: BJJProject, suffix: String = " (recovered copy)", sourceStore: BJJStore? = nil) throws -> BJJProject {
+        try locked { try copyReview(draft, suffix: suffix, sourceStore: sourceStore ?? self) }
+    }
+    private func copyReview(_ draft: BJJProject, suffix: String, sourceStore: BJJStore) throws -> BJJProject {
+        let original = try sourceStore.load(draft.id)
         for field in ["source", "proxy", "createdAt"] {
             guard NSDictionary(dictionary: ["value": draft.json[field]!]).isEqual(to: ["value": original.json[field]!]) else {
                 throw BJJError.invalid("Recovery cannot change imported media metadata.")
             }
         }
-        let registry = try recordings(draft.id)
+        let registry = try sourceStore.recordings(draft.id)
         for clip in draft.voiceovers {
             guard let registered = registry[clip["id"] as! String] as? BJJJSON else { throw BJJError.invalid("Unknown recovery recording.") }
             for field in ["id", "asset", "durationSec", "recordedAt", "codec", "sampleRate", "channels"] {
@@ -44,10 +47,18 @@ extension BJJStore {
                 }
             }
         }
-        let refs = Set([draft.source["asset"] as! String, draft.proxy["asset"] as! String] + draft.voiceovers.map { $0["asset"] as! String })
-        var bytes: Int64 = 32 * 1024 * 1024
-        for ref in refs { bytes += Int64(try asset(draft.id, ref).resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0) }
-        try checkSpace(required: bytes)
+        let entries = try BJJAssets.manifest(sourceStore, draft, proxy: true)
+        let bytes = entries.reduce(Int64(0)) { $0 + ($1["byteSize"] as! NSNumber).int64Value }
+        let estimate = BJJAssets.estimate("duplicate", output: 0, incoming: bytes)
+        try checkSpace(required: (estimate["requiredBytes"] as! NSNumber).int64Value)
+        let hashes = Dictionary(uniqueKeysWithValues: entries.map { ($0.s("reference"), $0.s("sha256")) })
+        func copyAsset(_ reference: String, to target: URL) throws {
+            let source = try BJJAssets.file(sourceStore, draft.id, reference)
+            try FileManager.default.copyItem(at: source, to: target)
+            guard try BJJAssets.digest(target) == hashes[reference], try BJJAssets.digest(source) == hashes[reference] else {
+                throw BJJError.domain("ASSET_CHANGED", "A copied asset failed checksum verification. The original was preserved.")
+            }
+        }
         let (id, folder) = try createDirectory()
         do {
             var mapping = [draft.id: id]
@@ -61,18 +72,18 @@ extension BJJStore {
             var json = remap(draft.json) as! BJJJSON
             json["revision"] = 1
             json["createdAt"] = BJJProject.now(); json["updatedAt"] = BJJProject.now()
-            json["projectName"] = String(draft.name.prefix(142)) + " (recovered copy)"
+            json["projectName"] = String(draft.name.prefix(160 - suffix.count)) + suffix
             for media in [draft.source, draft.proxy] {
                 let ref = media["asset"] as! String
                 let target = folder.appendingPathComponent(ref)
                 try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try FileManager.default.copyItem(at: asset(draft.id, ref), to: target)
+                try copyAsset(ref, to: target)
             }
             var clips = json["voiceovers"] as! [BJJJSON]
             var newRegistry: BJJJSON = [:]
             for index in clips.indices {
                 let ref = "voiceover/\(clips[index]["id"] as! String).wav"
-                try FileManager.default.copyItem(at: asset(draft.id, draft.voiceovers[index]["asset"] as! String), to: folder.appendingPathComponent(ref))
+                try copyAsset(draft.voiceovers[index]["asset"] as! String, to: folder.appendingPathComponent(ref))
                 clips[index]["asset"] = ref
                 newRegistry[clips[index]["id"] as! String] = clips[index]
             }

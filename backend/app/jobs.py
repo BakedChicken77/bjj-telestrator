@@ -51,7 +51,15 @@ class JobManager:
         return asset_path(self.store.project_dir(job.projectId), f'exports/inputs/{require_uuid(job.jobId)}.json')
 
     def _recover(self) -> None:
-        for metadata in self.store.root.glob('*/exports/*.json'):
+        for folder in self.store.root.iterdir():
+            try:
+                require_uuid(folder.name)
+                self.recover_project(folder.name)
+            except StorageError:
+                continue
+
+    def recover_project(self, project_id: str) -> None:
+        for metadata in asset_path(self.store.project_dir(project_id), 'exports').glob('*.json'):
             try:
                 if metadata.stat().st_size > 1024**2 or metadata.is_symlink():
                     continue
@@ -60,6 +68,8 @@ class JobManager:
                 require_uuid(job.projectId)
                 if metadata.parent.parent.name != job.projectId or metadata.stem != job.jobId:
                     continue
+                if job.jobId in self.jobs:
+                    continue  # Never rewrite an active or other project's job on restore.
                 job.retryAvailable = self.input_path(job).is_file()
                 if job.status not in TERMINAL:
                     job.status = 'failed'

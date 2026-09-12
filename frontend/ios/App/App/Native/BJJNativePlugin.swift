@@ -14,7 +14,9 @@ public class BJJNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDeleg
         "createExport", "getExport", "cancelExport", "getAssetURL", "shareExport",
         "prepareRecording", "startRecording", "stopRecording", "getCapabilities",
         "writeRecoveryDraft", "getRecoveryDrafts", "clearRecoveryDraft", "recoverProjectCopy", "shareDiagnostics",
-        "getProjectStorage", "retryExport", "removeExportFile"
+        "getProjectStorage", "retryExport", "removeExportFile",
+        "duplicateProject", "listCheckpoints", "createCheckpoint", "restoreCheckpoint",
+        "listDeletedProjects", "restoreDeletedProject", "permanentlyDeleteProject"
     ].map { CAPPluginMethod(name: $0, returnType: CAPPluginReturnPromise) }
     private var service: BJJService?
     private var startupError: String?
@@ -58,7 +60,9 @@ public class BJJNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDeleg
                 call.resolve(try await work(service))
             } catch {
                 if let domain = error as? BJJError { call.reject(domain.localizedDescription, domain.code) }
-                else { call.reject("Unable to access local project storage. Check free space and retry.", "STORAGE_UNAVAILABLE") }
+                else if let failure = error as? CocoaError, failure.code == .fileWriteOutOfSpace {
+                    call.reject("Not enough free space on this iPhone. Free storage and retry; existing media was preserved.", "STORAGE_LOW")
+                } else { call.reject("Unable to access local project storage. Check free space and retry.", "STORAGE_UNAVAILABLE") }
             }
         }
     }
@@ -77,7 +81,9 @@ public class BJJNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDeleg
     }
     @objc func recoverProjectCopy(_ call: CAPPluginCall) {
         perform(call) { service in
-            ["project": try service.store.recoverCopy(BJJProject(BJJValidate.object(call.getObject("project"), "recovery project"))).json]
+            let project = try BJJProject(BJJValidate.object(call.getObject("project"), "recovery project"))
+            let copy = try await BJJAssets.offMain { [store = service.store] in try store.recoverCopy(project) }
+            return ["project": copy.json]
         }
     }
     @objc func listProjects(_ call: CAPPluginCall) { perform(call) { service in ["projects": try service.store.list()] } }
@@ -94,7 +100,58 @@ public class BJJNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDeleg
         perform(call) { [self] service in
             let projectId = try id(call)
             guard recordingProject != projectId else { throw BJJError.invalid("Stop recording before deleting this project.") }
-            try service.deleteProject(projectId); return [:]
+            try service.deleteProject(projectId, expectedRevision: revision(call)); return [:]
+        }
+    }
+    private func revision(_ call: CAPPluginCall) throws -> Int {
+        Int(try BJJValidate.number(call.getDouble("expectedRevision"), "expected revision", 1...9007199254740991, integer: true))
+    }
+    @objc func duplicateProject(_ call: CAPPluginCall) {
+        perform(call) { [self] service in
+            let projectId = try id(call), expected = try revision(call)
+            let project = try await BJJAssets.offMain { [store = service.store] in try BJJProjectVersions(store: store).duplicate(projectId, revision: expected) }
+            return ["project": project.json]
+        }
+    }
+    @objc func listCheckpoints(_ call: CAPPluginCall) {
+        perform(call) { [self] service in
+            let projectId = try id(call)
+            return ["checkpoints": try await BJJAssets.offMain { [store = service.store] in try BJJProjectVersions(store: store).checkpoints(projectId) }]
+        }
+    }
+    @objc func createCheckpoint(_ call: CAPPluginCall) {
+        perform(call) { [self] service in
+            let projectId = try id(call), expected = try revision(call)
+            let label = try BJJValidate.string(call.getString("label"), "checkpoint label", max: 120)
+            return ["checkpoint": try await BJJAssets.offMain { [store = service.store] in try BJJProjectVersions(store: store).checkpoint(projectId, revision: expected, label: label) }]
+        }
+    }
+    @objc func restoreCheckpoint(_ call: CAPPluginCall) {
+        perform(call) { [self] service in
+            let projectId = try id(call), expected = try revision(call), checkpoint = try id(call, "checkpointId")
+            guard recordingProject != projectId else { throw BJJError.invalid("Stop recording before restoring a checkpoint.") }
+            let project = try await BJJAssets.offMain { [store = service.store] in try BJJProjectVersions(store: store).restoreCheckpoint(projectId, checkpoint: checkpoint, revision: expected) }
+            return ["project": project.json]
+        }
+    }
+    @objc func listDeletedProjects(_ call: CAPPluginCall) {
+        perform(call) { service in
+            ["projects": try await BJJAssets.offMain { [store = service.store] in try BJJProjectVersions(store: store).deleted() }]
+        }
+    }
+    @objc func restoreDeletedProject(_ call: CAPPluginCall) {
+        perform(call) { [self] service in
+            let trashId = try id(call, "trashId")
+            let (project, copied) = try await BJJAssets.offMain { [store = service.store] in try BJJProjectVersions(store: store).restoreDeleted(trashId) }
+            try service.recoverProject(project.id)
+            return ["project": project.json, "copied": copied]
+        }
+    }
+    @objc func permanentlyDeleteProject(_ call: CAPPluginCall) {
+        perform(call) { [self] service in
+            let trashId = try id(call, "trashId")
+            try await BJJAssets.offMain { [store = service.store] in try BJJProjectVersions(store: store).permanentlyDelete(trashId) }
+            return [:]
         }
     }
     @objc func listExports(_ call: CAPPluginCall) { perform(call) { [self] service in ["jobs": try service.listExports(id(call))] } }

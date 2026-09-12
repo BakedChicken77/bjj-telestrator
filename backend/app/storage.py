@@ -90,7 +90,10 @@ class ProjectStore:
             self.leases[project_id] = max(0, self.leases.get(project_id, 0) - 1)
 
     def project_dir(self, project_id: str) -> Path:
-        folder = (self.root / require_uuid(project_id)).resolve()
+        candidate = self.root / require_uuid(project_id)
+        if candidate.is_symlink():
+            raise StorageError('Symbolic links are not supported for project directories')
+        folder = candidate.resolve()
         if not folder.is_relative_to(self.root):
             raise StorageError('Invalid project directory')
         return folder
@@ -179,7 +182,7 @@ class ProjectStore:
                 project = self.load(directory.name)
                 projects.append({'projectId': project.projectId, 'projectName': project.projectName,
                                  'updatedAt': project.updatedAt, 'durationSec': project.source.durationSec,
-                                 'annotationCount': len(project.annotations)})
+                                 'annotationCount': len(project.annotations), 'revision': project.revision})
             except DomainError as exc:
                 # Keep upgrade-required/corrupt projects visible and recoverable.
                 projects.append({'projectId': directory.name, 'projectName': 'Unavailable project',
@@ -190,12 +193,9 @@ class ProjectStore:
         return sorted(projects, key=lambda item: str(item['updatedAt']), reverse=True)
 
     def delete(self, project_id: str) -> None:
+        from .recovery import ProjectRecovery
         with self.lock:
-            if self.leases.get(project_id, 0):
-                raise DomainError('ASSET_BUSY', 'Finish or cancel active media operations before deleting this project.', 409)
-            self.load(project_id)
-            shutil.rmtree(self.project_dir(project_id))
-
+            ProjectRecovery(self).trash(project_id, self.load(project_id).revision)
 
     def voiceover_metadata(self, project_id: str, clip_id: str) -> Voiceover:
         folder = self.project_dir(project_id)
@@ -213,19 +213,27 @@ class ProjectStore:
             raise StorageError('A voiceover asset is missing. Rerecord the clip.')
         return clip
 
-    def recover_copy(self, draft: Project) -> Project:
+    def recover_copy(self, draft: Project, *, suffix: str = ' (recovered copy)', source_store: ProjectStore | None = None) -> Project:
         """Install a new, independent review only after every asset is validated."""
+        from .assets import digest_file, manifest_assets
+        from .recovery import copy_preflight
+        source_store = source_store or self
         with self.lock:
-            original = self.load(draft.projectId)
+            original = source_store.load(draft.projectId)
             for field in ('source', 'proxy', 'createdAt'):
                 if getattr(original, field) != getattr(draft, field):
                     raise StorageError('Recovery cannot change imported media metadata')
-            self.validate_voiceovers(draft)
-            old_folder = self.project_dir(draft.projectId)
-            refs = {draft.source.asset, draft.proxy.asset, *(v.asset for v in draft.voiceovers)}
-            required = sum(asset_path(old_folder, ref).stat().st_size for ref in refs)
-            if shutil.disk_usage(self.root).free < required + 32 * 1024**2:
-                raise DomainError('STORAGE_LOW', 'Not enough space to recover a separate copy.', 507)
+            source_store.validate_voiceovers(draft)
+            old_folder = source_store.project_dir(draft.projectId)
+            entries = manifest_assets(source_store, draft, proxy=True)
+            copy_preflight(self, entries)
+            expected = {entry['reference']: entry['sha256'] for entry in entries}
+
+            def copy_asset(reference: str, target: Path) -> None:
+                source = asset_path(old_folder, reference)
+                shutil.copyfile(source, target)
+                if digest_file(target) != expected[reference] or digest_file(source) != expected[reference]:
+                    raise DomainError('ASSET_CHANGED', 'A copied asset failed checksum verification. The original was preserved.', 409)
             new_id = str(uuid4())
             folder = self.create_dir(new_id)
             try:
@@ -244,15 +252,15 @@ class ProjectStore:
 
                 document = remap(document)
                 document['revision'] = 1
-                document['projectName'] = draft.projectName[:142] + ' (recovered copy)'
+                document['projectName'] = draft.projectName[:160 - len(suffix)] + suffix
                 document['createdAt'] = document['updatedAt'] = utc_now()
                 for media in (draft.source, draft.proxy):
                     target = asset_path(folder, media.asset)
                     target.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copyfile(asset_path(old_folder, media.asset), target)
+                    copy_asset(media.asset, target)
                 for before, after in zip(draft.voiceovers, document['voiceovers'], strict=True):
                     after['asset'] = f'voiceover/{after["id"]}.wav'
-                    shutil.copyfile(asset_path(old_folder, before.asset), asset_path(folder, after['asset']))
+                    copy_asset(before.asset, asset_path(folder, after['asset']))
                     atomic_json(folder / 'voiceover' / f'{after["id"]}.json', after)
                 return self.save(Project.model_validate(document), existing=False)
             except BaseException:

@@ -10,6 +10,7 @@ export interface ProjectSummary {
   durationSec: number;
   annotationCount: number;
   unavailableCode?: string;
+  revision?: number;
 }
 export interface ExportJob {
   jobId: string;
@@ -48,6 +49,24 @@ export interface ProjectStorage {
   exportEstimate: SpaceEstimate;
   recordingsRetained: boolean;
 }
+export interface Checkpoint {
+  checkpointId: string;
+  projectId: string;
+  revision: number;
+  label: string;
+  createdAt: string;
+}
+export interface DeletedProject {
+  trashId: string;
+  projectId: string;
+  projectName: string;
+  revision: number;
+  deletedAt: string;
+}
+export interface RestoredProject {
+  project: Project;
+  copied: boolean;
+}
 export interface RuntimeCapabilities {
   schemaVersion: number;
   requiredCapabilities: string[];
@@ -57,6 +76,9 @@ export interface RuntimeCapabilities {
   exportRetry?: boolean;
   storageBreakdown?: boolean;
   exportFileCleanup?: boolean;
+  projectCheckpoints?: boolean;
+  projectDuplicate?: boolean;
+  projectTrash?: boolean;
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -138,7 +160,42 @@ const desktopAPI = {
         body: JSON.stringify(projectSchema.parse(project)),
       }),
     ),
-  deleteProject: (id: string) => request<void>(`/api/projects/${id}`, { method: 'DELETE' }),
+  deleteProject: (id: string, revision: number) =>
+    request<void>(`/api/projects/${id}`, {
+      method: 'DELETE',
+      headers: { 'If-Match': `"${revision}"` },
+    }),
+  duplicateProject: async (id: string, revision: number) =>
+    readProject(
+      await request<unknown>(`/api/projects/${id}/duplicate`, {
+        method: 'POST',
+        headers: { 'If-Match': `"${revision}"` },
+      }),
+    ),
+  checkpoints: (id: string) => request<Checkpoint[]>(`/api/projects/${id}/checkpoints`),
+  createCheckpoint: (id: string, revision: number, label: string) =>
+    request<Checkpoint>(`/api/projects/${id}/checkpoints`, {
+      method: 'POST',
+      headers: { 'If-Match': `"${revision}"`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label }),
+    }),
+  restoreCheckpoint: async (id: string, checkpointId: string, revision: number) =>
+    readProject(
+      await request<unknown>(`/api/projects/${id}/checkpoints/${checkpointId}/restore`, {
+        method: 'POST',
+        headers: { 'If-Match': `"${revision}"` },
+      }),
+    ),
+  deletedProjects: () => request<DeletedProject[]>('/api/recently-deleted'),
+  restoreDeletedProject: async (trashId: string): Promise<RestoredProject> => {
+    const result = await request<{ project: unknown; copied: boolean }>(
+      `/api/recently-deleted/${trashId}/restore`,
+      { method: 'POST' },
+    );
+    return { ...result, project: readProject(result.project) };
+  },
+  permanentlyDeleteProject: (trashId: string) =>
+    request<void>(`/api/recently-deleted/${trashId}`, { method: 'DELETE' }),
   exports: (id: string) => request<ExportJob[]>(`/api/projects/${id}/exports`),
   export: (id: string, revision: number) =>
     request<ExportJob>(`/api/projects/${id}/exports`, {
@@ -162,8 +219,30 @@ export const api = {
   projects: () => (isNativeIOS() ? nativeAPI.projects() : desktopAPI.projects()),
   project: (id: string) => (isNativeIOS() ? nativeAPI.project(id) : desktopAPI.project(id)),
   save: (project: Project) => (isNativeIOS() ? nativeAPI.save(project) : desktopAPI.save(project)),
-  deleteProject: (id: string) =>
-    isNativeIOS() ? nativeAPI.deleteProject(id) : desktopAPI.deleteProject(id),
+  deleteProject: (id: string, revision: number) =>
+    isNativeIOS() ? nativeAPI.deleteProject(id, revision) : desktopAPI.deleteProject(id, revision),
+  duplicateProject: (id: string, revision: number) =>
+    isNativeIOS()
+      ? nativeAPI.duplicateProject(id, revision)
+      : desktopAPI.duplicateProject(id, revision),
+  checkpoints: (id: string) =>
+    isNativeIOS() ? nativeAPI.checkpoints(id) : desktopAPI.checkpoints(id),
+  createCheckpoint: (id: string, revision: number, label: string) =>
+    isNativeIOS()
+      ? nativeAPI.createCheckpoint(id, revision, label)
+      : desktopAPI.createCheckpoint(id, revision, label),
+  restoreCheckpoint: (id: string, checkpointId: string, revision: number) =>
+    isNativeIOS()
+      ? nativeAPI.restoreCheckpoint(id, checkpointId, revision)
+      : desktopAPI.restoreCheckpoint(id, checkpointId, revision),
+  deletedProjects: () =>
+    isNativeIOS() ? nativeAPI.deletedProjects() : desktopAPI.deletedProjects(),
+  restoreDeletedProject: (id: string) =>
+    isNativeIOS() ? nativeAPI.restoreDeletedProject(id) : desktopAPI.restoreDeletedProject(id),
+  permanentlyDeleteProject: (id: string) =>
+    isNativeIOS()
+      ? nativeAPI.permanentlyDeleteProject(id)
+      : desktopAPI.permanentlyDeleteProject(id),
   exports: (id: string) => (isNativeIOS() ? nativeAPI.exports(id) : desktopAPI.exports(id)),
   export: (id: string, revision: number) =>
     isNativeIOS() ? nativeAPI.export(id, revision) : desktopAPI.export(id, revision),
