@@ -1071,10 +1071,24 @@
   "additionalProperties": true,
   "properties": {
     "schemaVersion": {
-      "const": 1,
-      "default": 1,
+      "const": 2,
+      "default": 2,
       "title": "Schemaversion",
       "type": "integer"
+    },
+    "revision": {
+      "default": 1,
+      "maximum": 9007199254740991,
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "requiredCapabilities": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Requiredcapabilities",
+      "type": "array"
     },
     "projectId": {
       "title": "Projectid",

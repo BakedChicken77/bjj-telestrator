@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { migrateDocument } from './project/migrations';
 
 const number = z.number().finite();
 const coordinate = number.min(0).max(1);
@@ -176,9 +177,11 @@ export const voiceoverSchema = z
     'Voiceover end must match start + duration',
   );
 
-export const projectSchema = z
+const currentProjectSchema = z
   .object({
-    schemaVersion: z.literal(1),
+    schemaVersion: z.literal(2),
+    revision: number.int().min(1).max(Number.MAX_SAFE_INTEGER),
+    requiredCapabilities: z.array(z.string().min(1).max(100)).max(128),
     projectId: uuid,
     projectName: z.string().trim().min(1).max(160),
     createdAt: timestamp,
@@ -252,6 +255,21 @@ export const projectSchema = z
       ids.add(item.id);
     }
   });
+
+export const projectSchema = z.preprocess((value, context) => {
+  try {
+    return migrateDocument(value);
+  } catch (error) {
+    context.addIssue({
+      code: 'custom',
+      message: error instanceof Error ? error.message : 'Invalid project',
+    });
+    return z.NEVER;
+  }
+}, currentProjectSchema);
+
+/** Boundary parsing retains typed upgrade errors for the project browser. */
+export const readProject = (value: unknown) => currentProjectSchema.parse(migrateDocument(value));
 
 export type Media = z.infer<typeof mediaSchema>;
 export type Annotation = z.infer<typeof annotationSchema>;

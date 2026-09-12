@@ -93,7 +93,7 @@ describe('desktop / standalone iPhone API routing', () => {
     harness.native = true;
     const job = { jobId: 'job', status: 'queued' };
     harness.plugin.createExport.mockResolvedValue({ job });
-    expect(await api.export('project')).toEqual(job);
+    expect(await api.export('project', 1)).toEqual(job);
     harness.plugin.cancelExport.mockResolvedValue({ job: { ...job, status: 'cancelled' } });
     expect((await api.cancelExport('job')).status).toBe('cancelled');
   });

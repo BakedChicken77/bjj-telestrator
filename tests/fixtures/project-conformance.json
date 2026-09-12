@@ -1,0 +1,2432 @@
+{
+  "migrationExpected": {
+    "schemaVersion": 2,
+    "revision": 1,
+    "requiredCapabilities": [
+      "project.revisions.v1"
+    ],
+    "projectId": "11111111-1111-4111-8111-111111111111",
+    "projectName": "Synthetic conformance",
+    "createdAt": "2026-09-05T00:00:00Z",
+    "updatedAt": "2026-09-05T00:00:00Z",
+    "source": {
+      "asset": "source/original.mp4",
+      "videoStartSec": 0.0,
+      "videoStreamIndex": 0,
+      "audioStreamIndex": null,
+      "originalFilename": "original.mp4",
+      "durationSec": 20.0,
+      "codec": "h264",
+      "audioCodec": "aac",
+      "hasAudio": true,
+      "codedWidth": 1920,
+      "codedHeight": 1080,
+      "displayWidth": 1920,
+      "displayHeight": 1080,
+      "sampleAspectRatio": "1:1",
+      "displayAspectRatio": "16:9",
+      "rotation": 0.0,
+      "avgFrameRate": 30.0,
+      "optionalFuture": {
+        "primaries": "retained"
+      }
+    },
+    "proxy": {
+      "asset": "proxy/editing.mp4",
+      "videoStartSec": 0.0,
+      "videoStreamIndex": 0,
+      "audioStreamIndex": null,
+      "originalFilename": "original.mp4",
+      "durationSec": 20.0,
+      "codec": "h264",
+      "audioCodec": "aac",
+      "hasAudio": true,
+      "codedWidth": 1920,
+      "codedHeight": 1080,
+      "displayWidth": 1920,
+      "displayHeight": 1080,
+      "sampleAspectRatio": "1:1",
+      "displayAspectRatio": "16:9",
+      "rotation": 0.0,
+      "avgFrameRate": 30.0
+    },
+    "settings": {
+      "defaultAnnotationDuration": 5.0,
+      "seekStepSec": 0.1,
+      "largeSeekStepSec": 1.0,
+      "originalAudioGain": 1.0,
+      "originalAudioMuted": false,
+      "voiceoverMasterGain": 1.0,
+      "optionalFuture": "preserved"
+    },
+    "exportSettings": {
+      "fps": 30.0,
+      "crf": 18,
+      "preset": "medium"
+    },
+    "annotations": [
+      {
+        "id": "33333333-3333-4333-8333-333333333333",
+        "startSec": 5.0,
+        "endSec": 10.0,
+        "zIndex": 0,
+        "strokeColor": "#ff0000",
+        "strokeWidth": 0.006,
+        "strokeOpacity": 1.0,
+        "fillColor": "#ff0000",
+        "fillOpacity": 0.0,
+        "createdAt": "2026-09-05T00:00:00Z",
+        "updatedAt": "2026-09-05T00:00:00Z",
+        "type": "arrow",
+        "geometry": {
+          "x1": 0.2,
+          "y1": 0.3,
+          "x2": 0.6,
+          "y2": 0.5,
+          "arrowheadSize": 0.025,
+          "optionalFuture": {
+            "keep": true
+          }
+        }
+      }
+    ],
+    "voiceovers": [],
+    "optionalFuture": {
+      "keep": [
+        1,
+        true,
+        "ação"
+      ],
+      "objectRef": "33333333-3333-4333-8333-333333333333"
+    }
+  },
+  "cases": [
+    {
+      "name": "legacy-v1",
+      "valid": true,
+      "document": {
+        "schemaVersion": 1,
+        "projectId": "11111111-1111-4111-8111-111111111111",
+        "projectName": "Synthetic conformance",
+        "createdAt": "2026-09-05T00:00:00Z",
+        "updatedAt": "2026-09-05T00:00:00Z",
+        "source": {
+          "asset": "source/original.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0,
+          "optionalFuture": {
+            "primaries": "retained"
+          }
+        },
+        "proxy": {
+          "asset": "proxy/editing.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0
+        },
+        "settings": {
+          "defaultAnnotationDuration": 5.0,
+          "seekStepSec": 0.1,
+          "largeSeekStepSec": 1.0,
+          "originalAudioGain": 1.0,
+          "originalAudioMuted": false,
+          "voiceoverMasterGain": 1.0,
+          "optionalFuture": "preserved"
+        },
+        "exportSettings": {
+          "fps": 30.0,
+          "crf": 18,
+          "preset": "medium"
+        },
+        "annotations": [
+          {
+            "id": "33333333-3333-4333-8333-333333333333",
+            "startSec": 5.0,
+            "endSec": 10.0,
+            "zIndex": 0,
+            "strokeColor": "#ff0000",
+            "strokeWidth": 0.006,
+            "strokeOpacity": 1.0,
+            "fillColor": "#ff0000",
+            "fillOpacity": 0.0,
+            "createdAt": "2026-09-05T00:00:00Z",
+            "updatedAt": "2026-09-05T00:00:00Z",
+            "type": "arrow",
+            "geometry": {
+              "x1": 0.2,
+              "y1": 0.3,
+              "x2": 0.6,
+              "y2": 0.5,
+              "arrowheadSize": 0.025,
+              "optionalFuture": {
+                "keep": true
+              }
+            }
+          }
+        ],
+        "voiceovers": [],
+        "optionalFuture": {
+          "keep": [
+            1,
+            true,
+            "ação"
+          ],
+          "objectRef": "33333333-3333-4333-8333-333333333333"
+        }
+      }
+    },
+    {
+      "name": "current-v2",
+      "valid": true,
+      "document": {
+        "schemaVersion": 2,
+        "revision": 1,
+        "requiredCapabilities": [
+          "project.revisions.v1"
+        ],
+        "projectId": "11111111-1111-4111-8111-111111111111",
+        "projectName": "Synthetic conformance",
+        "createdAt": "2026-09-05T00:00:00Z",
+        "updatedAt": "2026-09-05T00:00:00Z",
+        "source": {
+          "asset": "source/original.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0,
+          "optionalFuture": {
+            "primaries": "retained"
+          }
+        },
+        "proxy": {
+          "asset": "proxy/editing.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0
+        },
+        "settings": {
+          "defaultAnnotationDuration": 5.0,
+          "seekStepSec": 0.1,
+          "largeSeekStepSec": 1.0,
+          "originalAudioGain": 1.0,
+          "originalAudioMuted": false,
+          "voiceoverMasterGain": 1.0,
+          "optionalFuture": "preserved"
+        },
+        "exportSettings": {
+          "fps": 30.0,
+          "crf": 18,
+          "preset": "medium"
+        },
+        "annotations": [
+          {
+            "id": "33333333-3333-4333-8333-333333333333",
+            "startSec": 5.0,
+            "endSec": 10.0,
+            "zIndex": 0,
+            "strokeColor": "#ff0000",
+            "strokeWidth": 0.006,
+            "strokeOpacity": 1.0,
+            "fillColor": "#ff0000",
+            "fillOpacity": 0.0,
+            "createdAt": "2026-09-05T00:00:00Z",
+            "updatedAt": "2026-09-05T00:00:00Z",
+            "type": "arrow",
+            "geometry": {
+              "x1": 0.2,
+              "y1": 0.3,
+              "x2": 0.6,
+              "y2": 0.5,
+              "arrowheadSize": 0.025,
+              "optionalFuture": {
+                "keep": true
+              }
+            }
+          }
+        ],
+        "voiceovers": [],
+        "optionalFuture": {
+          "keep": [
+            1,
+            true,
+            "ação"
+          ],
+          "objectRef": "33333333-3333-4333-8333-333333333333"
+        }
+      }
+    },
+    {
+      "name": "future-schema",
+      "valid": false,
+      "document": {
+        "schemaVersion": 99,
+        "revision": 1,
+        "requiredCapabilities": [
+          "project.revisions.v1"
+        ],
+        "projectId": "11111111-1111-4111-8111-111111111111",
+        "projectName": "Synthetic conformance",
+        "createdAt": "2026-09-05T00:00:00Z",
+        "updatedAt": "2026-09-05T00:00:00Z",
+        "source": {
+          "asset": "source/original.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0,
+          "optionalFuture": {
+            "primaries": "retained"
+          }
+        },
+        "proxy": {
+          "asset": "proxy/editing.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0
+        },
+        "settings": {
+          "defaultAnnotationDuration": 5.0,
+          "seekStepSec": 0.1,
+          "largeSeekStepSec": 1.0,
+          "originalAudioGain": 1.0,
+          "originalAudioMuted": false,
+          "voiceoverMasterGain": 1.0,
+          "optionalFuture": "preserved"
+        },
+        "exportSettings": {
+          "fps": 30.0,
+          "crf": 18,
+          "preset": "medium"
+        },
+        "annotations": [
+          {
+            "id": "33333333-3333-4333-8333-333333333333",
+            "startSec": 5.0,
+            "endSec": 10.0,
+            "zIndex": 0,
+            "strokeColor": "#ff0000",
+            "strokeWidth": 0.006,
+            "strokeOpacity": 1.0,
+            "fillColor": "#ff0000",
+            "fillOpacity": 0.0,
+            "createdAt": "2026-09-05T00:00:00Z",
+            "updatedAt": "2026-09-05T00:00:00Z",
+            "type": "arrow",
+            "geometry": {
+              "x1": 0.2,
+              "y1": 0.3,
+              "x2": 0.6,
+              "y2": 0.5,
+              "arrowheadSize": 0.025,
+              "optionalFuture": {
+                "keep": true
+              }
+            }
+          }
+        ],
+        "voiceovers": [],
+        "optionalFuture": {
+          "keep": [
+            1,
+            true,
+            "ação"
+          ],
+          "objectRef": "33333333-3333-4333-8333-333333333333"
+        }
+      }
+    },
+    {
+      "name": "unknown-capability",
+      "valid": false,
+      "document": {
+        "schemaVersion": 2,
+        "revision": 1,
+        "requiredCapabilities": [
+          "project.revisions.v1",
+          "visual.unknown.v1"
+        ],
+        "projectId": "11111111-1111-4111-8111-111111111111",
+        "projectName": "Synthetic conformance",
+        "createdAt": "2026-09-05T00:00:00Z",
+        "updatedAt": "2026-09-05T00:00:00Z",
+        "source": {
+          "asset": "source/original.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0,
+          "optionalFuture": {
+            "primaries": "retained"
+          }
+        },
+        "proxy": {
+          "asset": "proxy/editing.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0
+        },
+        "settings": {
+          "defaultAnnotationDuration": 5.0,
+          "seekStepSec": 0.1,
+          "largeSeekStepSec": 1.0,
+          "originalAudioGain": 1.0,
+          "originalAudioMuted": false,
+          "voiceoverMasterGain": 1.0,
+          "optionalFuture": "preserved"
+        },
+        "exportSettings": {
+          "fps": 30.0,
+          "crf": 18,
+          "preset": "medium"
+        },
+        "annotations": [
+          {
+            "id": "33333333-3333-4333-8333-333333333333",
+            "startSec": 5.0,
+            "endSec": 10.0,
+            "zIndex": 0,
+            "strokeColor": "#ff0000",
+            "strokeWidth": 0.006,
+            "strokeOpacity": 1.0,
+            "fillColor": "#ff0000",
+            "fillOpacity": 0.0,
+            "createdAt": "2026-09-05T00:00:00Z",
+            "updatedAt": "2026-09-05T00:00:00Z",
+            "type": "arrow",
+            "geometry": {
+              "x1": 0.2,
+              "y1": 0.3,
+              "x2": 0.6,
+              "y2": 0.5,
+              "arrowheadSize": 0.025,
+              "optionalFuture": {
+                "keep": true
+              }
+            }
+          }
+        ],
+        "voiceovers": [],
+        "optionalFuture": {
+          "keep": [
+            1,
+            true,
+            "ação"
+          ],
+          "objectRef": "33333333-3333-4333-8333-333333333333"
+        }
+      }
+    },
+    {
+      "name": "missing-capability",
+      "valid": false,
+      "document": {
+        "schemaVersion": 2,
+        "revision": 1,
+        "requiredCapabilities": [],
+        "projectId": "11111111-1111-4111-8111-111111111111",
+        "projectName": "Synthetic conformance",
+        "createdAt": "2026-09-05T00:00:00Z",
+        "updatedAt": "2026-09-05T00:00:00Z",
+        "source": {
+          "asset": "source/original.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0,
+          "optionalFuture": {
+            "primaries": "retained"
+          }
+        },
+        "proxy": {
+          "asset": "proxy/editing.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0
+        },
+        "settings": {
+          "defaultAnnotationDuration": 5.0,
+          "seekStepSec": 0.1,
+          "largeSeekStepSec": 1.0,
+          "originalAudioGain": 1.0,
+          "originalAudioMuted": false,
+          "voiceoverMasterGain": 1.0,
+          "optionalFuture": "preserved"
+        },
+        "exportSettings": {
+          "fps": 30.0,
+          "crf": 18,
+          "preset": "medium"
+        },
+        "annotations": [
+          {
+            "id": "33333333-3333-4333-8333-333333333333",
+            "startSec": 5.0,
+            "endSec": 10.0,
+            "zIndex": 0,
+            "strokeColor": "#ff0000",
+            "strokeWidth": 0.006,
+            "strokeOpacity": 1.0,
+            "fillColor": "#ff0000",
+            "fillOpacity": 0.0,
+            "createdAt": "2026-09-05T00:00:00Z",
+            "updatedAt": "2026-09-05T00:00:00Z",
+            "type": "arrow",
+            "geometry": {
+              "x1": 0.2,
+              "y1": 0.3,
+              "x2": 0.6,
+              "y2": 0.5,
+              "arrowheadSize": 0.025,
+              "optionalFuture": {
+                "keep": true
+              }
+            }
+          }
+        ],
+        "voiceovers": [],
+        "optionalFuture": {
+          "keep": [
+            1,
+            true,
+            "ação"
+          ],
+          "objectRef": "33333333-3333-4333-8333-333333333333"
+        }
+      }
+    },
+    {
+      "name": "duplicate-capability",
+      "valid": false,
+      "document": {
+        "schemaVersion": 2,
+        "revision": 1,
+        "requiredCapabilities": [
+          "project.revisions.v1",
+          "project.revisions.v1"
+        ],
+        "projectId": "11111111-1111-4111-8111-111111111111",
+        "projectName": "Synthetic conformance",
+        "createdAt": "2026-09-05T00:00:00Z",
+        "updatedAt": "2026-09-05T00:00:00Z",
+        "source": {
+          "asset": "source/original.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0,
+          "optionalFuture": {
+            "primaries": "retained"
+          }
+        },
+        "proxy": {
+          "asset": "proxy/editing.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0
+        },
+        "settings": {
+          "defaultAnnotationDuration": 5.0,
+          "seekStepSec": 0.1,
+          "largeSeekStepSec": 1.0,
+          "originalAudioGain": 1.0,
+          "originalAudioMuted": false,
+          "voiceoverMasterGain": 1.0,
+          "optionalFuture": "preserved"
+        },
+        "exportSettings": {
+          "fps": 30.0,
+          "crf": 18,
+          "preset": "medium"
+        },
+        "annotations": [
+          {
+            "id": "33333333-3333-4333-8333-333333333333",
+            "startSec": 5.0,
+            "endSec": 10.0,
+            "zIndex": 0,
+            "strokeColor": "#ff0000",
+            "strokeWidth": 0.006,
+            "strokeOpacity": 1.0,
+            "fillColor": "#ff0000",
+            "fillOpacity": 0.0,
+            "createdAt": "2026-09-05T00:00:00Z",
+            "updatedAt": "2026-09-05T00:00:00Z",
+            "type": "arrow",
+            "geometry": {
+              "x1": 0.2,
+              "y1": 0.3,
+              "x2": 0.6,
+              "y2": 0.5,
+              "arrowheadSize": 0.025,
+              "optionalFuture": {
+                "keep": true
+              }
+            }
+          }
+        ],
+        "voiceovers": [],
+        "optionalFuture": {
+          "keep": [
+            1,
+            true,
+            "ação"
+          ],
+          "objectRef": "33333333-3333-4333-8333-333333333333"
+        }
+      }
+    },
+    {
+      "name": "null-capabilities",
+      "valid": false,
+      "document": {
+        "schemaVersion": 2,
+        "revision": 1,
+        "requiredCapabilities": null,
+        "projectId": "11111111-1111-4111-8111-111111111111",
+        "projectName": "Synthetic conformance",
+        "createdAt": "2026-09-05T00:00:00Z",
+        "updatedAt": "2026-09-05T00:00:00Z",
+        "source": {
+          "asset": "source/original.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0,
+          "optionalFuture": {
+            "primaries": "retained"
+          }
+        },
+        "proxy": {
+          "asset": "proxy/editing.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0
+        },
+        "settings": {
+          "defaultAnnotationDuration": 5.0,
+          "seekStepSec": 0.1,
+          "largeSeekStepSec": 1.0,
+          "originalAudioGain": 1.0,
+          "originalAudioMuted": false,
+          "voiceoverMasterGain": 1.0,
+          "optionalFuture": "preserved"
+        },
+        "exportSettings": {
+          "fps": 30.0,
+          "crf": 18,
+          "preset": "medium"
+        },
+        "annotations": [
+          {
+            "id": "33333333-3333-4333-8333-333333333333",
+            "startSec": 5.0,
+            "endSec": 10.0,
+            "zIndex": 0,
+            "strokeColor": "#ff0000",
+            "strokeWidth": 0.006,
+            "strokeOpacity": 1.0,
+            "fillColor": "#ff0000",
+            "fillOpacity": 0.0,
+            "createdAt": "2026-09-05T00:00:00Z",
+            "updatedAt": "2026-09-05T00:00:00Z",
+            "type": "arrow",
+            "geometry": {
+              "x1": 0.2,
+              "y1": 0.3,
+              "x2": 0.6,
+              "y2": 0.5,
+              "arrowheadSize": 0.025,
+              "optionalFuture": {
+                "keep": true
+              }
+            }
+          }
+        ],
+        "voiceovers": [],
+        "optionalFuture": {
+          "keep": [
+            1,
+            true,
+            "ação"
+          ],
+          "objectRef": "33333333-3333-4333-8333-333333333333"
+        }
+      }
+    },
+    {
+      "name": "missing-revision",
+      "valid": false,
+      "document": {
+        "schemaVersion": 2,
+        "requiredCapabilities": [
+          "project.revisions.v1"
+        ],
+        "projectId": "11111111-1111-4111-8111-111111111111",
+        "projectName": "Synthetic conformance",
+        "createdAt": "2026-09-05T00:00:00Z",
+        "updatedAt": "2026-09-05T00:00:00Z",
+        "source": {
+          "asset": "source/original.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0,
+          "optionalFuture": {
+            "primaries": "retained"
+          }
+        },
+        "proxy": {
+          "asset": "proxy/editing.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0
+        },
+        "settings": {
+          "defaultAnnotationDuration": 5.0,
+          "seekStepSec": 0.1,
+          "largeSeekStepSec": 1.0,
+          "originalAudioGain": 1.0,
+          "originalAudioMuted": false,
+          "voiceoverMasterGain": 1.0,
+          "optionalFuture": "preserved"
+        },
+        "exportSettings": {
+          "fps": 30.0,
+          "crf": 18,
+          "preset": "medium"
+        },
+        "annotations": [
+          {
+            "id": "33333333-3333-4333-8333-333333333333",
+            "startSec": 5.0,
+            "endSec": 10.0,
+            "zIndex": 0,
+            "strokeColor": "#ff0000",
+            "strokeWidth": 0.006,
+            "strokeOpacity": 1.0,
+            "fillColor": "#ff0000",
+            "fillOpacity": 0.0,
+            "createdAt": "2026-09-05T00:00:00Z",
+            "updatedAt": "2026-09-05T00:00:00Z",
+            "type": "arrow",
+            "geometry": {
+              "x1": 0.2,
+              "y1": 0.3,
+              "x2": 0.6,
+              "y2": 0.5,
+              "arrowheadSize": 0.025,
+              "optionalFuture": {
+                "keep": true
+              }
+            }
+          }
+        ],
+        "voiceovers": [],
+        "optionalFuture": {
+          "keep": [
+            1,
+            true,
+            "ação"
+          ],
+          "objectRef": "33333333-3333-4333-8333-333333333333"
+        }
+      }
+    },
+    {
+      "name": "zero-revision",
+      "valid": false,
+      "document": {
+        "schemaVersion": 2,
+        "revision": 0,
+        "requiredCapabilities": [
+          "project.revisions.v1"
+        ],
+        "projectId": "11111111-1111-4111-8111-111111111111",
+        "projectName": "Synthetic conformance",
+        "createdAt": "2026-09-05T00:00:00Z",
+        "updatedAt": "2026-09-05T00:00:00Z",
+        "source": {
+          "asset": "source/original.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0,
+          "optionalFuture": {
+            "primaries": "retained"
+          }
+        },
+        "proxy": {
+          "asset": "proxy/editing.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0
+        },
+        "settings": {
+          "defaultAnnotationDuration": 5.0,
+          "seekStepSec": 0.1,
+          "largeSeekStepSec": 1.0,
+          "originalAudioGain": 1.0,
+          "originalAudioMuted": false,
+          "voiceoverMasterGain": 1.0,
+          "optionalFuture": "preserved"
+        },
+        "exportSettings": {
+          "fps": 30.0,
+          "crf": 18,
+          "preset": "medium"
+        },
+        "annotations": [
+          {
+            "id": "33333333-3333-4333-8333-333333333333",
+            "startSec": 5.0,
+            "endSec": 10.0,
+            "zIndex": 0,
+            "strokeColor": "#ff0000",
+            "strokeWidth": 0.006,
+            "strokeOpacity": 1.0,
+            "fillColor": "#ff0000",
+            "fillOpacity": 0.0,
+            "createdAt": "2026-09-05T00:00:00Z",
+            "updatedAt": "2026-09-05T00:00:00Z",
+            "type": "arrow",
+            "geometry": {
+              "x1": 0.2,
+              "y1": 0.3,
+              "x2": 0.6,
+              "y2": 0.5,
+              "arrowheadSize": 0.025,
+              "optionalFuture": {
+                "keep": true
+              }
+            }
+          }
+        ],
+        "voiceovers": [],
+        "optionalFuture": {
+          "keep": [
+            1,
+            true,
+            "ação"
+          ],
+          "objectRef": "33333333-3333-4333-8333-333333333333"
+        }
+      }
+    },
+    {
+      "name": "boolean-revision",
+      "valid": false,
+      "document": {
+        "schemaVersion": 2,
+        "revision": true,
+        "requiredCapabilities": [
+          "project.revisions.v1"
+        ],
+        "projectId": "11111111-1111-4111-8111-111111111111",
+        "projectName": "Synthetic conformance",
+        "createdAt": "2026-09-05T00:00:00Z",
+        "updatedAt": "2026-09-05T00:00:00Z",
+        "source": {
+          "asset": "source/original.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0,
+          "optionalFuture": {
+            "primaries": "retained"
+          }
+        },
+        "proxy": {
+          "asset": "proxy/editing.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0
+        },
+        "settings": {
+          "defaultAnnotationDuration": 5.0,
+          "seekStepSec": 0.1,
+          "largeSeekStepSec": 1.0,
+          "originalAudioGain": 1.0,
+          "originalAudioMuted": false,
+          "voiceoverMasterGain": 1.0,
+          "optionalFuture": "preserved"
+        },
+        "exportSettings": {
+          "fps": 30.0,
+          "crf": 18,
+          "preset": "medium"
+        },
+        "annotations": [
+          {
+            "id": "33333333-3333-4333-8333-333333333333",
+            "startSec": 5.0,
+            "endSec": 10.0,
+            "zIndex": 0,
+            "strokeColor": "#ff0000",
+            "strokeWidth": 0.006,
+            "strokeOpacity": 1.0,
+            "fillColor": "#ff0000",
+            "fillOpacity": 0.0,
+            "createdAt": "2026-09-05T00:00:00Z",
+            "updatedAt": "2026-09-05T00:00:00Z",
+            "type": "arrow",
+            "geometry": {
+              "x1": 0.2,
+              "y1": 0.3,
+              "x2": 0.6,
+              "y2": 0.5,
+              "arrowheadSize": 0.025,
+              "optionalFuture": {
+                "keep": true
+              }
+            }
+          }
+        ],
+        "voiceovers": [],
+        "optionalFuture": {
+          "keep": [
+            1,
+            true,
+            "ação"
+          ],
+          "objectRef": "33333333-3333-4333-8333-333333333333"
+        }
+      }
+    },
+    {
+      "name": "unsafe-revision",
+      "valid": false,
+      "document": {
+        "schemaVersion": 2,
+        "revision": 9007199254740992,
+        "requiredCapabilities": [
+          "project.revisions.v1"
+        ],
+        "projectId": "11111111-1111-4111-8111-111111111111",
+        "projectName": "Synthetic conformance",
+        "createdAt": "2026-09-05T00:00:00Z",
+        "updatedAt": "2026-09-05T00:00:00Z",
+        "source": {
+          "asset": "source/original.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0,
+          "optionalFuture": {
+            "primaries": "retained"
+          }
+        },
+        "proxy": {
+          "asset": "proxy/editing.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0
+        },
+        "settings": {
+          "defaultAnnotationDuration": 5.0,
+          "seekStepSec": 0.1,
+          "largeSeekStepSec": 1.0,
+          "originalAudioGain": 1.0,
+          "originalAudioMuted": false,
+          "voiceoverMasterGain": 1.0,
+          "optionalFuture": "preserved"
+        },
+        "exportSettings": {
+          "fps": 30.0,
+          "crf": 18,
+          "preset": "medium"
+        },
+        "annotations": [
+          {
+            "id": "33333333-3333-4333-8333-333333333333",
+            "startSec": 5.0,
+            "endSec": 10.0,
+            "zIndex": 0,
+            "strokeColor": "#ff0000",
+            "strokeWidth": 0.006,
+            "strokeOpacity": 1.0,
+            "fillColor": "#ff0000",
+            "fillOpacity": 0.0,
+            "createdAt": "2026-09-05T00:00:00Z",
+            "updatedAt": "2026-09-05T00:00:00Z",
+            "type": "arrow",
+            "geometry": {
+              "x1": 0.2,
+              "y1": 0.3,
+              "x2": 0.6,
+              "y2": 0.5,
+              "arrowheadSize": 0.025,
+              "optionalFuture": {
+                "keep": true
+              }
+            }
+          }
+        ],
+        "voiceovers": [],
+        "optionalFuture": {
+          "keep": [
+            1,
+            true,
+            "ação"
+          ],
+          "objectRef": "33333333-3333-4333-8333-333333333333"
+        }
+      }
+    },
+    {
+      "name": "duplicate-id",
+      "valid": false,
+      "document": {
+        "schemaVersion": 2,
+        "revision": 1,
+        "requiredCapabilities": [
+          "project.revisions.v1"
+        ],
+        "projectId": "11111111-1111-4111-8111-111111111111",
+        "projectName": "Synthetic conformance",
+        "createdAt": "2026-09-05T00:00:00Z",
+        "updatedAt": "2026-09-05T00:00:00Z",
+        "source": {
+          "asset": "source/original.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0,
+          "optionalFuture": {
+            "primaries": "retained"
+          }
+        },
+        "proxy": {
+          "asset": "proxy/editing.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0
+        },
+        "settings": {
+          "defaultAnnotationDuration": 5.0,
+          "seekStepSec": 0.1,
+          "largeSeekStepSec": 1.0,
+          "originalAudioGain": 1.0,
+          "originalAudioMuted": false,
+          "voiceoverMasterGain": 1.0,
+          "optionalFuture": "preserved"
+        },
+        "exportSettings": {
+          "fps": 30.0,
+          "crf": 18,
+          "preset": "medium"
+        },
+        "annotations": [
+          {
+            "id": "33333333-3333-4333-8333-333333333333",
+            "startSec": 5.0,
+            "endSec": 10.0,
+            "zIndex": 0,
+            "strokeColor": "#ff0000",
+            "strokeWidth": 0.006,
+            "strokeOpacity": 1.0,
+            "fillColor": "#ff0000",
+            "fillOpacity": 0.0,
+            "createdAt": "2026-09-05T00:00:00Z",
+            "updatedAt": "2026-09-05T00:00:00Z",
+            "type": "arrow",
+            "geometry": {
+              "x1": 0.2,
+              "y1": 0.3,
+              "x2": 0.6,
+              "y2": 0.5,
+              "arrowheadSize": 0.025,
+              "optionalFuture": {
+                "keep": true
+              }
+            }
+          },
+          {
+            "id": "33333333-3333-4333-8333-333333333333",
+            "startSec": 5.0,
+            "endSec": 10.0,
+            "zIndex": 0,
+            "strokeColor": "#ff0000",
+            "strokeWidth": 0.006,
+            "strokeOpacity": 1.0,
+            "fillColor": "#ff0000",
+            "fillOpacity": 0.0,
+            "createdAt": "2026-09-05T00:00:00Z",
+            "updatedAt": "2026-09-05T00:00:00Z",
+            "type": "arrow",
+            "geometry": {
+              "x1": 0.2,
+              "y1": 0.3,
+              "x2": 0.6,
+              "y2": 0.5,
+              "arrowheadSize": 0.025,
+              "optionalFuture": {
+                "keep": true
+              }
+            }
+          }
+        ],
+        "voiceovers": [],
+        "optionalFuture": {
+          "keep": [
+            1,
+            true,
+            "ação"
+          ],
+          "objectRef": "33333333-3333-4333-8333-333333333333"
+        }
+      }
+    },
+    {
+      "name": "invalid-id",
+      "valid": false,
+      "document": {
+        "schemaVersion": 2,
+        "revision": 1,
+        "requiredCapabilities": [
+          "project.revisions.v1"
+        ],
+        "projectId": "11111111-1111-4111-8111-111111111111",
+        "projectName": "Synthetic conformance",
+        "createdAt": "2026-09-05T00:00:00Z",
+        "updatedAt": "2026-09-05T00:00:00Z",
+        "source": {
+          "asset": "source/original.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0,
+          "optionalFuture": {
+            "primaries": "retained"
+          }
+        },
+        "proxy": {
+          "asset": "proxy/editing.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0
+        },
+        "settings": {
+          "defaultAnnotationDuration": 5.0,
+          "seekStepSec": 0.1,
+          "largeSeekStepSec": 1.0,
+          "originalAudioGain": 1.0,
+          "originalAudioMuted": false,
+          "voiceoverMasterGain": 1.0,
+          "optionalFuture": "preserved"
+        },
+        "exportSettings": {
+          "fps": 30.0,
+          "crf": 18,
+          "preset": "medium"
+        },
+        "annotations": [
+          {
+            "id": "not-a-uuid",
+            "startSec": 5.0,
+            "endSec": 10.0,
+            "zIndex": 0,
+            "strokeColor": "#ff0000",
+            "strokeWidth": 0.006,
+            "strokeOpacity": 1.0,
+            "fillColor": "#ff0000",
+            "fillOpacity": 0.0,
+            "createdAt": "2026-09-05T00:00:00Z",
+            "updatedAt": "2026-09-05T00:00:00Z",
+            "type": "arrow",
+            "geometry": {
+              "x1": 0.2,
+              "y1": 0.3,
+              "x2": 0.6,
+              "y2": 0.5,
+              "arrowheadSize": 0.025,
+              "optionalFuture": {
+                "keep": true
+              }
+            }
+          }
+        ],
+        "voiceovers": [],
+        "optionalFuture": {
+          "keep": [
+            1,
+            true,
+            "ação"
+          ],
+          "objectRef": "33333333-3333-4333-8333-333333333333"
+        }
+      }
+    },
+    {
+      "name": "negative-time",
+      "valid": false,
+      "document": {
+        "schemaVersion": 2,
+        "revision": 1,
+        "requiredCapabilities": [
+          "project.revisions.v1"
+        ],
+        "projectId": "11111111-1111-4111-8111-111111111111",
+        "projectName": "Synthetic conformance",
+        "createdAt": "2026-09-05T00:00:00Z",
+        "updatedAt": "2026-09-05T00:00:00Z",
+        "source": {
+          "asset": "source/original.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0,
+          "optionalFuture": {
+            "primaries": "retained"
+          }
+        },
+        "proxy": {
+          "asset": "proxy/editing.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0
+        },
+        "settings": {
+          "defaultAnnotationDuration": 5.0,
+          "seekStepSec": 0.1,
+          "largeSeekStepSec": 1.0,
+          "originalAudioGain": 1.0,
+          "originalAudioMuted": false,
+          "voiceoverMasterGain": 1.0,
+          "optionalFuture": "preserved"
+        },
+        "exportSettings": {
+          "fps": 30.0,
+          "crf": 18,
+          "preset": "medium"
+        },
+        "annotations": [
+          {
+            "id": "33333333-3333-4333-8333-333333333333",
+            "startSec": -1,
+            "endSec": 10.0,
+            "zIndex": 0,
+            "strokeColor": "#ff0000",
+            "strokeWidth": 0.006,
+            "strokeOpacity": 1.0,
+            "fillColor": "#ff0000",
+            "fillOpacity": 0.0,
+            "createdAt": "2026-09-05T00:00:00Z",
+            "updatedAt": "2026-09-05T00:00:00Z",
+            "type": "arrow",
+            "geometry": {
+              "x1": 0.2,
+              "y1": 0.3,
+              "x2": 0.6,
+              "y2": 0.5,
+              "arrowheadSize": 0.025,
+              "optionalFuture": {
+                "keep": true
+              }
+            }
+          }
+        ],
+        "voiceovers": [],
+        "optionalFuture": {
+          "keep": [
+            1,
+            true,
+            "ação"
+          ],
+          "objectRef": "33333333-3333-4333-8333-333333333333"
+        }
+      }
+    },
+    {
+      "name": "empty-interval",
+      "valid": false,
+      "document": {
+        "schemaVersion": 2,
+        "revision": 1,
+        "requiredCapabilities": [
+          "project.revisions.v1"
+        ],
+        "projectId": "11111111-1111-4111-8111-111111111111",
+        "projectName": "Synthetic conformance",
+        "createdAt": "2026-09-05T00:00:00Z",
+        "updatedAt": "2026-09-05T00:00:00Z",
+        "source": {
+          "asset": "source/original.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0,
+          "optionalFuture": {
+            "primaries": "retained"
+          }
+        },
+        "proxy": {
+          "asset": "proxy/editing.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0
+        },
+        "settings": {
+          "defaultAnnotationDuration": 5.0,
+          "seekStepSec": 0.1,
+          "largeSeekStepSec": 1.0,
+          "originalAudioGain": 1.0,
+          "originalAudioMuted": false,
+          "voiceoverMasterGain": 1.0,
+          "optionalFuture": "preserved"
+        },
+        "exportSettings": {
+          "fps": 30.0,
+          "crf": 18,
+          "preset": "medium"
+        },
+        "annotations": [
+          {
+            "id": "33333333-3333-4333-8333-333333333333",
+            "startSec": 5.0,
+            "endSec": 5,
+            "zIndex": 0,
+            "strokeColor": "#ff0000",
+            "strokeWidth": 0.006,
+            "strokeOpacity": 1.0,
+            "fillColor": "#ff0000",
+            "fillOpacity": 0.0,
+            "createdAt": "2026-09-05T00:00:00Z",
+            "updatedAt": "2026-09-05T00:00:00Z",
+            "type": "arrow",
+            "geometry": {
+              "x1": 0.2,
+              "y1": 0.3,
+              "x2": 0.6,
+              "y2": 0.5,
+              "arrowheadSize": 0.025,
+              "optionalFuture": {
+                "keep": true
+              }
+            }
+          }
+        ],
+        "voiceovers": [],
+        "optionalFuture": {
+          "keep": [
+            1,
+            true,
+            "ação"
+          ],
+          "objectRef": "33333333-3333-4333-8333-333333333333"
+        }
+      }
+    },
+    {
+      "name": "beyond-source",
+      "valid": false,
+      "document": {
+        "schemaVersion": 2,
+        "revision": 1,
+        "requiredCapabilities": [
+          "project.revisions.v1"
+        ],
+        "projectId": "11111111-1111-4111-8111-111111111111",
+        "projectName": "Synthetic conformance",
+        "createdAt": "2026-09-05T00:00:00Z",
+        "updatedAt": "2026-09-05T00:00:00Z",
+        "source": {
+          "asset": "source/original.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0,
+          "optionalFuture": {
+            "primaries": "retained"
+          }
+        },
+        "proxy": {
+          "asset": "proxy/editing.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0
+        },
+        "settings": {
+          "defaultAnnotationDuration": 5.0,
+          "seekStepSec": 0.1,
+          "largeSeekStepSec": 1.0,
+          "originalAudioGain": 1.0,
+          "originalAudioMuted": false,
+          "voiceoverMasterGain": 1.0,
+          "optionalFuture": "preserved"
+        },
+        "exportSettings": {
+          "fps": 30.0,
+          "crf": 18,
+          "preset": "medium"
+        },
+        "annotations": [
+          {
+            "id": "33333333-3333-4333-8333-333333333333",
+            "startSec": 5.0,
+            "endSec": 21,
+            "zIndex": 0,
+            "strokeColor": "#ff0000",
+            "strokeWidth": 0.006,
+            "strokeOpacity": 1.0,
+            "fillColor": "#ff0000",
+            "fillOpacity": 0.0,
+            "createdAt": "2026-09-05T00:00:00Z",
+            "updatedAt": "2026-09-05T00:00:00Z",
+            "type": "arrow",
+            "geometry": {
+              "x1": 0.2,
+              "y1": 0.3,
+              "x2": 0.6,
+              "y2": 0.5,
+              "arrowheadSize": 0.025,
+              "optionalFuture": {
+                "keep": true
+              }
+            }
+          }
+        ],
+        "voiceovers": [],
+        "optionalFuture": {
+          "keep": [
+            1,
+            true,
+            "ação"
+          ],
+          "objectRef": "33333333-3333-4333-8333-333333333333"
+        }
+      }
+    },
+    {
+      "name": "outside-geometry",
+      "valid": false,
+      "document": {
+        "schemaVersion": 2,
+        "revision": 1,
+        "requiredCapabilities": [
+          "project.revisions.v1"
+        ],
+        "projectId": "11111111-1111-4111-8111-111111111111",
+        "projectName": "Synthetic conformance",
+        "createdAt": "2026-09-05T00:00:00Z",
+        "updatedAt": "2026-09-05T00:00:00Z",
+        "source": {
+          "asset": "source/original.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0,
+          "optionalFuture": {
+            "primaries": "retained"
+          }
+        },
+        "proxy": {
+          "asset": "proxy/editing.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0
+        },
+        "settings": {
+          "defaultAnnotationDuration": 5.0,
+          "seekStepSec": 0.1,
+          "largeSeekStepSec": 1.0,
+          "originalAudioGain": 1.0,
+          "originalAudioMuted": false,
+          "voiceoverMasterGain": 1.0,
+          "optionalFuture": "preserved"
+        },
+        "exportSettings": {
+          "fps": 30.0,
+          "crf": 18,
+          "preset": "medium"
+        },
+        "annotations": [
+          {
+            "id": "33333333-3333-4333-8333-333333333333",
+            "startSec": 5.0,
+            "endSec": 10.0,
+            "zIndex": 0,
+            "strokeColor": "#ff0000",
+            "strokeWidth": 0.006,
+            "strokeOpacity": 1.0,
+            "fillColor": "#ff0000",
+            "fillOpacity": 0.0,
+            "createdAt": "2026-09-05T00:00:00Z",
+            "updatedAt": "2026-09-05T00:00:00Z",
+            "type": "arrow",
+            "geometry": {
+              "x1": 1.1,
+              "y1": 0.3,
+              "x2": 0.6,
+              "y2": 0.5,
+              "arrowheadSize": 0.025,
+              "optionalFuture": {
+                "keep": true
+              }
+            }
+          }
+        ],
+        "voiceovers": [],
+        "optionalFuture": {
+          "keep": [
+            1,
+            true,
+            "ação"
+          ],
+          "objectRef": "33333333-3333-4333-8333-333333333333"
+        }
+      }
+    },
+    {
+      "name": "boolean-geometry",
+      "valid": false,
+      "document": {
+        "schemaVersion": 2,
+        "revision": 1,
+        "requiredCapabilities": [
+          "project.revisions.v1"
+        ],
+        "projectId": "11111111-1111-4111-8111-111111111111",
+        "projectName": "Synthetic conformance",
+        "createdAt": "2026-09-05T00:00:00Z",
+        "updatedAt": "2026-09-05T00:00:00Z",
+        "source": {
+          "asset": "source/original.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0,
+          "optionalFuture": {
+            "primaries": "retained"
+          }
+        },
+        "proxy": {
+          "asset": "proxy/editing.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0
+        },
+        "settings": {
+          "defaultAnnotationDuration": 5.0,
+          "seekStepSec": 0.1,
+          "largeSeekStepSec": 1.0,
+          "originalAudioGain": 1.0,
+          "originalAudioMuted": false,
+          "voiceoverMasterGain": 1.0,
+          "optionalFuture": "preserved"
+        },
+        "exportSettings": {
+          "fps": 30.0,
+          "crf": 18,
+          "preset": "medium"
+        },
+        "annotations": [
+          {
+            "id": "33333333-3333-4333-8333-333333333333",
+            "startSec": 5.0,
+            "endSec": 10.0,
+            "zIndex": 0,
+            "strokeColor": "#ff0000",
+            "strokeWidth": 0.006,
+            "strokeOpacity": 1.0,
+            "fillColor": "#ff0000",
+            "fillOpacity": 0.0,
+            "createdAt": "2026-09-05T00:00:00Z",
+            "updatedAt": "2026-09-05T00:00:00Z",
+            "type": "arrow",
+            "geometry": {
+              "x1": true,
+              "y1": 0.3,
+              "x2": 0.6,
+              "y2": 0.5,
+              "arrowheadSize": 0.025,
+              "optionalFuture": {
+                "keep": true
+              }
+            }
+          }
+        ],
+        "voiceovers": [],
+        "optionalFuture": {
+          "keep": [
+            1,
+            true,
+            "ação"
+          ],
+          "objectRef": "33333333-3333-4333-8333-333333333333"
+        }
+      }
+    },
+    {
+      "name": "string-geometry",
+      "valid": false,
+      "document": {
+        "schemaVersion": 2,
+        "revision": 1,
+        "requiredCapabilities": [
+          "project.revisions.v1"
+        ],
+        "projectId": "11111111-1111-4111-8111-111111111111",
+        "projectName": "Synthetic conformance",
+        "createdAt": "2026-09-05T00:00:00Z",
+        "updatedAt": "2026-09-05T00:00:00Z",
+        "source": {
+          "asset": "source/original.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0,
+          "optionalFuture": {
+            "primaries": "retained"
+          }
+        },
+        "proxy": {
+          "asset": "proxy/editing.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0
+        },
+        "settings": {
+          "defaultAnnotationDuration": 5.0,
+          "seekStepSec": 0.1,
+          "largeSeekStepSec": 1.0,
+          "originalAudioGain": 1.0,
+          "originalAudioMuted": false,
+          "voiceoverMasterGain": 1.0,
+          "optionalFuture": "preserved"
+        },
+        "exportSettings": {
+          "fps": 30.0,
+          "crf": 18,
+          "preset": "medium"
+        },
+        "annotations": [
+          {
+            "id": "33333333-3333-4333-8333-333333333333",
+            "startSec": 5.0,
+            "endSec": 10.0,
+            "zIndex": 0,
+            "strokeColor": "#ff0000",
+            "strokeWidth": 0.006,
+            "strokeOpacity": 1.0,
+            "fillColor": "#ff0000",
+            "fillOpacity": 0.0,
+            "createdAt": "2026-09-05T00:00:00Z",
+            "updatedAt": "2026-09-05T00:00:00Z",
+            "type": "arrow",
+            "geometry": {
+              "x1": "0.2",
+              "y1": 0.3,
+              "x2": 0.6,
+              "y2": 0.5,
+              "arrowheadSize": 0.025,
+              "optionalFuture": {
+                "keep": true
+              }
+            }
+          }
+        ],
+        "voiceovers": [],
+        "optionalFuture": {
+          "keep": [
+            1,
+            true,
+            "ação"
+          ],
+          "objectRef": "33333333-3333-4333-8333-333333333333"
+        }
+      }
+    },
+    {
+      "name": "unsafe-asset",
+      "valid": false,
+      "document": {
+        "schemaVersion": 2,
+        "revision": 1,
+        "requiredCapabilities": [
+          "project.revisions.v1"
+        ],
+        "projectId": "11111111-1111-4111-8111-111111111111",
+        "projectName": "Synthetic conformance",
+        "createdAt": "2026-09-05T00:00:00Z",
+        "updatedAt": "2026-09-05T00:00:00Z",
+        "source": {
+          "asset": "../outside.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0,
+          "optionalFuture": {
+            "primaries": "retained"
+          }
+        },
+        "proxy": {
+          "asset": "proxy/editing.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0
+        },
+        "settings": {
+          "defaultAnnotationDuration": 5.0,
+          "seekStepSec": 0.1,
+          "largeSeekStepSec": 1.0,
+          "originalAudioGain": 1.0,
+          "originalAudioMuted": false,
+          "voiceoverMasterGain": 1.0,
+          "optionalFuture": "preserved"
+        },
+        "exportSettings": {
+          "fps": 30.0,
+          "crf": 18,
+          "preset": "medium"
+        },
+        "annotations": [
+          {
+            "id": "33333333-3333-4333-8333-333333333333",
+            "startSec": 5.0,
+            "endSec": 10.0,
+            "zIndex": 0,
+            "strokeColor": "#ff0000",
+            "strokeWidth": 0.006,
+            "strokeOpacity": 1.0,
+            "fillColor": "#ff0000",
+            "fillOpacity": 0.0,
+            "createdAt": "2026-09-05T00:00:00Z",
+            "updatedAt": "2026-09-05T00:00:00Z",
+            "type": "arrow",
+            "geometry": {
+              "x1": 0.2,
+              "y1": 0.3,
+              "x2": 0.6,
+              "y2": 0.5,
+              "arrowheadSize": 0.025,
+              "optionalFuture": {
+                "keep": true
+              }
+            }
+          }
+        ],
+        "voiceovers": [],
+        "optionalFuture": {
+          "keep": [
+            1,
+            true,
+            "ação"
+          ],
+          "objectRef": "33333333-3333-4333-8333-333333333333"
+        }
+      }
+    },
+    {
+      "name": "naive-date",
+      "valid": false,
+      "document": {
+        "schemaVersion": 2,
+        "revision": 1,
+        "requiredCapabilities": [
+          "project.revisions.v1"
+        ],
+        "projectId": "11111111-1111-4111-8111-111111111111",
+        "projectName": "Synthetic conformance",
+        "createdAt": "2026-09-05T00:00:00",
+        "updatedAt": "2026-09-05T00:00:00Z",
+        "source": {
+          "asset": "source/original.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0,
+          "optionalFuture": {
+            "primaries": "retained"
+          }
+        },
+        "proxy": {
+          "asset": "proxy/editing.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0
+        },
+        "settings": {
+          "defaultAnnotationDuration": 5.0,
+          "seekStepSec": 0.1,
+          "largeSeekStepSec": 1.0,
+          "originalAudioGain": 1.0,
+          "originalAudioMuted": false,
+          "voiceoverMasterGain": 1.0,
+          "optionalFuture": "preserved"
+        },
+        "exportSettings": {
+          "fps": 30.0,
+          "crf": 18,
+          "preset": "medium"
+        },
+        "annotations": [
+          {
+            "id": "33333333-3333-4333-8333-333333333333",
+            "startSec": 5.0,
+            "endSec": 10.0,
+            "zIndex": 0,
+            "strokeColor": "#ff0000",
+            "strokeWidth": 0.006,
+            "strokeOpacity": 1.0,
+            "fillColor": "#ff0000",
+            "fillOpacity": 0.0,
+            "createdAt": "2026-09-05T00:00:00Z",
+            "updatedAt": "2026-09-05T00:00:00Z",
+            "type": "arrow",
+            "geometry": {
+              "x1": 0.2,
+              "y1": 0.3,
+              "x2": 0.6,
+              "y2": 0.5,
+              "arrowheadSize": 0.025,
+              "optionalFuture": {
+                "keep": true
+              }
+            }
+          }
+        ],
+        "voiceovers": [],
+        "optionalFuture": {
+          "keep": [
+            1,
+            true,
+            "ação"
+          ],
+          "objectRef": "33333333-3333-4333-8333-333333333333"
+        }
+      }
+    },
+    {
+      "name": "blank-name",
+      "valid": false,
+      "document": {
+        "schemaVersion": 2,
+        "revision": 1,
+        "requiredCapabilities": [
+          "project.revisions.v1"
+        ],
+        "projectId": "11111111-1111-4111-8111-111111111111",
+        "projectName": "   ",
+        "createdAt": "2026-09-05T00:00:00Z",
+        "updatedAt": "2026-09-05T00:00:00Z",
+        "source": {
+          "asset": "source/original.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0,
+          "optionalFuture": {
+            "primaries": "retained"
+          }
+        },
+        "proxy": {
+          "asset": "proxy/editing.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0
+        },
+        "settings": {
+          "defaultAnnotationDuration": 5.0,
+          "seekStepSec": 0.1,
+          "largeSeekStepSec": 1.0,
+          "originalAudioGain": 1.0,
+          "originalAudioMuted": false,
+          "voiceoverMasterGain": 1.0,
+          "optionalFuture": "preserved"
+        },
+        "exportSettings": {
+          "fps": 30.0,
+          "crf": 18,
+          "preset": "medium"
+        },
+        "annotations": [
+          {
+            "id": "33333333-3333-4333-8333-333333333333",
+            "startSec": 5.0,
+            "endSec": 10.0,
+            "zIndex": 0,
+            "strokeColor": "#ff0000",
+            "strokeWidth": 0.006,
+            "strokeOpacity": 1.0,
+            "fillColor": "#ff0000",
+            "fillOpacity": 0.0,
+            "createdAt": "2026-09-05T00:00:00Z",
+            "updatedAt": "2026-09-05T00:00:00Z",
+            "type": "arrow",
+            "geometry": {
+              "x1": 0.2,
+              "y1": 0.3,
+              "x2": 0.6,
+              "y2": 0.5,
+              "arrowheadSize": 0.025,
+              "optionalFuture": {
+                "keep": true
+              }
+            }
+          }
+        ],
+        "voiceovers": [],
+        "optionalFuture": {
+          "keep": [
+            1,
+            true,
+            "ação"
+          ],
+          "objectRef": "33333333-3333-4333-8333-333333333333"
+        }
+      }
+    }
+  ]
+}

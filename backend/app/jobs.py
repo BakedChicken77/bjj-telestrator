@@ -56,7 +56,7 @@ class JobManager:
                 raise StorageError('The backend is shutting down. Try again after restart.')
             if sum(j.status not in TERMINAL for j in self.jobs.values()) >= 8:
                 raise StorageError('The export queue is full. Wait for a job to finish.')
-            job = Job(jobId=str(uuid4()), projectId=project.projectId, createdAt=utc_now())
+            job = Job(jobId=str(uuid4()), projectId=project.projectId, createdAt=utc_now(), projectRevision=project.revision)
             job.filename = f'{safe_filename(project.projectName, "review")}-annotated-{job.createdAt[:19].replace(":", "-")}.mp4'
             self.jobs[job.jobId] = job
             self.cancel_events[job.jobId] = threading.Event()

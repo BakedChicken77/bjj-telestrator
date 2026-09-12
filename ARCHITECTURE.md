@@ -1,6 +1,6 @@
 # Architecture
 
-Version 1.1 adds a standalone iOS execution path. The desktop components below remain unchanged; the native implementation is described at the end of this document. Apple SDK/device acceptance is a separate, still-pending release gate.
+Version 1.1 adds a standalone iOS execution path. The desktop components below remain unchanged; the native implementation is described at the end of this document. The baseline and P1.02/P1.03 candidate Apple SDK tests/archive passed in [GitHub CI](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34718055711); signed installation and physical-device acceptance remain separate gates.
 
 ## Components
 
@@ -141,4 +141,27 @@ Jobs persist status/filename/error metadata. Cancellation cancels the reader/wri
 
 ## iPhone build and verification boundary
 
-`frontend/ios/App/App.xcodeproj` is the real SPM-based app project, with a shared App scheme and hosted AppTests target. `scripts/configure_ios.py` reproducibly adds app-owned Swift files without replacing the generated project. `scripts/test_ios.py` invokes Xcode simulator tests and records an `.xcresult`. Linux checks validate the TypeScript bridge and touch editor; Swift syntax/project inspection cannot establish Apple SDK type compatibility or runtime correctness. A macOS build, nine native tests, signing, and physical iPhone acceptance remain necessary before release.
+`frontend/ios/App/App.xcodeproj` is the real SPM-based app project, with a shared App scheme and hosted AppTests target. `scripts/configure_ios.py` reproducibly adds app-owned Swift files without replacing the generated project. `scripts/test_ios.py` invokes Xcode simulator tests and records an `.xcresult`. Linux checks validate the TypeScript bridge and touch editor; Swift syntax/project inspection cannot establish Apple SDK type compatibility or runtime correctness. The baseline macOS build, 11 native tests, and unsigned archive passed in CI. The P1.02/P1.03 candidate then passed all 15 native tests and an unsigned archive in [run 34718055711](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34718055711). Signing and physical iPhone acceptance remain required before release.
+
+## Authoritative project saves (schema 2)
+
+The shared `SaveSession` owns the only editor write queue, used by autosave,
+explicit save, native recording, lifecycle flushes, and export. It consumes the
+service acknowledgment and advances storage revision separately from edit history.
+Edits arriving during a save are saved next against the acknowledged revision.
+A lost response is reconciled only if the newer durable document has identical
+editable content. Conflicts stop retries and retain a local journal for recovery.
+
+Desktop `ProjectStore` serializes conditional read/check/write with its existing
+recursive lock in the single-process local server. Do not launch multiple writers
+against the same data root. Native `BJJStore` uses its recursive lock; bridge calls
+remain serialized. Recorded takes first enter the durable recording journal;
+reopening or saving incorporates them into a new committed revision. Export reads
+committed content, so pending recordings cannot silently change an old revision.
+
+Recovery copies validate source/recording ownership and produce independent local
+files and fresh object IDs. Copy failure removes only the uncommitted destination.
+Native copy work is synchronous and has a remaining responsiveness/device gate for
+large projects; tracked storage jobs are the next P1.06 work package. Edit drafts
+contain project JSON, never source bytes. Support summaries are allowlisted,
+user-initiated and inspectable; no telemetry or automatic transfer was added.

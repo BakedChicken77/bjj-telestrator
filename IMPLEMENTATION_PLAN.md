@@ -1,5 +1,68 @@
 # Implementation plan
 
+## September 12, 2026 phased implementation assignment
+
+Authoritative brief: Steve's five-phase plan in the implementation assignment.
+Starting commit: `f5323b3b270e3836d7df10309d1684cf8d98e9ca` (live main rechecked).
+Branch: `codex/p1-save-recovery`. Original checkout remained untouched; work uses
+an isolated git worktree. App version stays 1.1.0 until release selection; schema
+2 is introduced for the first persisted revision changes.
+
+Selected first work package: P1.02 and P1.03, plus P1.01 baseline and candidate
+acceptance preparation. The remaining core work continues in the brief's order.
+P5.01–P5.07 are not selected. No publication, paid service, billing, account,
+external media upload, repository visibility change, or unrelated dependency PR
+is authorized by mentioning those modules.
+
+| Tasks | Status | Exact remaining gate / next action |
+| --- | --- | --- |
+| P1.01 | device/staging verification pending | Baseline and fresh candidate CI verified; candidate-specific signing/device template and release gate prepared. Run fresh signed-install/update and Windows/Docker acceptance. |
+| P1.02 | automatically verified | TypeScript, Python and Swift conformance plus migration/edit/export/reopen passed. Physical-device migration/reopen is still part of release acceptance. |
+| P1.03 | automatically verified | Local and native CI recovery/revision tests pass. Physical interruption, storage failure and VoiceOver acceptance remain pending. |
+| P1.04–P1.08 | not started | P1.06 storage/reference foundations are next, then P1.04 media, P1.05 packages, P1.07 accessibility and P1.08 profiling. Recovery-copy helpers do not complete P1.06. |
+| P2.01–P2.08 | not started | Follow Phase 1 save/media/asset contracts and the brief's batch order. |
+| P3.01–P3.07 | not started | Requires Phase 2 transport/timeline/export contracts. |
+| P4.01–P4.06 | not started | Requires explicit review composition; no source-time reinterpretation. |
+| P5.01–P5.07 | not selected | Each module needs its own selection; no placeholder UI. |
+
+Engineering decisions: [authoritative saves ADR](docs/decisions/001-authoritative-saves.md).
+Evidence and commands: [verification](docs/VERIFICATION.md).
+Hardware/signing checklist: [device acceptance](docs/DEVICE_ACCEPTANCE.md).
+
+Limits: only the existing six visual types and linear audio are persisted. No
+HDR conversion, portable ZIP, asset garbage collection, restartable export
+manifest, broad accessibility audit, 20-minute benchmark or cloud feature is
+claimed. Native recovery-copy currently copies synchronously; large-media
+responsiveness/progress belongs to the next storage work package. Draft storage
+is bounded and cannot preserve an edit before it has actually been journaled.
+
+### Completion record — P1.02 / P1.03
+
+- Outcome: storage-owned schema-2 revisions, stale-write rejection, pending-save
+  recovery and independent copies on both service adapters; no source rewrite.
+- Starting commit: `f5323b3b270e3836d7df10309d1684cf8d98e9ca`.
+  Implementation commits: `6c77e2f` and `2fdb591`; real migration/export test extension: `349567c`. Publication was authorized on September 12. [Draft PR #8](https://github.com/BakedChicken77/bjj-telestrator/pull/8) is open; all CI gates passed in [run 34718055711](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34718055711). Final local measurements are recorded in the verification addendum.
+- Public interfaces: capability GET/native query; If-Match save/export and native
+  expectedRevision; recovery-copy and native draft journal; projectRevision on jobs.
+- Migration/retention: preserve exact version-1 JSON; preserve optional fields,
+  source and recording files; fresh UUIDs/references on copies. No GC is enabled.
+- Tests: TypeScript/Python/Swift share 22 conformance cases; failure injection
+  covers stale writers, lost acknowledgment, interrupted atomic install/copy and
+  revision-independent undo/redo. The full local gate passed: 100 backend, 90 frontend, 12 repository and 11 browser tests. A version-1 disk migration/edit/export/reopen extension also passed its real FFmpeg test. Fresh Xcode 26.6 compilation, all 15 XCTest methods and the unsigned archive passed in CI run 34718055711; physical acceptance remains pending.
+- Accessibility/platform: new recovery actions are semantic buttons; support
+  preview uses a native HTML dialog with escape/focus behavior. Comprehensive
+  VoiceOver and physical-device checks remain open.
+- Rollback: retain the whole newer project, then recover pre-migration JSON in a
+  separate prior-version copy. Never uninstall or overwrite new work to downgrade.
+- Docs: PROJECT_FORMAT, ARCHITECTURE, README, IOS_README, VERIFICATION, changelog,
+  decision record and DEVICE_ACCEPTANCE updated.
+- Next eligible package: P1.06 reference/space/snapshot foundations. The whole of
+  Phase 1 is not accepted by completion of this first package.
+
+## Historical delivery records
+
+These are dated delivery snapshots, not the current candidate status. The September 12 record above supersedes old unchecked native/repository setup items: the remote repository exists and main passed native SDK tests and an unsigned archive. Fresh candidate CI now passes; signed-build and physical-device gates remain open.
+
 ## Milestone 1 — annotation editor and exports
 
 - [x] Inspect workspace: empty; scaffold local React/TypeScript and FastAPI application.

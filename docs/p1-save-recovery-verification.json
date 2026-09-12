@@ -1,0 +1,309 @@
+{
+  "reportVersion": 1,
+  "date": "2026-09-12",
+  "branch": "codex/p1-save-recovery",
+  "startingCommit": "f5323b3b270e3836d7df10309d1684cf8d98e9ca",
+  "candidateCommit": "349567c730c74b46da46a7545a917cab5d3f988a",
+  "taskStatus": {
+    "P1.01": "device/staging verification pending",
+    "P1.02": "automatically verified",
+    "P1.03": "automatically verified",
+    "P1.04-P1.08": "not started",
+    "P2-P4": "not started",
+    "P5.01-P5.07": "not selected"
+  },
+  "fullLocalGate": {
+    "commit": "2fdb591679a99e79373313c7a4d9562553144fbb",
+    "command": "BJJ_E2E_CHROMIUM_PATH=<existing compatible Chromium> backend/.venv/bin/python scripts/verify.py --browser",
+    "result": "passed",
+    "backend": {
+      "passed": 100,
+      "seconds": 74.19,
+      "realFFmpegExports": true
+    },
+    "frontend": {
+      "passed": 90,
+      "files": 10
+    },
+    "repository": {
+      "passed": 12
+    },
+    "browser": {
+      "passed": 11,
+      "reportedMinutes": 3.4,
+      "engine": "Chromium 149.0.7827.0",
+      "nativeIOS": false
+    },
+    "otherGates": [
+      "Ruff",
+      "ESLint",
+      "strict TypeScript",
+      "Vite production build",
+      "Prettier"
+    ]
+  },
+  "migrationExportFollowUp": {
+    "commit": "349567c730c74b46da46a7545a917cab5d3f988a",
+    "productionCodeChanged": false,
+    "command": "backend/.venv/bin/python -m pytest backend/tests/test_renderer.py::test_real_export_pixels_audio_duration_and_source_preserved -q",
+    "passed": 1,
+    "seconds": 4.33,
+    "checks": [
+      "version-1 disk document",
+      "exact pre-migration bytes",
+      "schema-2 revision 1",
+      "edit and save revision 2",
+      "real H.264/AAC export",
+      "half-open boundary pixels",
+      "unchanged source SHA-256",
+      "reopen saved project"
+    ]
+  },
+  "native": {
+    "baselineCommit": "f5323b3b270e3836d7df10309d1684cf8d98e9ca",
+    "baselineCI": "https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34532184666",
+    "baselineXCTestPassed": 11,
+    "baselineUnsignedArchive": "passed",
+    "candidateXCTestMethodsAuthored": 15,
+    "candidateCapacitorSync": "passed",
+    "candidateSDKCompilation": "passed: Xcode 26.6",
+    "candidateXCTest": "passed: 15 tests, 0 failures",
+    "candidateUnsignedArchive": "passed",
+    "signedInstall": "not run",
+    "physicalDevice": "not run",
+    "candidateCommit": "06ca668eeadce6ce383d98c4c107e3998bd1434a",
+    "candidateRun": "https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34718055711",
+    "candidateXCTestSeconds": 46.367,
+    "simulator": "iPhone 17 Pro",
+    "realNativeExportTestSeconds": 36.55,
+    "realNativeExport": {
+      "codec": "H.264/avc1",
+      "audioCodec": "AAC",
+      "dimensions": [
+        320,
+        180
+      ],
+      "durationSec": 4,
+      "durationToleranceSec": 0.1,
+      "annotationInterval": [
+        1,
+        2
+      ],
+      "sourceSha256Comparison": "equal before/after",
+      "numericDigestAndBytes": "not emitted by this test run"
+    }
+  },
+  "freshWindowsDocker": "not run",
+  "exports": [
+    {
+      "sourceName": "acceptance.mp4",
+      "projectRevision": 8,
+      "sourceSha256": "4482a5a94aeab9b50e982b97a3029b31fcb7d70bf1c505d4c6ec662e7f3c598d",
+      "bytes": 428060,
+      "durationSec": 20.0,
+      "streams": [
+        {
+          "codec_type": "video",
+          "codec_name": "h264",
+          "width": 640,
+          "height": 360,
+          "pix_fmt": "yuv420p",
+          "avg_frame_rate": "30/1"
+        },
+        {
+          "codec_type": "audio",
+          "codec_name": "aac",
+          "avg_frame_rate": "0/0",
+          "sample_rate": "48000"
+        }
+      ]
+    },
+    {
+      "sourceName": "portrait.mp4",
+      "projectRevision": 2,
+      "sourceSha256": "d751f73ab58752f42400c9f9dca43f4466d3dd7fe08592e29a612ded1777e56c",
+      "bytes": 88885,
+      "durationSec": 4.0,
+      "streams": [
+        {
+          "codec_type": "video",
+          "codec_name": "h264",
+          "width": 360,
+          "height": 640,
+          "pix_fmt": "yuv420p",
+          "avg_frame_rate": "30/1"
+        },
+        {
+          "codec_type": "audio",
+          "codec_name": "aac",
+          "avg_frame_rate": "0/0",
+          "sample_rate": "48000"
+        }
+      ]
+    },
+    {
+      "sourceName": "rotated.mov",
+      "projectRevision": 2,
+      "sourceSha256": "62237e560bf30c1b2e0dba4eee2316eab4e73f872ae3057e421df37f10a9907e",
+      "bytes": 88480,
+      "durationSec": 4.0,
+      "streams": [
+        {
+          "codec_type": "video",
+          "codec_name": "h264",
+          "width": 360,
+          "height": 640,
+          "pix_fmt": "yuv420p",
+          "avg_frame_rate": "30/1"
+        },
+        {
+          "codec_type": "audio",
+          "codec_name": "aac",
+          "avg_frame_rate": "0/0",
+          "sample_rate": "48000"
+        }
+      ]
+    },
+    {
+      "sourceName": "silent.mp4",
+      "projectRevision": 2,
+      "sourceSha256": "af08dbc8248ec3695143d3bcff881d3bb41174d53d23e7f8a60d08265868b3ca",
+      "bytes": 8069,
+      "durationSec": 4.0,
+      "streams": [
+        {
+          "codec_type": "video",
+          "codec_name": "h264",
+          "width": 640,
+          "height": 360,
+          "pix_fmt": "yuv420p",
+          "avg_frame_rate": "30/1"
+        }
+      ]
+    }
+  ],
+  "changedFiles": [
+    ".github/workflows/release.yml",
+    "ARCHITECTURE.md",
+    "CHANGELOG.md",
+    "IMPLEMENTATION_PLAN.md",
+    "IOS_README.md",
+    "PROJECT_FORMAT.md",
+    "README.md",
+    "backend/app/errors.py",
+    "backend/app/jobs.py",
+    "backend/app/main.py",
+    "backend/app/migrations.py",
+    "backend/app/models.py",
+    "backend/app/storage.py",
+    "backend/pyproject.toml",
+    "backend/tests/test_backend.py",
+    "backend/tests/test_renderer.py",
+    "backend/tests/test_revisions.py",
+    "backend/tests/test_voiceover.py",
+    "backend/tests/test_voiceover_renderer.py",
+    "docs/DEVICE_ACCEPTANCE.md",
+    "docs/GITHUB_SETUP.md",
+    "docs/VERIFICATION.md",
+    "docs/decisions/001-authoritative-saves.md",
+    "docs/example-project.json",
+    "docs/ios-verification.json",
+    "docs/p1-save-recovery-verification.json",
+    "docs/project.schema.json",
+    "frontend/ios/App/App.xcodeproj/project.pbxproj",
+    "frontend/ios/App/App/Native/BJJNativePlugin.swift",
+    "frontend/ios/App/App/Native/BJJProject.swift",
+    "frontend/ios/App/App/Native/BJJProjectMigrations.swift",
+    "frontend/ios/App/App/Native/BJJProjectRecovery.swift",
+    "frontend/ios/App/App/Native/BJJService.swift",
+    "frontend/ios/App/AppTests/BJJNativeTests.swift",
+    "frontend/src/App.tsx",
+    "frontend/src/api.ts",
+    "frontend/src/build.d.ts",
+    "frontend/src/components/SupportDialog.tsx",
+    "frontend/src/model.test.ts",
+    "frontend/src/model.ts",
+    "frontend/src/native.test.ts",
+    "frontend/src/native.ts",
+    "frontend/src/project/conformance.test.ts",
+    "frontend/src/project/diagnostics.ts",
+    "frontend/src/project/migrations.ts",
+    "frontend/src/project/recovery.ts",
+    "frontend/src/project/saveSession.test.ts",
+    "frontend/src/project/saveSession.ts",
+    "frontend/src/store.ts",
+    "frontend/src/styles.css",
+    "frontend/src/testFixtures.ts",
+    "frontend/src/useAutosave.ts",
+    "frontend/src/useNativeRecording.ts",
+    "frontend/vite.config.ts",
+    "scripts/ci/release.py",
+    "scripts/configure_ios.py",
+    "tests/browser/recovery.spec.ts",
+    "tests/fixtures/project-conformance.json",
+    "tests/repository/test_automation.py"
+  ],
+  "retention": "Original media and exact pre-migration JSON retained; independent copies use new project/object UUIDs; no garbage collection.",
+  "publication": {
+    "authorizedOn": "2026-09-12",
+    "remoteChanged": true,
+    "pullRequestCreated": true,
+    "pullRequest": "https://github.com/BakedChicken77/bjj-telestrator/pull/8",
+    "headCommit": "06ca668eeadce6ce383d98c4c107e3998bd1434a",
+    "tree": "f7b679210a80b0d2cba28625667f68083ec020f8",
+    "method": "Connected GitHub Git objects API; command-line credentials unavailable.",
+    "treesVerifiedEqual": true,
+    "commitMapping": [
+      {
+        "localSha": "6c77e2f8c464bfc39ecc9d5bf6680d73f9cf2fa8",
+        "remoteSha": "e35e37b4e905816964bce83baf156a485c2094ee",
+        "tree": "167659717114414cdb1ea6a4794ef6b00df0c1b7"
+      },
+      {
+        "localSha": "2fdb591679a99e79373313c7a4d9562553144fbb",
+        "remoteSha": "e47339a38760d6f326380310383ea3476b6c7bd3",
+        "tree": "4de7d30da1759ed69446005550b4e22fb01f6c3c"
+      },
+      {
+        "localSha": "349567c730c74b46da46a7545a917cab5d3f988a",
+        "remoteSha": "0c8af984e477730b60a639b21bf74aece207f54f",
+        "tree": "5ba9b52da7b00f3f02a931566eeaec6940436449"
+      },
+      {
+        "localSha": "59190397d1a200e45033cecb403005ab0b3c5fd9",
+        "remoteSha": "06ca668eeadce6ce383d98c4c107e3998bd1434a",
+        "tree": "f7b679210a80b0d2cba28625667f68083ec020f8"
+      }
+    ]
+  },
+  "nextEligiblePackage": "P1.06 storage/reference/space/snapshot foundations after reviewing this package; physical-device gates remain pending.",
+  "githubCI": {
+    "runId": 34718055711,
+    "url": "https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34718055711",
+    "headCommit": "06ca668eeadce6ce383d98c4c107e3998bd1434a",
+    "backend": "passed: 100 tests, 18.95 seconds",
+    "frontend": "passed: 90 tests",
+    "repository": "passed: 12 tests",
+    "browser": "passed: 11 scenarios, 1.3 minutes",
+    "docker": "passed: production build/startup/frontend/storage/FFmpeg health",
+    "native": "passed: Xcode 26.6; 15 tests, 0 failures; unsigned archive",
+    "gate": "passed"
+  },
+  "artifacts": [
+    {
+      "name": "ios-unsigned",
+      "id": 10306075698,
+      "bytes": 12492259
+    },
+    {
+      "name": "ios-test-results",
+      "id": 10305361516,
+      "bytes": 65675900
+    },
+    {
+      "name": "browser-results",
+      "id": 10305097614,
+      "bytes": 1440970
+    }
+  ]
+}

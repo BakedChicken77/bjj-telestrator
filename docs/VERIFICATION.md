@@ -1,5 +1,147 @@
 # Verification record
 
+## P1.02 / P1.03 first vertical package — 2026-09-12
+
+Starting commit: `f5323b3b270e3836d7df10309d1684cf8d98e9ca` (live main checked
+through GitHub and git). Local branch: `codex/p1-save-recovery`. Implementation
+commits: `6c77e2f` and `2fdb591`; the latter fixes an edit arriving during journal cleanup.
+The final verification addendum below identifies the tested candidate commit.
+
+**Native baseline correction:** [CI run 34532184666](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34532184666)
+passed at `f5323b3b`, including 11 native XCTest cases and an unsigned archive.
+Older local-only records below describe earlier dates; their statements that Apple
+SDK tests had never run are superseded by that successful CI evidence. They do
+not establish signed installation, a physical phone result, or this candidate.
+
+Local baseline was rerun: 74 backend tests (71.01 s), 60 frontend tests, 11 repository
+tests, and all 9 real browser scenarios (2.9 min). Python 3.12.14, Node 24.19.0,
+FFmpeg/FFprobe and Playwright 1.63.0 were used on Linux. The existing pinned
+Ruff 0.16.6 and dependency installations were reused without upgrades. Playwright's
+standard Chromium download was unavailable; a locally installed Chromium 149 was
+selected through the existing BJJ_E2E_CHROMIUM_PATH option.
+
+The baseline verification script exposed working-directory-dependent Ruff import
+classification: root CI passed while the backend-directory invocation failed.
+Explicit first-party imports now make both invocations agree (no gate disabled;
+see [Ruff's setting](https://docs.astral.sh/ruff/settings/#lint_isort_known-first-party)).
+The first new browser-test import was corrected to the repository's existing
+Playwright module path. A subsequent run overlapped a source refresh and its mobile
+case was invalidated; the clean final run, not that partial run, is authoritative.
+Recovery failure injection keeps writes blocked through the lifecycle flush so it
+tests a genuinely uncommitted draft; reconnecting before reload had correctly
+allowed the real service to save it.
+
+Automated implementation evidence: 100 backend tests passed, including
+real FFmpeg exports; 90 frontend tests passed; 12 repository tests passed. Strict
+TypeScript, ESLint, Ruff, build and formatting passed. Shared TypeScript/Python/
+Swift fixtures include 22 validation cases and an exact expected migration.
+The native suite now contains 15 authored test methods, including revision
+conflicts, retained original JSON, recovery copies/journals and fixture conformance.
+Its runner was invoked locally and truthfully refused because macOS/Xcode are absent. Fresh macOS CI subsequently compiled the candidate, passed all 15 tests and produced the unsigned archive, as recorded below.
+
+**Publication update:** Steve explicitly authorized publishing the branch and
+opening a draft PR on September 12. [Draft PR #8](https://github.com/BakedChicken77/bjj-telestrator/pull/8) is open and
+[CI run 34718055711](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34718055711) passed all six jobs, including the aggregate gate. Command-line Git had no credentials;
+the connected GitHub account published the same four file trees and commit
+sequence. Each GitHub commit records its original local commit in a trailer.
+The published head is `06ca668eeadce6ce383d98c4c107e3998bd1434a`; its tree is
+`f7b679210a80b0d2cba28625667f68083ec020f8`, exactly matching local `5919039`.
+The earlier automatic approval rejection is resolved. No merge, release tag,
+signing, TestFlight upload, paid service or customer charge was performed.
+
+Exact remaining acceptance: signed install over
+populated projects; physical iPhone recovery/export/share/VoiceOver; Windows 11/
+Docker on this candidate; realistic 20-minute and lower-resource-device results.
+Native recovery-copy responsiveness on large projects remains unmeasured. Source
+media and pre-migration documents are retained; no Phase 1 exit gate is claimed.
+
+
+## Final local verification addendum — 2026-09-12
+
+The complete unchanged-production-code gate passed at
+`2fdb591679a99e79373313c7a4d9562553144fbb`. Follow-up
+`349567c730c74b46da46a7545a917cab5d3f988a` extends the existing real export tests
+with version-1 disk migration, an edit, revision-aware save/export and reopen;
+it changes tests only. The enhanced FFmpeg scenario passed separately. The
+native counterpart passed in fresh macOS CI. Later report-only commits do not
+change the tested application. Full file inventory and structured evidence are in
+[p1-save-recovery-verification.json](p1-save-recovery-verification.json).
+
+| Gate | Result |
+| --- | --- |
+| `backend/.venv/bin/python scripts/verify.py --browser` with existing Chromium selected | Passed, exit 0; all requested gates passed. |
+| Backend / real FFmpeg | 100 passed, 74.19 seconds. |
+| Frontend | 90 passed in 10 files. |
+| Repository | 12 passed. |
+| Browser | 11 passed, 3.4 minutes; real editing, recording, exports, conflict/copy, failed save/reload, diagnostics and touch flows. |
+| Ruff / ESLint / TypeScript / build / Prettier | Passed using the repository configuration. |
+| Enhanced migration-to-real-export test at `349567c` | 1 passed, 4.33 seconds; existing timed pixels/audio assertions retained. |
+| `npm run ios:sync` at `349567c` | Passed; rebuilt and copied the editor and updated Capacitor plugin configuration. This does not compile Swift. |
+| Candidate native SDK / 15 XCTest methods / unsigned archive | Passed in [CI run 34718055711](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34718055711); all 15 tests, zero failures, and unsigned archive. |
+| Signed phone / fresh Windows Docker / VoiceOver / 20-minute workload | Not run; explicit acceptance gates remain pending. |
+
+### Fresh GitHub CI and native evidence
+
+[CI run 34718055711](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34718055711) passed for published application head
+`06ca668eeadce6ce383d98c4c107e3998bd1434a` (the same tree as locally verified `5919039`).
+Backend: 100 tests in 18.95 seconds. Frontend: 90 tests. Repository: 12 tests,
+plus actionlint. Browser: 11 scenarios in 1.3 minutes. Production Docker build,
+startup, frontend, storage and FFmpeg health all passed on Ubuntu; this is not a
+Windows 11 execution claim. The aggregate CI gate passed.
+
+Xcode 26.6 on the iPhone 17 Pro **simulator** compiled the actual native target.
+All 15 XCTest methods passed with zero failures in 46.367 seconds of test time;
+build, simulator startup and artifact packaging took additional time. The real
+native MP4 migration/edit/export/reopen scenario passed in 36.550 seconds. It
+asserted H.264 (`avc1`), AAC, 320×180, 4 seconds within 100 ms, annotation pixels
+before/at/after `[1,2)`, original-audio energy, and equality of pre/post source
+SHA-256. Recovery, stale revisions, the 22 canonical fixture cases, rotated silent
+video, voiceover timing/mute and queued cancellation also passed. Numeric native
+file size/source digest were not emitted in this run; no invented values are
+reported. This test evidence does not establish physical-phone timing or thermals.
+
+`ARCHIVE SUCCEEDED` was recorded and the following bounded artifacts were uploaded
+(retention through September 26, 2026):
+
+| Artifact | ID | ZIP bytes |
+| --- | --- | --- |
+| ios-unsigned | 10306075698 | 12492259 |
+| ios-test-results | 10305361516 | 65675900 |
+| browser-results | 10305097614 | 1440970 |
+
+The unsigned archive cannot be installed directly on a phone. No signed IPA,
+TestFlight upload, merge or release was produced. Documentation updates after
+this application head preserve its application code; PR checks identify their own
+run and commit separately.
+
+All four measured outputs below are real finalized MP4s from the clean browser
+run, with H.264/yuv420p at 30 fps and AAC/48 kHz where audio exists. Sources were
+synthetic. Sizes are observed results, not estimates or quality guarantees.
+
+| Source fixture | Saved revision | Output dimensions | Duration | Bytes | Audio |
+| --- | --- | --- | --- | --- | --- |
+| acceptance.mp4 | 8 | 640×360 | 20.000 s | 428060 | AAC |
+| portrait.mp4 | 2 | 360×640 | 4.000 s | 88885 | AAC |
+| rotated.mov | 2 | 360×640 | 4.000 s | 88480 | AAC |
+| silent.mp4 | 2 | 640×360 | 4.000 s | 8069 | None |
+
+The 20-second scenario confirmed arrow `[5,10)` and circle `[7,9)` before and
+after undo/redo and reopening; decoded output samples checked visibility at
+4.9, 5, 7.5, 9.5 and 10 seconds. Its preserved source SHA-256 is
+`4482a5a94aeab9b50e982b97a3029b31fcb7d70bf1c505d4c6ec662e7f3c598d`.
+The structured record contains hashes for the portrait, rotation and silent
+fixtures. The browser narration test additionally verified real microphone
+capture, clip persistence and audible tone placement in AAC. Recovery copies
+were checked independently for new IDs, unchanged source hashes, independent
+edits and an intact original project.
+
+No source media, recordings, generated movies, credentials or test traces were added to the
+commits. The pre-existing large-bundle and upstream test-client deprecation
+advisories remain; no assertion, meaningful gate or timeout was removed or widened.
+Rollback retains the full newer project and uses the untouched pre-migration JSON
+in a separate older-version copy. An older binary cannot read schema 2; do not
+uninstall the iPhone app or overwrite newer work to simulate a downgrade.
+
 ## Version 1.1 iPhone conversion — 2026-09-10
 
 The user reports successful Windows 11/Docker Desktop operation of the original desktop app. The following checks were performed for the iPhone source conversion. This is **not** a signed or device-verified iOS release.

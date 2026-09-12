@@ -115,3 +115,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
           IOS_DEVICE_ACCEPTED: ${{ vars.IOS_DEVICE_ACCEPTED }}
+          IOS_DEVICE_ACCEPTED_SHA: ${{ vars.IOS_DEVICE_ACCEPTED_SHA }}
+          IOS_DEVICE_ACCEPTED_VERSION: ${{ vars.IOS_DEVICE_ACCEPTED_VERSION }}
+          IOS_DEVICE_ACCEPTED_BUILD: ${{ vars.IOS_DEVICE_ACCEPTED_BUILD }}
+          IOS_DEVICE_EVIDENCE_URL: ${{ vars.IOS_DEVICE_EVIDENCE_URL }}

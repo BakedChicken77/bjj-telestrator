@@ -6,10 +6,19 @@ typealias BJJJSON = [String: Any]
 
 enum BJJError: LocalizedError {
     case invalid(String)
+    case domain(String, String)
     case cancelled
+    var code: String {
+        switch self {
+        case .domain(let code, _): return code
+        case .cancelled: return "JOB_CANCELLED"
+        case .invalid: return "PROJECT_INVALID"
+        }
+    }
     var errorDescription: String? {
         switch self {
         case .invalid(let message): return message
+        case .domain(_, let message): return message
         case .cancelled: return "The operation was cancelled."
         }
     }
@@ -94,6 +103,7 @@ enum BJJValidate {
 struct BJJProject {
     let json: BJJJSON
     var id: String { json["projectId"] as! String }
+    var revision: Int { (json["revision"] as! NSNumber).intValue }
     var name: String { json["projectName"] as! String }
     var source: BJJJSON { json["source"] as! BJJJSON }
     var proxy: BJJJSON { json["proxy"] as! BJJJSON }
@@ -103,8 +113,9 @@ struct BJJProject {
     var annotations: [BJJJSON] { json["annotations"] as! [BJJJSON] }
     var voiceovers: [BJJJSON] { json["voiceovers"] as! [BJJJSON] }
 
-    init(_ value: BJJJSON) throws {
-        try BJJValidate.number(value["schemaVersion"], "schema version", 1...1, integer: true)
+    init(_ document: BJJJSON) throws {
+        let value = try BJJProjectMigrations.migrate(document)
+        try BJJValidate.number(value["revision"], "project revision", 1...9007199254740991, integer: true)
         try BJJValidate.uuid(value["projectId"])
         let name = try BJJValidate.string(value["projectName"], "project name", max: 160)
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw BJJError.invalid("Enter a project name.") }
@@ -246,14 +257,33 @@ final class BJJStore {
     }
     func load(_ id: String) throws -> BJJProject {
         lock.lock(); defer { lock.unlock() }
-        var json = try readJSON(directory(id).appendingPathComponent("project.json"))
-        var clips = try BJJValidate.objects(json["voiceovers"], "voiceovers", maximum: 200)
-        for value in try pendingRecordings(id).values {
-            let clip = try BJJValidate.object(value, "recovered recording")
-            if !clips.contains(where: { $0["id"] as? String == clip["id"] as? String }) { clips.append(clip) }
-        }
-        json["voiceovers"] = clips
+        let url = try directory(id).appendingPathComponent("project.json")
+        var json = try readJSON(url)
+        let validated = try BJJProject(json)
+        guard validated.id == id else { throw BJJError.domain("PROJECT_CORRUPT", "The project identifier does not match its storage.") }
+        if (json["schemaVersion"] as? Int) != BJJProjectMigrations.currentVersion {
+            _ = try asset(id, validated.source["asset"] as! String)
+            _ = try asset(id, validated.proxy["asset"] as! String)
+            for clip in validated.voiceovers { _ = try asset(id, clip["asset"] as! String) }
+            let backup = url.deletingLastPathComponent().appendingPathComponent("project.pre-migration-v1.json")
+            let original = try Data(contentsOf: url)
+            if FileManager.default.fileExists(atPath: backup.path) {
+                guard try Data(contentsOf: backup) == original else {
+                    throw BJJError.domain("PROJECT_CORRUPT", "The preserved migration copy differs. Restore from a verified backup.")
+                }
+            } else { try original.write(to: backup, options: .atomic) }
+            try writeJSON(validated.json, to: url)
+            json = try BJJProject(readJSON(url)).json
+        } else { json = validated.json }
         return try BJJProject(json)
+    }
+    func loadRecoveringRecordings(_ id: String) throws -> BJJProject {
+        lock.lock(); defer { lock.unlock() }
+        let project = try load(id)
+        // Recovery is a real storage revision, never an invisible change to an
+        // existing revision. Ordinary loads/exports read only committed JSON.
+        if try pendingRecordings(id).isEmpty { return project }
+        return try save(project)
     }
     func list() throws -> [BJJJSON] {
         lock.lock(); defer { lock.unlock() }
@@ -262,7 +292,11 @@ final class BJJStore {
         for folder in folders where UUID(uuidString: folder.lastPathComponent) != nil {
             if FileManager.default.fileExists(atPath: folder.appendingPathComponent("project.json").path) {
                 do { results.append(try load(folder.lastPathComponent).summary()) }
-                catch { throw BJJError.invalid("A saved project is damaged (\(folder.lastPathComponent)). Restore its project.json from a backup. Other files were not changed.") }
+                catch {
+                    results.append(["projectId": folder.lastPathComponent, "projectName": "Unavailable project",
+                                    "updatedAt": "", "durationSec": 0, "annotationCount": 0,
+                                    "unavailableCode": (error as? BJJError)?.code ?? "PROJECT_CORRUPT"])
+                }
             }
         }
         return results.sorted { ($0["updatedAt"] as! String) > ($1["updatedAt"] as! String) }
@@ -281,6 +315,9 @@ final class BJJStore {
         let project = try BJJProject(merged)
         if !creating {
             let previous = try load(project.id)
+            guard previous.revision == project.revision else {
+                throw BJJError.domain("PROJECT_CONFLICT", "This project changed in another session. Keep your edits as a copy or reload the saved version.")
+            }
             for field in ["source", "proxy", "createdAt"] {
                 guard NSDictionary(dictionary: ["value": project.json[field]!]).isEqual(to: ["value": previous.json[field]!]) else {
                     throw BJJError.invalid("Imported media metadata cannot be replaced by an edit.")
@@ -300,6 +337,10 @@ final class BJJStore {
             _ = try asset(project.id, clip["asset"] as! String)
         }
         var json = project.json
+        guard creating || project.revision < 9007199254740991 else { throw BJJError.invalid("The project revision limit was reached.") }
+        let target = try directory(project.id).appendingPathComponent("project.json")
+        guard !creating || !FileManager.default.fileExists(atPath: target.path) else { throw BJJError.invalid("This project already exists.") }
+        json["revision"] = creating ? 1 : project.revision + 1
         json["updatedAt"] = BJJProject.now()
         try writeJSON(json, to: directory(project.id).appendingPathComponent("project.json"))
         try writeJSON(pending, to: directory(project.id).appendingPathComponent("voiceover/pending.json"))
@@ -321,12 +362,9 @@ final class BJJStore {
         var pending = try pendingRecordings(id)
         pending[clip["id"] as! String] = clip
         try writeJSON(pending, to: directory(id).appendingPathComponent("voiceover/pending.json"))
-        // Native interruptions save a take even if WebKit is being suspended.
-        var project = try load(id).json
-        var clips = project["voiceovers"] as! [BJJJSON]
-        if !clips.contains(where: { $0["id"] as? String == clip["id"] as? String }) { clips.append(clip) }
-        project["voiceovers"] = clips
-        _ = try save(BJJProject(project), acknowledgeRecordings: false)
+        // Pending is a durable recording journal. A normal save incorporates it
+        // atomically; do not advance the editor's revision behind its back.
+        _ = try load(id)
     }
     func createDirectory() throws -> (String, URL) {
         let id = UUID().uuidString.lowercased()

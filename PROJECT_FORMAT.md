@@ -1,4 +1,4 @@
-# Project format — schema version 1
+# Project format — schema version 2
 
 `project.json` is UTF-8 JSON. The backend validates it with `backend/app/models.py`; the browser validates it with Zod in `frontend/src/model.ts`. `docs/project.schema.json` is generated from Pydantic, and `docs/example-project.json` is a complete illustrative document (its relative media assets are not bundled).
 
@@ -6,7 +6,9 @@
 
 | Field | Meaning |
 | --- | --- |
-| `schemaVersion` | Integer `1`. Unsupported versions fail explicitly. |
+| `schemaVersion` | Integer `2`. Version 1 migrates; future versions require an upgrade. |
+| `revision` | Storage-assigned positive JSON safe integer; saves use the expected revision. |
+| `requiredCapabilities` | Unique capability strings; version 2 requires `project.revisions.v1`. Unknown requirements block editing/export. |
 | `projectId` | Canonical UUID, also the project directory identifier. |
 | `projectName` | Editable display/export name. |
 | `createdAt`, `updatedAt` | ISO-8601 timestamps. |
@@ -95,16 +97,58 @@ Effective start is `startSec + timingOffsetMs/1000`; effective end is `endSec + 
 
 ## Compatibility and migrations
 
-Both validators preserve unknown object fields when loading/saving version 1 documents. This allows additive metadata without silent loss. A higher `schemaVersion` is rejected with a useful error rather than being rewritten as version 1. A future migration should be implemented at the project-load boundary in `backend/app/storage.py` before `Project.model_validate_json`, with explicit source/target versions and a backup; corresponding browser schema updates belong in `frontend/src/model.ts`. No older project version exists to migrate in this release.
+TypeScript, Python, and Swift use ordered migration registries and the canonical
+`tests/fixtures/project-conformance.json` cases. Version 1 migrates to version 2
+with revision 1 and `project.revisions.v1`; repeated migration is a no-op. Unknown
+optional object fields survive. Unknown required capabilities and future schemas
+require an upgrade. Storage retains the exact prior JSON, validates assets, installs
+atomically, then reopens the migrated document. Source files are not rewritten.
 
 Editable JSON does not include the selection, playhead, active tool, undo stack, backend job processes or absolute paths. Export job records are stored separately. Back up each complete project directory, not just `project.json`, to retain its referenced media.
 
 ## Native iOS implementation (application version 1.1)
 
-The iPhone editor retains **schemaVersion 1** and the same normalized geometry, temporal intervals, settings, and voiceover clip fields. A new application version alone does not require a project schema migration. Swift validation lives in `frontend/ios/App/App/Native/BJJProject.swift`; future native migrations belong immediately before its project-load validation, with the original document backed up. Unknown additive fields survive native reads/edits/saves.
+Both runtimes now use schema 2. Geometry, source-time annotation intervals and
+linear voiceover semantics are unchanged. `BJJProjectMigrations.swift` provides
+the native registry and the native test bundle consumes the same canonical JSON
+as TypeScript/Python. No composition, new visual type, or audio trim field is added.
 
 Native source/proxy metadata uses AVFoundation FourCC codec strings, for example `avc1` (H.264), `hvc1`/`hev1` (HEVC), and `mp4a` (AAC), instead of FFprobe's `h264`, `hevc`, and `aac` names. The native metadata adds `videoStartSec` (source track time-range origin) and `nativeEngine: "AVFoundation"`. Logical project time zero is the first source video time; original audio offsets are relative to that origin. Assets remain project-relative, and bridge media URLs are transient UUID lookups rather than persisted filesystem paths.
 
 Native recordings use 48 kHz mono `pcm_s16le` WAV and the same clip schema. `voiceover/assets.json` holds a clip-ID-to-metadata registry; `voiceover/pending.json` holds recovered takes pending acknowledgement by an editor save. These implementation sidecars differ from the desktop's per-clip registry files. Removing a clip from the document retains its audio for undo. Desktop and native project directories cannot be copied between implementations without migrating those registry sidecars; a portable project import/export feature is not included.
 
 Native export restricts `fps` to at most 60. Its UI maps High/Balanced/Smaller file to the existing `crf` numeric values, which the native renderer converts to a bounded target bitrate. `preset` remains in the schema for compatibility but is not an Apple encoder control and is hidden in the iPhone export dialog. Native projects use the same settings for original/clip/master gain and mute. Native peak clamping differs from the desktop audio limiter; it does not change clip timing.
+
+## Save, export, and recovery protocol
+
+`GET /api/capabilities` and native `getCapabilities` report schema/capabilities.
+Desktop GET returns `ETag: "N"`. PUT requires `If-Match: "N"` and document
+`revision=N`; a successful save returns N+1, and stale writes return 412 with
+`PROJECT_CONFLICT` and `currentRevision`. Missing preconditions return 428.
+Native `saveProject` accepts `expectedRevision` and rejects stale saves with the
+same code. Revision is not editable or restored by undo/redo.
+
+Export POST requires the same conditional revision; native `createExport` accepts
+`expectedRevision`. The job's `projectRevision` identifies its immutable in-memory
+input. Durable restart/retry manifests are P1.06, not claimed here.
+
+A recovery draft has `version:1`, generated `writerId`/`draftId`, `savedAt`, and
+validated `project` including its base revision. Desktop drafts use local browser
+storage; native drafts use `recovery/{writerId}.json`. Each writer owns its slot.
+Cleanup compares `draftId`, so an old acknowledgment cannot delete a newer draft.
+Drafts over four million UTF-16 code units are not journaled; an explicit recovery
+error is shown, and a direct durable save remains available. Storage quota can be
+lower. No force-close guarantee is made for edits not yet journaled.
+
+Recovery-copy accepts the validated draft, verifies immutable media against the
+owning project, copies its source/proxy/recordings into a new project, remaps known
+UUID references, and publishes project JSON only after validation. Failed copies
+are removed; existing projects remain intact. Optional-field reference values
+matching remapped UUIDs are retained with updated IDs. There is no cross-project
+hard-linking or portable ZIP/package format in this work package.
+
+Rollback: preserve the entire current project directory first. Use a separately
+copied directory plus `project.pre-migration-v1.json` with the previous binary for
+prior-version recovery. That copy excludes later edits by design; never overwrite
+the newer project to pretend to downgrade it. Phone rollback must preserve the
+app container and bundle identity. Do not uninstall to roll back.

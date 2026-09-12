@@ -19,8 +19,10 @@ from fastapi.responses import FileResponse, JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from .config import Config
+from .errors import DomainError, conflict
 from .jobs import JobManager
 from .media import MediaError, create_proxy, probe_media
+from .migrations import runtime_capabilities
 from .models import Job, Project, Voiceover
 from .storage import ProjectStore, StorageError, asset_path, safe_filename, utc_now
 from .voiceover import normalize_voiceover
@@ -107,6 +109,10 @@ def create_app(config: Config | None = None) -> FastAPI:
     application.state.config = settings
     application.add_middleware(LocalRequestGuard, config=settings)
 
+    @application.exception_handler(DomainError)
+    async def domain_error(_request: Request, exc: DomainError) -> JSONResponse:
+        return JSONResponse({'detail': str(exc), 'code': exc.code, **exc.details}, status_code=exc.status)
+
     @application.exception_handler(StorageError)
     async def storage_error(_request: Request, exc: StorageError) -> JSONResponse:
         return JSONResponse({'detail': str(exc)}, status_code=400)
@@ -134,6 +140,18 @@ def create_app(config: Config | None = None) -> FastAPI:
     def health() -> dict[str, object]:
         return {'status': 'ok', 'ffmpeg': shutil.which(os.getenv('BJJ_FFMPEG_PATH', 'ffmpeg')) is not None,
                 'ffprobe': shutil.which(os.getenv('BJJ_FFPROBE_PATH', 'ffprobe')) is not None}
+
+    @application.get('/api/capabilities')
+    def capabilities() -> dict:
+        return runtime_capabilities()
+
+    def expected_revision(request: Request) -> int:
+        value = request.headers.get('if-match', '')
+        if not value:
+            raise DomainError('REVISION_REQUIRED', 'Reopen this project in an updated client before saving or exporting.', 428)
+        if len(value) < 3 or not value.startswith('"') or not value.endswith('"') or not value[1:-1].isdigit():
+            raise DomainError('REVISION_REQUIRED', 'The expected project revision is invalid.')
+        return int(value[1:-1])
 
     @application.get('/api/projects')
     def list_projects() -> list[dict[str, object]]:
@@ -185,14 +203,27 @@ def create_app(config: Config | None = None) -> FastAPI:
                 shutil.rmtree(folder, ignore_errors=True)
 
     @application.get('/api/projects/{project_id}', response_model=Project)
-    def get_project(project_id: str) -> Project:
-        return store.load(project_id)
+    def get_project(project_id: str, response: Response) -> Project:
+        project = store.load(project_id)
+        response.headers['ETag'] = f'"{project.revision}"'
+        response.headers['Cache-Control'] = 'no-store'
+        return project
 
     @application.put('/api/projects/{project_id}', response_model=Project)
-    def save_project(project_id: str, project: Project) -> Project:
+    def save_project(project_id: str, project: Project, request: Request, response: Response) -> Project:
         if project.projectId != project_id:
             raise HTTPException(400, 'Project identifier does not match the URL')
-        return store.save(project)
+        if expected_revision(request) != project.revision:
+            raise DomainError('REVISION_REQUIRED', 'The request and project revisions do not match.')
+        saved = store.save(project)
+        response.headers['ETag'] = f'"{saved.revision}"'
+        return saved
+
+    @application.post('/api/projects/{project_id}/recover-copy', response_model=Project)
+    def recover_copy(project_id: str, project: Project) -> Project:
+        if project.projectId != project_id:
+            raise HTTPException(400, 'Project identifier does not match the URL')
+        return store.recover_copy(project)
 
     @application.delete('/api/projects/{project_id}', status_code=204)
     def delete_project(project_id: str) -> Response:
@@ -212,9 +243,11 @@ def create_app(config: Config | None = None) -> FastAPI:
         return FileResponse(path, media_type='video/mp4', headers={'Cache-Control': 'private, max-age=3600'})
 
     @application.post('/api/projects/{project_id}/exports')
-    def start_export(project_id: str) -> Job:
+    def start_export(project_id: str, request: Request) -> Job:
         with store.lock:
             project = store.load(project_id)
+            if expected_revision(request) != project.revision:
+                raise conflict(project.revision)
             if not asset_path(store.project_dir(project_id), project.source.asset).is_file():
                 raise HTTPException(404, 'The original video asset is missing')
             store.validate_voiceovers(project)

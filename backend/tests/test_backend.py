@@ -11,15 +11,17 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from fastapi.testclient import TestClient
+from pydantic import ValidationError
+
 from app.config import Config
+from app.errors import DomainError
 from app.jobs import JobManager
 from app.main import create_app
 from app.media import MediaError, parse_probe, probe_media, proxy_args, proxy_dimensions
 from app.models import Project
 from app.renderer import ExportCancelled
 from app.storage import ProjectStore, StorageError, asset_path, atomic_json, require_uuid, safe_filename
-from fastapi.testclient import TestClient
-from pydantic import ValidationError
 
 STAMP = '2026-09-05T00:00:00Z'
 
@@ -66,7 +68,7 @@ def test_document_rejects_invalid(mutation: str) -> None:
     elif mutation == 'ids':
         document['annotations'].append(annotation.copy())
     else:
-        document['schemaVersion'] = 2
+        document['schemaVersion'] = 99
     with pytest.raises(ValidationError):
         Project.model_validate(document)
 
@@ -112,9 +114,9 @@ def test_sanitization_atomic_storage_and_restart(tmp_path: Path) -> None:
         store.save(project)
     path = store.project_dir(project.projectId) / 'project.json'
     path.write_text('{bad', encoding='utf-8')
-    with pytest.raises(StorageError, match='damaged'):
+    with pytest.raises(DomainError, match='damaged'):
         store.load(project.projectId)
-    assert store.list() == []
+    assert store.list()[0]['unavailableCode'] == 'PROJECT_CORRUPT'
 
 
 def probe_document(rotation: float = 0) -> dict:
@@ -231,7 +233,7 @@ def test_api_validation_range_and_origin_security(tmp_path: Path) -> None:
         assert client.get('/api/projects', headers={'Host': 'evil.example'}).status_code == 400
         assert client.get('/api/projects', headers={'Host': '[malformed'}).status_code == 400
         assert client.put(f'/api/projects/{project.projectId}', json=project.model_dump(),
-                          headers={'Host': 'localhost:8001', 'Origin': 'http://localhost:8001'}).status_code == 200
+                          headers={'Host': 'localhost:8001', 'Origin': 'http://localhost:8001', 'If-Match': f'"{project.revision}"'}).status_code == 200
         document = project.model_dump()
         document['annotations'][0]['endSec'] = 21
         assert client.put(f'/api/projects/{project.projectId}', json=document).status_code == 422

@@ -9,13 +9,14 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from fastapi.testclient import TestClient
+from pydantic import ValidationError
+
 from app.config import Config
 from app.main import create_app
 from app.models import Project
 from app.renderer import ExportCancelled
 from app.storage import ProjectStore
-from fastapi.testclient import TestClient
-from pydantic import ValidationError
 
 
 def ffmpeg(*args: str) -> None:
@@ -51,6 +52,14 @@ def upload(client: TestClient, project: dict, recording: Path, start: str = '0.5
     return response.json()
 
 
+def save_project(client, project):
+    response = client.put(f"/api/projects/{project['projectId']}", json=project,
+                          headers={'If-Match': f'"{project["revision"]}"'})
+    if response.status_code == 200:
+        project['revision'] = response.json()['revision']
+    return response
+
+
 def test_real_recording_normalization_immediate_preview_clamp_and_restart(client_project, recording: Path) -> None:
     client, application, project = client_project
     assert not project['source']['hasAudio']
@@ -66,7 +75,7 @@ def test_real_recording_normalization_immediate_preview_clamp_and_restart(client
         assert any(audio.readframes(24000))
     assert client.get(f"/api/projects/{project['projectId']}").json()['voiceovers'] == []
     project['voiceovers'] = [clip]
-    saved = client.put(f"/api/projects/{project['projectId']}", json=project)
+    saved = save_project(client, project)
     assert saved.status_code == 200, saved.text
     store = ProjectStore(application.state.config.data_dir)
     assert store.load(project['projectId']).voiceovers[0].id == clip['id']
@@ -80,12 +89,12 @@ def test_soft_remove_restores_for_undo_and_project_delete_removes_assets(client_
     client, application, project = client_project
     clip = upload(client, project, recording)
     project['voiceovers'] = [clip]
-    assert client.put(f"/api/projects/{project['projectId']}", json=project).status_code == 200
+    assert save_project(client, project).status_code == 200
     project['voiceovers'] = []
-    assert client.put(f"/api/projects/{project['projectId']}", json=project).status_code == 200
+    assert save_project(client, project).status_code == 200
     assert client.get(f"/api/projects/{project['projectId']}/voiceovers/{clip['id']}/audio").status_code == 200
     project['voiceovers'] = [clip]
-    assert client.put(f"/api/projects/{project['projectId']}", json=project).status_code == 200
+    assert save_project(client, project).status_code == 200
     directory = application.state.store.project_dir(project['projectId'])
     assert client.delete(f"/api/projects/{project['projectId']}").status_code == 204
     assert not directory.exists()
@@ -101,7 +110,7 @@ def test_voiceover_identity_is_bound_to_registered_asset(client_project, recordi
     if field == 'durationSec':
         clip['endSec'] = clip['startSec'] + clip['durationSec']
     project['voiceovers'] = [clip]
-    response = client.put(f"/api/projects/{project['projectId']}", json=project)
+    response = save_project(client, project)
     assert response.status_code == 400, response.text
     assert 'registered' in response.text or 'cannot be changed' in response.text
 
@@ -113,13 +122,13 @@ def test_timing_nudge_gain_mute_validation_and_unknown_fields(client_project, re
                  'gain': .6, 'muted': True, 'futureClipField': 'retain'})
     project['voiceovers'] = [clip]
     project['settings'].update({'originalAudioGain': .2, 'originalAudioMuted': True, 'voiceoverMasterGain': 1.5})
-    saved = client.put(f"/api/projects/{project['projectId']}", json=project)
+    saved = save_project(client, project)
     assert saved.status_code == 200, saved.text
     assert saved.json()['voiceovers'][0]['futureClipField'] == 'retain'
     clip['timingOffsetMs'] = -500
-    assert client.put(f"/api/projects/{project['projectId']}", json=project).status_code == 422
+    assert save_project(client, project).status_code == 422
     clip['timingOffsetMs'] = 1000
-    assert client.put(f"/api/projects/{project['projectId']}", json=project).status_code == 422
+    assert save_project(client, project).status_code == 422
     clip['timingOffsetMs'] = 0
     clip['endSec'] += .1
     with pytest.raises(ValidationError):
@@ -130,7 +139,7 @@ def test_permanent_delete_protects_active_snapshot_and_rejects_stale_reference(c
     client, application, project = client_project
     clip = upload(client, project, recording)
     project['voiceovers'] = [clip]
-    assert client.put(f"/api/projects/{project['projectId']}", json=project).status_code == 200
+    assert save_project(client, project).status_code == 200
     entered = threading.Event()
 
     def hold(_project, _folder, _output, _temp, _progress, cancelled):
@@ -139,7 +148,7 @@ def test_permanent_delete_protects_active_snapshot_and_rejects_stale_reference(c
         raise ExportCancelled()
 
     application.state.jobs.renderer = hold
-    job = client.post(f"/api/projects/{project['projectId']}/exports").json()
+    job = client.post(f"/api/projects/{project['projectId']}/exports", headers={"If-Match": f'"{project["revision"]}"'}).json()
     assert entered.wait(3)
     endpoint = f"/api/projects/{project['projectId']}/voiceovers/{clip['id']}"
     assert client.delete(endpoint).status_code == 409
@@ -148,7 +157,10 @@ def test_permanent_delete_protects_active_snapshot_and_rejects_stale_reference(c
     assert client.delete(endpoint).status_code == 204
     assert client.get(endpoint + '/audio').status_code == 400
     assert client.get(f"/api/projects/{project['projectId']}").json()['voiceovers'] == []
-    assert client.put(f"/api/projects/{project['projectId']}", json=project).status_code == 400
+    # Permanent deletion advanced storage revision; reload its revision before
+    # testing that the old recording reference itself is rejected.
+    project['revision'] = client.get(f"/api/projects/{project['projectId']}").json()['revision']
+    assert save_project(client, project).status_code == 400
 
 
 @pytest.mark.parametrize('contents,mime,start,status', [

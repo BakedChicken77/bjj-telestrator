@@ -58,7 +58,7 @@ describe('versioned project validation', () => {
     project.annotations = [arrow()];
     project.annotations[0].geometry.x1 = Number.NaN;
     expect(projectSchema.safeParse(project).success).toBe(false);
-    expect(projectSchema.safeParse({ ...fixture(), schemaVersion: 2 }).success).toBe(false);
+    expect(projectSchema.safeParse({ ...fixture(), schemaVersion: 99 }).success).toBe(false);
   });
   it('enforces backend domains for names, text, gains, freehand smoothing and z ordering', () => {
     expect(projectSchema.safeParse({ ...fixture(), projectName: 'x'.repeat(161) }).success).toBe(

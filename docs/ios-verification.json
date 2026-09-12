@@ -1,6 +1,6 @@
 {
   "applicationVersion": "1.1.0",
-  "checkedOn": "2026-09-10",
+  "checkedOn": "2026-09-12",
   "desktopWindows": {
     "status": "user_reported_pass",
     "platform": "Windows 11 / Docker Desktop"
@@ -36,12 +36,41 @@
     "xctestMethodsAuthored": 9,
     "xctestResult": "not_run",
     "signedIPA": false,
-    "physicalIPhone": "not_run"
+    "physicalIPhone": "not_run",
+    "baselineCI": {
+      "commit": "f5323b3b270e3836d7df10309d1684cf8d98e9ca",
+      "runURL": "https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34532184666",
+      "xctestPassed": 11,
+      "unsignedArchive": "passed"
+    },
+    "candidateSDKCompilation": "passed: Xcode 26.6",
+    "candidateXCTestMethodsAuthored": 15,
+    "candidateXCTestPassed": 15,
+    "candidateUnsignedArchive": "passed",
+    "candidateCommit": "06ca668eeadce6ce383d98c4c107e3998bd1434a",
+    "candidateCI": "https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34718055711"
   },
   "limits": [
-    "Native iOS implementation requires an actual Xcode build and simulator/device acceptance before use.",
+    "Baseline and fresh candidate native SDK/XCTest/archive passed in GitHub CI. Signed installation, physical hardware acceptance and a fresh Windows 11 run remain pending.",
     "No signed installable iPhone binary was produced.",
     "Touch browser tests use the desktop backend, not the native Swift renderer.",
     "Long-video iPhone performance is not benchmarked."
-  ]
+  ],
+  "historicalLocalRecordCheckedOn": "2026-09-10",
+  "recordScope": "Original September 10 local evidence is retained in top-level counts; baselineCI corrects historical native status; candidate results are separately recorded below.",
+  "candidate": {
+    "commit": "349567c730c74b46da46a7545a917cab5d3f988a",
+    "verificationRecord": "p1-save-recovery-verification.json",
+    "backendPassed": 100,
+    "frontendPassed": 90,
+    "repositoryPassed": 12,
+    "browserPassed": 11,
+    "capacitorSync": "passed",
+    "nativeSDKAndXCTest": "passed: 15 tests, zero failures",
+    "pullRequest": "https://github.com/BakedChicken77/bjj-telestrator/pull/8",
+    "ciRun": "https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34718055711",
+    "unsignedArchive": "passed",
+    "publishedCommit": "06ca668eeadce6ce383d98c4c107e3998bd1434a",
+    "dockerLinux": "passed"
+  }
 }

@@ -124,6 +124,12 @@ def main() -> None:
             phase,
             f"isa = {name}; buildActionMask = 2147483647; files = ({files}); runOnlyForDeploymentPostprocessing = 0;",
         )
+    conformance, conformance_build = uid("test:conformance-file"), uid("test:conformance-build")
+    section("PBXFileReference", conformance,
+            'isa = PBXFileReference; lastKnownFileType = text.json; path = "../../../../tests/fixtures/project-conformance.json"; sourceTree = "<group>";')
+    section("PBXBuildFile", conformance_build, f"isa = PBXBuildFile; fileRef = {conformance};")
+    child(group, "children", conformance)
+    child(resources, "files", conformance_build)
     section(
         "PBXContainerItemProxy",
         proxy,
