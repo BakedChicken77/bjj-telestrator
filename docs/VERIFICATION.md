@@ -4,7 +4,7 @@
 
 Starting commit: `f5323b3b270e3836d7df10309d1684cf8d98e9ca` (live main checked
 through GitHub and git). Local branch: `codex/p1-save-recovery`. Implementation
-commit: `6c77e2f`; a follow-up fixes an edit arriving during journal cleanup.
+commits: `6c77e2f` and `2fdb591`; the latter fixes an edit arriving during journal cleanup.
 The final verification addendum below identifies the tested candidate commit.
 
 **Native baseline correction:** [CI run 34532184666](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34532184666)
@@ -31,7 +31,7 @@ Recovery failure injection keeps writes blocked through the lifecycle flush so i
 tests a genuinely uncommitted draft; reconnecting before reload had correctly
 allowed the real service to save it.
 
-Automated implementation evidence so far: 100 backend tests passed, including
+Automated implementation evidence: 100 backend tests passed, including
 real FFmpeg exports; 90 frontend tests passed; 12 repository tests passed. Strict
 TypeScript, ESLint, Ruff, build and formatting passed. Shared TypeScript/Python/
 Swift fixtures include 22 validation cases and an exact expected migration.
@@ -53,6 +53,58 @@ Docker on this candidate; realistic 20-minute and lower-resource-device results.
 Native recovery-copy responsiveness on large projects remains unmeasured. Source
 media and pre-migration documents are retained; no Phase 1 exit gate is claimed.
 
+
+## Final local verification addendum — 2026-09-12
+
+The complete unchanged-production-code gate passed at
+`2fdb591679a99e79373313c7a4d9562553144fbb`. Follow-up
+`349567c730c74b46da46a7545a917cab5d3f988a` extends the existing real export tests
+with version-1 disk migration, an edit, revision-aware save/export and reopen;
+it changes tests only. The enhanced FFmpeg scenario passed separately. The
+native counterpart remains authored and unrun. Later report-only commits do not
+change the tested application. Full file inventory and structured evidence are in
+[p1-save-recovery-verification.json](p1-save-recovery-verification.json).
+
+| Gate | Result |
+| --- | --- |
+| `backend/.venv/bin/python scripts/verify.py --browser` with existing Chromium selected | Passed, exit 0; all requested gates passed. |
+| Backend / real FFmpeg | 100 passed, 74.19 seconds. |
+| Frontend | 90 passed in 10 files. |
+| Repository | 12 passed. |
+| Browser | 11 passed, 3.4 minutes; real editing, recording, exports, conflict/copy, failed save/reload, diagnostics and touch flows. |
+| Ruff / ESLint / TypeScript / build / Prettier | Passed using the repository configuration. |
+| Enhanced migration-to-real-export test at `349567c` | 1 passed, 4.33 seconds; existing timed pixels/audio assertions retained. |
+| `npm run ios:sync` at `349567c` | Passed; rebuilt and copied the editor and updated Capacitor plugin configuration. This does not compile Swift. |
+| Candidate native SDK / 15 XCTest methods / unsigned archive | Not run: Linux host and public branch push awaiting authorization. |
+| Signed phone / fresh Windows Docker / VoiceOver / 20-minute workload | Not run; explicit acceptance gates remain pending. |
+
+All four measured outputs below are real finalized MP4s from the clean browser
+run, with H.264/yuv420p at 30 fps and AAC/48 kHz where audio exists. Sources were
+synthetic. Sizes are observed results, not estimates or quality guarantees.
+
+| Source fixture | Saved revision | Output dimensions | Duration | Bytes | Audio |
+| --- | --- | --- | --- | --- | --- |
+| acceptance.mp4 | 8 | 640×360 | 20.000 s | 428060 | AAC |
+| portrait.mp4 | 2 | 360×640 | 4.000 s | 88885 | AAC |
+| rotated.mov | 2 | 360×640 | 4.000 s | 88480 | AAC |
+| silent.mp4 | 2 | 640×360 | 4.000 s | 8069 | None |
+
+The 20-second scenario confirmed arrow `[5,10)` and circle `[7,9)` before and
+after undo/redo and reopening; decoded output samples checked visibility at
+4.9, 5, 7.5, 9.5 and 10 seconds. Its preserved source SHA-256 is
+`4482a5a94aeab9b50e982b97a3029b31fcb7d70bf1c505d4c6ec662e7f3c598d`.
+The structured record contains hashes for the portrait, rotation and silent
+fixtures. The browser narration test additionally verified real microphone
+capture, clip persistence and audible tone placement in AAC. Recovery copies
+were checked independently for new IDs, unchanged source hashes, independent
+edits and an intact original project.
+
+No source media, recordings, generated movies, credentials or test traces were added to the
+commits. The pre-existing large-bundle and upstream test-client deprecation
+advisories remain; no assertion, meaningful gate or timeout was removed or widened.
+Rollback retains the full newer project and uses the untouched pre-migration JSON
+in a separate older-version copy. An older binary cannot read schema 2; do not
+uninstall the iPhone app or overwrite newer work to simulate a downgrade.
 
 ## Version 1.1 iPhone conversion — 2026-09-10
 

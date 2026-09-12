@@ -18,7 +18,7 @@ is authorized by mentioning those modules.
 | --- | --- | --- |
 | P1.01 | device/staging verification pending | Baseline native CI verified; candidate-specific signing/device template and release gate prepared. Run fresh signed-install/update and Windows/Docker acceptance. |
 | P1.02 | implemented | Migration/revision/capability code and shared fixtures added to all three validators; fresh native CI and device migration/reopen remain required. |
-| P1.03 | implemented | Serialized saves, conditional export, drafts/conflict copies and redacted diagnostics; finish fresh browser/native/hardware failure-injection evidence. |
+| P1.03 | implemented | Serialized saves, conditional export, drafts/conflict copies and redacted diagnostics; local failure-injection checks pass. Fresh native CI and hardware acceptance remain pending. |
 | P1.04–P1.08 | not started | P1.06 storage/reference foundations are next, then P1.04 media, P1.05 packages, P1.07 accessibility and P1.08 profiling. Recovery-copy helpers do not complete P1.06. |
 | P2.01–P2.08 | not started | Follow Phase 1 save/media/asset contracts and the brief's batch order. |
 | P3.01–P3.07 | not started | Requires Phase 2 transport/timeline/export contracts. |
@@ -41,14 +41,14 @@ is bounded and cannot preserve an edit before it has actually been journaled.
 - Outcome: storage-owned schema-2 revisions, stale-write rejection, pending-save
   recovery and independent copies on both service adapters; no source rewrite.
 - Starting commit: `f5323b3b270e3836d7df10309d1684cf8d98e9ca`.
-  Final commit/PR and exact CI result are recorded in the verification addendum.
+  Implementation commits: `6c77e2f` and `2fdb591`; real migration/export test extension: `349567c`. Native CI is blocked pending authorization to push the public branch; no PR exists. Final local measurements are recorded in the verification addendum.
 - Public interfaces: capability GET/native query; If-Match save/export and native
   expectedRevision; recovery-copy and native draft journal; projectRevision on jobs.
 - Migration/retention: preserve exact version-1 JSON; preserve optional fields,
   source and recording files; fresh UUIDs/references on copies. No GC is enabled.
 - Tests: TypeScript/Python/Swift share 22 conformance cases; failure injection
   covers stale writers, lost acknowledgment, interrupted atomic install/copy and
-  revision-independent undo/redo. Existing real MP4 pixel/audio/hash tests remain.
+  revision-independent undo/redo. The full local gate passed: 100 backend, 90 frontend, 12 repository and 11 browser tests. A version-1 disk migration/edit/export/reopen extension also passed its real FFmpeg test. Native compilation/XCTest remains pending.
 - Accessibility/platform: new recovery actions are semantic buttons; support
   preview uses a native HTML dialog with escape/focus behavior. Comprehensive
   VoiceOver and physical-device checks remain open.
@@ -61,6 +61,7 @@ is bounded and cannot preserve an edit before it has actually been journaled.
 
 ## Historical delivery records
 
+These are dated delivery snapshots, not the current candidate status. The September 12 record above supersedes old unchecked native/repository setup items: the remote repository exists and main passed native SDK tests and an unsigned archive. Fresh candidate and physical-device gates remain open.
 
 ## Milestone 1 — annotation editor and exports
 

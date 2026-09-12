@@ -52,5 +52,16 @@
     "Touch browser tests use the desktop backend, not the native Swift renderer.",
     "Long-video iPhone performance is not benchmarked."
   ],
-  "historicalLocalRecordCheckedOn": "2026-09-10"
+  "historicalLocalRecordCheckedOn": "2026-09-10",
+  "recordScope": "Original September 10 local evidence is retained in top-level counts; baselineCI corrects historical native status; candidate results are separately recorded below.",
+  "candidate": {
+    "commit": "349567c730c74b46da46a7545a917cab5d3f988a",
+    "verificationRecord": "p1-save-recovery-verification.json",
+    "backendPassed": 100,
+    "frontendPassed": 90,
+    "repositoryPassed": 12,
+    "browserPassed": 11,
+    "capacitorSync": "passed",
+    "nativeSDKAndXCTest": "not run; public push authorization required for macOS CI"
+  }
 }
