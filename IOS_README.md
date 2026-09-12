@@ -2,7 +2,7 @@
 
 This repository now includes a standalone iOS application alongside the working Windows/Docker application. The iPhone app bundles the React annotation editor in Capacitor 8.5.1 and uses Swift, AVFoundation, Core Image, and Core Graphics for local files, microphone capture, and H.264/AAC MP4 rendering. It does not connect to the Windows computer or require Docker at runtime.
 
-**Release status:** the implementation and Xcode project are included. Frontend checks and touch-browser tests can run on Linux/Windows. The native Apple SDK build, simulator tests, signing, and physical iPhone acceptance must still be completed using an Apple build environment and the physical phone. GitHub-hosted Mac runners are configured for the build/tests. This archive is source code, not a signed IPA, App Store release, or TestFlight invitation. Native behavior must not be considered verified until those gates pass.
+**Release status:** the baseline native Apple SDK build, 11 XCTest cases, and unsigned archive passed in [CI](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34532184666) at `f5323b3b270e3836d7df10309d1684cf8d98e9ca`. This implementation branch needs fresh CI. Signing, installed updates, physical-iPhone export/share, and a realistic 20-minute workload remain unverified. An unsigned archive is not an installable IPA. GitHub-hosted macOS runners support the Windows-only development route.
 
 ## Windows-only build and distribution route
 
@@ -29,7 +29,7 @@ You need a Mac capable of running Xcode 26 or newer, its iOS SDK/simulator compo
 
 A free Apple Account can use Xcode's Personal Team for personal device testing. Apple currently limits that provisioning to seven days, after which the app must be rebuilt/reinstalled. Paid Apple Developer Program membership is needed for TestFlight/App Store distribution. See Apple's [developer account overview](https://developer.apple.com/help/account/basics/about-your-developer-account). Do not delete the app merely to renew signing: deleting it deletes its local projects.
 
-If you only have Windows, follow [GitHub setup](docs/GITHUB_SETUP.md). The included workflows use GitHub-hosted macOS/Xcode machines, with optional signed IPA and TestFlight upload after Apple credentials are configured. You do not need to own a Mac for that route. Apple enrollment, credential provisioning, the first native build, and on-phone acceptance remain required; none has been claimed completed.
+If you only have Windows, follow [GitHub setup](docs/GITHUB_SETUP.md). The included workflows use GitHub-hosted macOS/Xcode machines, with optional signed IPA and TestFlight upload after Apple credentials are configured. You do not need to own a Mac for that route. Apple enrollment, credential provisioning, a fresh candidate build, and on-phone acceptance remain required. The passing baseline does not attest to a different candidate.
 
 ## On-phone workflow
 
@@ -82,7 +82,7 @@ python3 scripts/test_ios.py
 python3 scripts/test_ios.py --device <simulator-UDID>
 ```
 
-The runner invokes `xcodebuild test`, saves an `.xcresult` under `tests/generated/`, and fails clearly outside macOS. Alternatively use Product → Test in Xcode with the shared **App** scheme. The nine tests in `BJJNativeTests.swift` include native generated video/tone fixtures and actual MP4 rendering, half-open boundaries, dimensions/orientation, audio mixing/nudge, source preservation, atomic persistence/recovery, path safety, and job cancellation. **They were authored but not executed in the Linux implementation environment.**
+The runner invokes `xcodebuild test`, saves an `.xcresult` under `tests/generated/`, and fails clearly outside macOS. Alternatively use Product → Test in Xcode with the shared **App** scheme. The tests in `BJJNativeTests.swift` include native generated video/tone fixtures and actual MP4 rendering, half-open boundaries, dimensions/orientation, audio mixing/nudge, source preservation, atomic persistence/recovery, path safety, and job cancellation. **The baseline 11 tests passed on GitHub macOS runners ([evidence](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34532184666)); new cases require a fresh run.**
 
 When adding Swift source files, run `python3 scripts/configure_ios.py` to wire them into the Xcode app target. The app uses Swift Package Manager; CocoaPods is not required. Do not run `cap add ios` over the customized checked-in project.
 
@@ -119,3 +119,18 @@ Before treating this as a verified iPhone release:
 - **Need diagnosis after a native error:** reproduce with a short non-sensitive test clip while connected to Xcode; inspect the `com.bjjtelestrator.app` media log. Do not overwrite or delete the original recording.
 
 Apple/Capacitor build and provisioning references were checked on 2026-09-10. Device acceptance is still required.
+
+## Save recovery and candidate evidence
+
+Schema-1 JSON is retained as `project.pre-migration-v1.json` before migration.
+Pending edit drafts are stored in the native application container, separately
+from project JSON, throughout editing. Before suspension the bridge requests a
+flush while execution is available; a final lifecycle callback is not guaranteed.
+Recording recovery has its own asset journal and commits a revision when reopened.
+Use **Recover draft as a copy** to preserve both the saved review and pending edits.
+A completed copy has independent media files and object IDs. Keep the app open
+while large media is copied; progressive/cancellable storage jobs belong to P1.06.
+
+Use [DEVICE_ACCEPTANCE.md](docs/DEVICE_ACCEPTANCE.md) for the exact signed-build
+checklist and result fields. Retain the same bundle identity when installing an
+update over projects. Never uninstall as a routine rollback step.

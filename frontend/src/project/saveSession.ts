@@ -92,49 +92,52 @@ export class SaveSession {
             'PROJECT_CONFLICT',
             this.state.error ?? 'Resolve the save conflict first.',
           );
-        while (this.dirty) {
-          const target = { ...this.latest, revision: this.confirmed.revision };
-          const draft = this.draft;
-          await this.journals.catch(() => undefined);
-          this.report('saving');
-          let saved: Project;
-          try {
-            saved = await this.deps.save(target);
-          } catch (cause) {
-            recordDiagnostic((cause as { code?: string })?.code ?? 'SAVE_FAILED');
-            // A lost response may follow a successful commit. Acknowledge only
-            // identical content at a newer revision, never merge different edits.
-            const durable = await this.deps.read(target.projectId).catch(() => null);
-            if (
-              durable &&
-              durable.revision > target.revision &&
-              editableContent(durable) === editableContent(target)
-            )
-              saved = durable;
-            else {
-              const isConflict =
-                (cause as { code?: string })?.code === 'PROJECT_CONFLICT' ||
-                (durable !== null && durable.revision !== target.revision);
-              this.report(
-                isConflict ? 'conflict' : 'failed',
-                isConflict
-                  ? 'This project changed in another session. Recover your edits as a copy or reload the saved version.'
-                  : cause instanceof Error
-                    ? cause.message
-                    : 'Unable to save. Keep the app open and retry.',
-              );
-              throw cause;
+        for (;;) {
+          while (this.dirty) {
+            const target = { ...this.latest, revision: this.confirmed.revision };
+            const draft = this.draft;
+            await this.journals.catch(() => undefined);
+            this.report('saving');
+            let saved: Project;
+            try {
+              saved = await this.deps.save(target);
+            } catch (cause) {
+              recordDiagnostic((cause as { code?: string })?.code ?? 'SAVE_FAILED');
+              // A lost response may follow a successful commit. Acknowledge only
+              // identical content at a newer revision, never merge different edits.
+              const durable = await this.deps.read(target.projectId).catch(() => null);
+              if (
+                durable &&
+                durable.revision > target.revision &&
+                editableContent(durable) === editableContent(target)
+              )
+                saved = durable;
+              else {
+                const isConflict =
+                  (cause as { code?: string })?.code === 'PROJECT_CONFLICT' ||
+                  (durable !== null && durable.revision !== target.revision);
+                this.report(
+                  isConflict ? 'conflict' : 'failed',
+                  isConflict
+                    ? 'This project changed in another session. Recover your edits as a copy or reload the saved version.'
+                    : cause instanceof Error
+                      ? cause.message
+                      : 'Unable to save. Keep the app open and retry.',
+                );
+                throw cause;
+              }
             }
+            this.confirmed = saved;
+            if (this.disposed) return saved;
+            this.latest = this.deps.acknowledge(target, saved) ?? this.latest;
+            if (draft) await this.deps.clear(draft).catch(() => undefined);
+            this.report(this.dirty ? 'pending' : 'saved');
           }
-          this.confirmed = saved;
-          if (this.disposed) return saved;
-          this.latest = this.deps.acknowledge(target, saved) ?? this.latest;
-          if (draft) await this.deps.clear(draft).catch(() => undefined);
-          this.report(this.dirty ? 'pending' : 'saved');
+          if (this.draft && !this.dirty) await this.deps.clear(this.draft).catch(() => undefined);
+          if (this.dirty) continue;
+          this.report('saved');
+          return this.confirmed;
         }
-        if (this.draft && !this.dirty) await this.deps.clear(this.draft).catch(() => undefined);
-        this.report('saved');
-        return this.confirmed;
       });
     this.queue = work;
     return work;

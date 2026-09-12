@@ -102,6 +102,23 @@ describe('authoritative save queue', () => {
     expect(ack).not.toHaveBeenCalled();
     expect(deps.clear).not.toHaveBeenCalled();
   });
+  it('drains an edit that arrives while an acknowledged journal is being cleared', async () => {
+    const gate = deferred<void>();
+    const { initial, session, deps } = setup();
+    deps.clear = vi
+      .fn()
+      .mockImplementationOnce(() => gate.promise)
+      .mockResolvedValue(undefined);
+    session.update({ ...initial, projectName: 'first' });
+    const finished = session.flush();
+    await vi.waitFor(() => expect(deps.clear).toHaveBeenCalled());
+    session.update({ ...initial, projectName: 'arrived during cleanup' });
+    gate.resolve();
+    const saved = await finished;
+    expect(saved.projectName).toBe('arrived during cleanup');
+    expect(saved.revision).toBe(3);
+    expect(session.state.status).toBe('saved');
+  });
   it('never restores storage revisions through undo/redo or arbitrary edit recipes', () => {
     const initial = fixture();
     useEditor.getState().setProject(initial);

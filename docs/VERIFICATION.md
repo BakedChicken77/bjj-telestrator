@@ -1,5 +1,59 @@
 # Verification record
 
+## P1.02 / P1.03 first vertical package — 2026-09-12
+
+Starting commit: `f5323b3b270e3836d7df10309d1684cf8d98e9ca` (live main checked
+through GitHub and git). Local branch: `codex/p1-save-recovery`. Implementation
+commit: `6c77e2f`; a follow-up fixes an edit arriving during journal cleanup.
+The final verification addendum below identifies the tested candidate commit.
+
+**Native baseline correction:** [CI run 34532184666](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34532184666)
+passed at `f5323b3b`, including 11 native XCTest cases and an unsigned archive.
+Older local-only records below describe earlier dates; their statements that Apple
+SDK tests had never run are superseded by that successful CI evidence. They do
+not establish signed installation, a physical phone result, or this candidate.
+
+Local baseline was rerun: 74 backend tests (71.01 s), 60 frontend tests, 11 repository
+tests, and all 9 real browser scenarios (2.9 min). Python 3.12.14, Node 24.19.0,
+FFmpeg/FFprobe and Playwright 1.63.0 were used on Linux. The existing pinned
+Ruff 0.16.6 and dependency installations were reused without upgrades. Playwright's
+standard Chromium download was unavailable; a locally installed Chromium 149 was
+selected through the existing BJJ_E2E_CHROMIUM_PATH option.
+
+The baseline verification script exposed working-directory-dependent Ruff import
+classification: root CI passed while the backend-directory invocation failed.
+Explicit first-party imports now make both invocations agree (no gate disabled;
+see [Ruff's setting](https://docs.astral.sh/ruff/settings/#lint_isort_known-first-party)).
+The first new browser-test import was corrected to the repository's existing
+Playwright module path. A subsequent run overlapped a source refresh and its mobile
+case was invalidated; the clean final run, not that partial run, is authoritative.
+Recovery failure injection keeps writes blocked through the lifecycle flush so it
+tests a genuinely uncommitted draft; reconnecting before reload had correctly
+allowed the real service to save it.
+
+Automated implementation evidence so far: 100 backend tests passed, including
+real FFmpeg exports; 90 frontend tests passed; 12 repository tests passed. Strict
+TypeScript, ESLint, Ruff, build and formatting passed. Shared TypeScript/Python/
+Swift fixtures include 22 validation cases and an exact expected migration.
+The native suite now contains 15 authored test methods, including revision
+conflicts, retained original JSON, recovery copies/journals and fixture conformance.
+Its runner was invoked here and truthfully refused because macOS/Xcode are absent.
+
+**Publication blocker:** automatic approval review rejected the public branch
+push because public repository publication needs explicit user authorization.
+No remote code was changed, no PR was created, and no new native CI run was
+started. Do not substitute the old native CI result for the new candidate.
+The next external action is pushing the reviewed local branch and creating a draft
+PR to run the existing CI, after authorization. No release tag, signing credential,
+TestFlight upload, publication, paid service, or customer charge was configured.
+
+Exact remaining acceptance: fresh native SDK/XCTest/archive; signed install over
+populated projects; physical iPhone recovery/export/share/VoiceOver; Windows 11/
+Docker on this candidate; realistic 20-minute and lower-resource-device results.
+Native recovery-copy responsiveness on large projects remains unmeasured. Source
+media and pre-migration documents are retained; no Phase 1 exit gate is claimed.
+
+
 ## Version 1.1 iPhone conversion — 2026-09-10
 
 The user reports successful Windows 11/Docker Desktop operation of the original desktop app. The following checks were performed for the iPhone source conversion. This is **not** a signed or device-verified iOS release.

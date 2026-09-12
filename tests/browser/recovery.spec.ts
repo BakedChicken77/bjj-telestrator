@@ -53,11 +53,13 @@ test('failed save survives reload and support preview contains only allowlisted 
   await expect(page.locator('dialog')).toHaveCount(0);
   const drafts = await page.evaluate(() => Object.keys(localStorage).filter((key) => key.startsWith('bjj:recovery:')));
   expect(drafts.length).toBeGreaterThan(0);
-  await page.unroute(endpoint);
   page.on('dialog', (dialog) => dialog.accept());
   await page.reload();
   await expect(page.getByLabel('Pending recovery drafts')).toBeVisible();
   await expect(page.getByLabel('Project name', { exact: true })).toHaveValue(p.projectName);
+  // Keep writes offline through the lifecycle flush; only reconnect after the
+  // journal has demonstrably recovered on a fresh page.
+  await page.unroute(endpoint);
   const response = page.waitForResponse((r) => r.url().endsWith('/recover-copy'));
   await page.getByRole('button', { name: 'Recover draft as a copy', exact: true }).click();
   const copy = await (await response).json();

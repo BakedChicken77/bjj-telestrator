@@ -89,13 +89,23 @@ def checksums(output: Path) -> None:
     (output / "SHA256SUMS.txt").write_text("\n".join(lines) + "\n")
 
 
+def device_accepted(environment: dict[str, str], commit: str, version: str) -> bool:
+    """A historic boolean cannot attest to another candidate or signed build."""
+    build = f"{environment.get('GITHUB_RUN_NUMBER', '1')}.{environment.get('GITHUB_RUN_ATTEMPT', '1')}"
+    return (environment.get('IOS_DEVICE_ACCEPTED') == 'true'
+            and environment.get('IOS_DEVICE_ACCEPTED_SHA') == commit
+            and environment.get('IOS_DEVICE_ACCEPTED_VERSION') == version
+            and environment.get('IOS_DEVICE_ACCEPTED_BUILD') == build
+            and environment.get('IOS_DEVICE_EVIDENCE_URL', '').startswith('https://'))
+
+
 def publish(output: Path, tag: str) -> None:
     validate_version(tag)
     repository = os.environ["GITHUB_REPOSITORY"]
     commit = command(["git", "rev-parse", "HEAD"])
     marker = f"<!-- bjj-telestrator:{commit} -->"
     signed = any(output.glob("*.ipa"))
-    accepted = os.environ.get("IOS_DEVICE_ACCEPTED") == "true"
+    accepted = device_accepted(dict(os.environ), commit, tag[1:])
     prerelease = not (signed and accepted and "-" not in tag)
     summary = (f"{marker}\n\nBuilt from `{commit}` after all CI gates passed.\n\n"
                "- Source ZIP: full desktop and iPhone source.\n"

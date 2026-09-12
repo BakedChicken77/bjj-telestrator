@@ -132,3 +132,10 @@ GitHub installs Playwright Chromium and FFmpeg. Locally, see README for dependen
 - Signing skipped: absent `IOS_SIGNING_ENABLED` defaults to off. Signing failure blocks publication when enabled.
 - Apple upload accepted but app absent: wait for Apple's processing; check bundle/app record, agreements, role, and TestFlight group assignment.
 - Release blocked: fix the failing gate. Do not remove the gate to label an untested iPhone build ready.
+
+
+Candidate device acceptance now binds the exact commit, version and workflow
+run/attempt build; a global `IOS_DEVICE_ACCEPTED` boolean no longer accepts future
+builds. See [DEVICE_ACCEPTANCE.md](DEVICE_ACCEPTANCE.md) for the companion
+variables, pilot behavior and evidence template. The baseline GitHub repository,
+CI and 11 native tests/archive have since completed successfully at `f5323b3b`.

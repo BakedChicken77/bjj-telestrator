@@ -1,6 +1,6 @@
 {
   "applicationVersion": "1.1.0",
-  "checkedOn": "2026-09-10",
+  "checkedOn": "2026-09-12",
   "desktopWindows": {
     "status": "user_reported_pass",
     "platform": "Windows 11 / Docker Desktop"
@@ -36,12 +36,21 @@
     "xctestMethodsAuthored": 9,
     "xctestResult": "not_run",
     "signedIPA": false,
-    "physicalIPhone": "not_run"
+    "physicalIPhone": "not_run",
+    "baselineCI": {
+      "commit": "f5323b3b270e3836d7df10309d1684cf8d98e9ca",
+      "runURL": "https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34532184666",
+      "xctestPassed": 11,
+      "unsignedArchive": "passed"
+    },
+    "candidateSDKCompilation": "pending_public_push_approval_and_macos_CI",
+    "candidateXCTestMethodsAuthored": 15
   },
   "limits": [
-    "Native iOS implementation requires an actual Xcode build and simulator/device acceptance before use.",
+    "The baseline native SDK/XCTest/archive passed in GitHub CI. New candidate SDK tests, signing, and physical hardware acceptance remain pending.",
     "No signed installable iPhone binary was produced.",
     "Touch browser tests use the desktop backend, not the native Swift renderer.",
     "Long-video iPhone performance is not benchmarked."
-  ]
+  ],
+  "historicalLocalRecordCheckedOn": "2026-09-10"
 }

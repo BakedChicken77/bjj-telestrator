@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+- P1.02: schema-2 migration with retained original JSON, runtime capabilities,
+  conditional saves/exports, and cross-runtime conformance fixtures.
+- P1.03: serialized save acknowledgments, recovery drafts/copies, explicit stale
+  write handling, and inspectable redacted support summaries.
+- P1.01 preparation: refreshed native baseline evidence and candidate-specific
+  signed-device acceptance checks. Physical hardware acceptance remains pending.
+- Make Ruff import classification identical in local and CI working directories.
+
 ## [1.1.0] - 2026-09-10
 
 - Added the standalone iPhone source target with native storage, imports, recording and MP4 rendering.
