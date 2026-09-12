@@ -24,6 +24,9 @@
 		508F2335ED33A61F4DF232CB = {isa = PBXBuildFile; fileRef = B6DE8DE90A23549110E26D4D;};
 		346B4AB9E398D0FB0992D2B0 = {isa = PBXBuildFile; fileRef = 624D1D62CAC247172FAB6012;};
 		38267E781EA13FBA32367861 = {isa = PBXBuildFile; fileRef = 94E7B890A3B96DEF8434ACC0;};
+		E8960943DC6B0CF6A89E0D0F = {isa = PBXBuildFile; fileRef = FED0CACB9B0A262AB8C18307;};
+		6077BD82ACC7C2D35AF5B306 = {isa = PBXBuildFile; fileRef = 44A95B4B17BE3FA0A4576AED;};
+		34C8798CFA7D90D784962368 = {isa = PBXBuildFile; fileRef = EAB160585DDCE994D316EA85;};
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -47,6 +50,9 @@
 		624D1D62CAC247172FAB6012 = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>";};
 		94E7B890A3B96DEF8434ACC0 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BJJNativeTests.swift; sourceTree = "<group>";};
 		DA2C8C2E79713CE00D999523 = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR;};
+		FED0CACB9B0A262AB8C18307 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJProjectMigrations.swift"; sourceTree = "<group>";};
+		44A95B4B17BE3FA0A4576AED = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJProjectRecovery.swift"; sourceTree = "<group>";};
+		EAB160585DDCE994D316EA85 = {isa = PBXFileReference; lastKnownFileType = text.json; path = "../../../../tests/fixtures/project-conformance.json"; sourceTree = "<group>";};
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -88,6 +94,8 @@
 				B6DE8DE90A23549110E26D4D,
 				0B68BAB90854D1594409F8D9,
 				16E599F6FB44CCEA142B5AC1,
+				FED0CACB9B0A262AB8C18307,
+				44A95B4B17BE3FA0A4576AED,
 				F916B83A68F5667CEED2E809,
 				5BB0BCDE78B219A3C987DC74,
 				A37787FAED071B35864C07AB,
@@ -104,7 +112,7 @@
 			path = App;
 			sourceTree = "<group>";
 		};
-		A5A37748E95AD12DB4552552 = {isa = PBXGroup; children = (94E7B890A3B96DEF8434ACC0,); path = AppTests; sourceTree = "<group>";};
+		A5A37748E95AD12DB4552552 = {isa = PBXGroup; children = (94E7B890A3B96DEF8434ACC0, EAB160585DDCE994D316EA85,); path = AppTests; sourceTree = "<group>";};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -190,7 +198,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		C07A97930E4E5BC84D76F326 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;};
+		C07A97930E4E5BC84D76F326 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (34C8798CFA7D90D784962368,); runOnlyForDeploymentPostprocessing = 0;};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -201,6 +209,8 @@
 				508F2335ED33A61F4DF232CB,
 				DBB4CB707D525095EF87036A,
 				6922D58CAEC63F9844868D0E,
+				E8960943DC6B0CF6A89E0D0F,
+				6077BD82ACC7C2D35AF5B306,
 				FCE6181DC70419E98245F919,
 				674BC1CED1759E160AA57669,
 				D358BDB8E4F31EBAEA04670A,

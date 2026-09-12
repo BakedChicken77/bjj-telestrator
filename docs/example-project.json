@@ -1,5 +1,9 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "revision": 1,
+  "requiredCapabilities": [
+    "project.revisions.v1"
+  ],
   "projectId": "00000000-0000-4000-8000-000000000001",
   "projectName": "Guard retention review",
   "createdAt": "2026-09-05T12:00:00Z",

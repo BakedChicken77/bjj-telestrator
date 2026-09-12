@@ -1,5 +1,7 @@
-import { projectSchema, voiceoverSchema, type Project } from './model';
+import { projectSchema, readProject, voiceoverSchema, type Project } from './model';
 import { isNativeIOS, nativeAPI } from './native';
+import { ProjectError } from './project/migrations';
+import { recordDiagnostic } from './project/diagnostics';
 
 export interface ProjectSummary {
   projectId: string;
@@ -7,6 +9,7 @@ export interface ProjectSummary {
   updatedAt: string;
   durationSec: number;
   annotationCount: number;
+  unavailableCode?: string;
 }
 export interface ExportJob {
   jobId: string;
@@ -17,6 +20,14 @@ export interface ExportJob {
   error: string | null;
   filename: string | null;
   createdAt: string;
+  projectRevision?: number;
+}
+export interface RuntimeCapabilities {
+  schemaVersion: number;
+  requiredCapabilities: string[];
+  conditionalSave: boolean;
+  conditionalExport: boolean;
+  recoveryCopy: boolean;
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -24,14 +35,18 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   try {
     response = await fetch(url, init);
   } catch {
-    throw new Error(
+    recordDiagnostic('CONNECTION_UNAVAILABLE');
+    throw new ProjectError(
+      'CONNECTION_UNAVAILABLE',
       'Cannot connect to BJJ Telestrator. Check that the local backend is running, then retry.',
     );
   }
   if (!response.ok) {
     let message = `Request failed (${response.status}).`;
+    let code = 'REQUEST_FAILED';
     try {
-      const error: { detail?: unknown } = await response.json();
+      const error: { detail?: unknown; code?: string } = await response.json();
+      if (typeof error.code === 'string') code = error.code;
       if (typeof error.detail === 'string') message = error.detail;
       else if (Array.isArray(error.detail))
         message = error.detail
@@ -44,12 +59,22 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     } catch {
       /* The status above remains useful for non-JSON server errors. */
     }
-    throw new Error(message);
+    recordDiagnostic(code);
+    throw new ProjectError(code, message);
   }
   return response.status === 204 ? (undefined as T) : (response.json() as Promise<T>);
 }
 
 const desktopAPI = {
+  capabilities: () => request<RuntimeCapabilities>('/api/capabilities'),
+  recoverCopy: async (project: Project) =>
+    readProject(
+      await request<unknown>(`/api/projects/${project.projectId}/recover-copy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(projectSchema.parse(project)),
+      }),
+    ),
   uploadVoiceover: async (
     projectId: string,
     recording: Blob,
@@ -67,7 +92,7 @@ const desktopAPI = {
     );
   },
   projects: () => request<ProjectSummary[]>('/api/projects'),
-  project: async (id: string) => projectSchema.parse(await request<unknown>(`/api/projects/${id}`)),
+  project: async (id: string) => readProject(await request<unknown>(`/api/projects/${id}`)),
   importVideo: async (file: File, name?: string) => {
     const form = new FormData();
     form.append('file', file);
@@ -80,13 +105,17 @@ const desktopAPI = {
     projectSchema.parse(
       await request<unknown>(`/api/projects/${project.projectId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'If-Match': `"${project.revision}"` },
         body: JSON.stringify(projectSchema.parse(project)),
       }),
     ),
   deleteProject: (id: string) => request<void>(`/api/projects/${id}`, { method: 'DELETE' }),
   exports: (id: string) => request<ExportJob[]>(`/api/projects/${id}/exports`),
-  export: (id: string) => request<ExportJob>(`/api/projects/${id}/exports`, { method: 'POST' }),
+  export: (id: string, revision: number) =>
+    request<ExportJob>(`/api/projects/${id}/exports`, {
+      method: 'POST',
+      headers: { 'If-Match': `"${revision}"` },
+    }),
   exportJob: (id: string) => request<ExportJob>(`/api/exports/${id}`),
   cancelExport: (id: string) => request<ExportJob>(`/api/exports/${id}/cancel`, { method: 'POST' }),
 };
@@ -94,13 +123,17 @@ const desktopAPI = {
 /** Keep the verified desktop HTTP path; iOS uses an entirely local native service. */
 export const api = {
   ...desktopAPI,
+  capabilities: () => (isNativeIOS() ? nativeAPI.capabilities() : desktopAPI.capabilities()),
+  recoverCopy: (project: Project) =>
+    isNativeIOS() ? nativeAPI.recoverCopy(project) : desktopAPI.recoverCopy(project),
   projects: () => (isNativeIOS() ? nativeAPI.projects() : desktopAPI.projects()),
   project: (id: string) => (isNativeIOS() ? nativeAPI.project(id) : desktopAPI.project(id)),
   save: (project: Project) => (isNativeIOS() ? nativeAPI.save(project) : desktopAPI.save(project)),
   deleteProject: (id: string) =>
     isNativeIOS() ? nativeAPI.deleteProject(id) : desktopAPI.deleteProject(id),
   exports: (id: string) => (isNativeIOS() ? nativeAPI.exports(id) : desktopAPI.exports(id)),
-  export: (id: string) => (isNativeIOS() ? nativeAPI.export(id) : desktopAPI.export(id)),
+  export: (id: string, revision: number) =>
+    isNativeIOS() ? nativeAPI.export(id, revision) : desktopAPI.export(id, revision),
   exportJob: (id: string) => (isNativeIOS() ? nativeAPI.exportJob(id) : desktopAPI.exportJob(id)),
   cancelExport: (id: string) =>
     isNativeIOS() ? nativeAPI.cancelExport(id) : desktopAPI.cancelExport(id),

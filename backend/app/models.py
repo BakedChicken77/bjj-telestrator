@@ -1,4 +1,4 @@
-"""Version 1 documents. Unknown fields survive load/save for forward compatibility."""
+"""Versioned documents. Unknown optional fields survive load/save."""
 from __future__ import annotations
 
 from datetime import datetime
@@ -7,13 +7,15 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .migrations import MAX_REVISION, migrate_document
+
 Unit = Annotated[float, Field(ge=0, le=1)]
 PositiveUnit = Annotated[float, Field(gt=0, le=1)]
 Color = Annotated[str, Field(pattern=r'^#[0-9a-fA-F]{6}$')]
 
 
 class Model(BaseModel):
-    model_config = ConfigDict(extra='allow', allow_inf_nan=False)
+    model_config = ConfigDict(extra='allow', allow_inf_nan=False, strict=True)
 
 
 class Point(Model):
@@ -99,7 +101,8 @@ class AnnotationBase(Model):
     @field_validator('createdAt', 'updatedAt')
     @classmethod
     def valid_date(cls, value: str) -> str:
-        datetime.fromisoformat(value.replace('Z', '+00:00'))
+        if datetime.fromisoformat(value.replace('Z', '+00:00')).tzinfo is None:
+            raise ValueError('Timestamp must include a timezone')
         return value
 
     @model_validator(mode='after')
@@ -218,7 +221,9 @@ class Voiceover(Model):
 
 
 class Project(Model):
-    schemaVersion: Literal[1] = 1
+    schemaVersion: Literal[2] = 2
+    revision: Annotated[int, Field(ge=1, le=MAX_REVISION, strict=True)] = 1
+    requiredCapabilities: list[str] = Field(default_factory=lambda: ['project.revisions.v1'])
     projectId: str
     projectName: Annotated[str, Field(min_length=1, max_length=160)]
     createdAt: str
@@ -233,8 +238,20 @@ class Project(Model):
     _uuid = field_validator('projectId')(AnnotationBase.valid_uuid.__func__)
     _dates = field_validator('createdAt', 'updatedAt')(AnnotationBase.valid_date.__func__)
 
+    @model_validator(mode='before')
+    @classmethod
+    def migrate(cls, value: object) -> object:
+        # Constructors for a newly imported asset use current defaults; persisted
+        # and client documents always carry a schema version.
+        if isinstance(value, dict) and 'schemaVersion' not in value:
+            value = {'schemaVersion': 2, 'revision': 1,
+                     'requiredCapabilities': ['project.revisions.v1'], **value}
+        return migrate_document(value)
+
     @model_validator(mode='after')
     def valid_project(self) -> Self:
+        if not self.projectName.strip():
+            raise ValueError('Enter a project name')
         identifiers = [a.id for a in self.annotations] + [v.id for v in self.voiceovers]
         if len(identifiers) != len(set(identifiers)):
             raise ValueError('Annotation and voiceover identifiers must be unique')
@@ -249,6 +266,7 @@ class Project(Model):
 class Job(Model):
     jobId: str
     projectId: str
+    projectRevision: int | None = None
     status: Literal['queued', 'running', 'completed', 'failed', 'cancelled'] = 'queued'
     progress: Annotated[float, Field(ge=0, le=100)] = 0
     renderedSec: Annotated[float, Field(ge=0)] = 0

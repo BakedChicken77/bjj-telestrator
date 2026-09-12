@@ -12,6 +12,7 @@ struct BJJExportJob: Codable {
     var error: String?
     var filename: String?
     let createdAt: String
+    var projectRevision: Int? = nil
     func json() throws -> BJJJSON {
         var value = try BJJValidate.object(JSONSerialization.jsonObject(with: JSONEncoder().encode(self)), "export")
         value["error"] = error.map { $0 as Any } ?? NSNull()
@@ -73,15 +74,18 @@ struct BJJExportJob: Codable {
         guard let job = jobs[id] else { throw BJJError.invalid("This export does not exist.") }
         return job
     }
-    func createExport(_ projectId: String) throws -> BJJExportJob {
+    func createExport(_ projectId: String, expectedRevision: Int? = nil) throws -> BJJExportJob {
         let project = try store.load(projectId)
+        if let expectedRevision, project.revision != expectedRevision {
+            throw BJJError.domain("PROJECT_CONFLICT", "The saved project changed. Reopen it before exporting.")
+        }
         guard project.exportSettings.n("fps") <= 60 else { throw BJJError.invalid("Choose an export frame rate of 60 fps or less on iPhone.") }
         try store.checkSpace(required: Int64(project.duration * 2_000_000) + 100_000_000)
         let id = UUID().uuidString.lowercased()
         let stamp = BJJProject.now().replacingOccurrences(of: ":", with: "-")
         let name = "\(BJJStore.sanitized(project.name))-annotated-\(stamp)-\(id.prefix(8)).mp4"
         let job = BJJExportJob(jobId: id, projectId: projectId, status: "queued", progress: 0, renderedSec: 0,
-                               filename: name, createdAt: BJJProject.now())
+                               filename: name, createdAt: BJJProject.now(), projectRevision: project.revision)
         jobs[id] = job; snapshots[id] = project; queue.append(id)
         try persist(job)
         Task { startNext() }

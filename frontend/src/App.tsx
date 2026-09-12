@@ -8,6 +8,8 @@ import { Inspector } from './components/Inspector';
 import { VoiceoverPanel } from './components/VoiceoverPanel';
 import { useAutosave } from './useAutosave';
 import { isNativeIOS, nativeAPI, nativeBridge } from './native';
+import { SupportDialog } from './components/SupportDialog';
+import { diagnosticSummary } from './project/diagnostics';
 
 const tools: { id: Tool; label: string; glyph: string }[] = [
   { id: 'select', label: 'Select', glyph: '↖' },
@@ -136,7 +138,16 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [mobilePanel, setMobilePanel] = useState<'timeline' | 'properties'>('timeline');
-  const { status, error: saveError, flush } = useAutosave(project);
+  const {
+    status,
+    error: saveError,
+    flush,
+    recovery,
+    recoveryError,
+    dismissRecovery,
+    clearDraft,
+  } = useAutosave();
+  const [support, setSupport] = useState<string | null>(null);
 
   const loadProject = useCallback((next: Project) => {
     videoRef.current?.pause();
@@ -151,6 +162,15 @@ export default function App() {
     let cancelled = false;
     async function start() {
       try {
+        const capabilities = await api.capabilities();
+        if (
+          !capabilities.conditionalSave ||
+          !capabilities.conditionalExport ||
+          capabilities.schemaVersion < 2
+        )
+          throw new Error(
+            'Upgrade required: the editor and local service need matching versions for safe saves.',
+          );
         const list = await api.projects();
         if (cancelled) return;
         setProjects(list);
@@ -299,8 +319,9 @@ export default function App() {
     setExporting(true);
     setError(null);
     try {
-      await flush();
-      const job = await api.export(project.projectId);
+      const saved = await flush();
+      if (!saved) return;
+      const job = await api.export(saved.projectId, saved.revision);
       setJobs((list) => [job, ...list.filter((item) => item.jobId !== job.jobId)]);
     } catch (cause) {
       setError(errorText(cause));
@@ -309,7 +330,18 @@ export default function App() {
     }
   }
 
-  const visibleError = error ?? saveError ?? editorError;
+  async function recoverCopy(draftProject: Project) {
+    setBusy('Recovering an independent copy…');
+    try {
+      const copy = await api.recoverCopy(draftProject);
+      loadProject(copy);
+    } catch (cause) {
+      setError(errorText(cause));
+    } finally {
+      setBusy(null);
+    }
+  }
+  const visibleError = error ?? saveError ?? recoveryError ?? editorError;
   return (
     <div className={`app-shell mobile-${mobilePanel}`}>
       <header className="app-topbar">
@@ -341,7 +373,9 @@ export default function App() {
               ? 'Unsaved changes'
               : status === 'saving'
                 ? 'Saving…'
-                : 'Save failed'}
+                : status === 'conflict'
+                  ? 'Save conflict'
+                  : 'Save failed'}
         </div>
         <div className="topbar-actions">
           <button onClick={() => void showBrowser()} aria-label="Projects" disabled={recording}>
@@ -353,7 +387,7 @@ export default function App() {
               title="Save now"
               onClick={() => void flush().catch((cause: unknown) => setError(errorText(cause)))}
             >
-              Save
+              {status === 'failed' ? 'Retry save' : 'Save'}
             </button>
           )}
           <button
@@ -369,9 +403,58 @@ export default function App() {
           </button>
         </div>
       </header>
+      {support !== null && <SupportDialog text={support} onClose={() => setSupport(null)} />}
+      {project && status === 'conflict' && (
+        <section className="recovery-banner" aria-label="Save conflict recovery">
+          <p>Your edits and the newer saved version have been kept separately.</p>
+          <button disabled={!!busy} onClick={() => void recoverCopy(project)}>
+            Recover my edits as a copy
+          </button>
+          <button
+            disabled={!!busy}
+            onClick={() =>
+              void api
+                .project(project.projectId)
+                .then(loadProject)
+                .catch((cause: unknown) => setError(errorText(cause)))
+            }
+          >
+            Reload saved version
+          </button>
+        </section>
+      )}
+      {recovery.length > 0 && (
+        <section className="recovery-banner" aria-label="Pending recovery drafts">
+          <p>Unsaved edits were found. Recover a separate copy to keep both versions.</p>
+          {recovery.map((draft) => (
+            <div key={draft.draftId}>
+              <span>
+                {new Date(draft.savedAt).toLocaleString()} · {draft.project.annotations.length}{' '}
+                annotations{' '}
+              </span>
+              <button disabled={!!busy} onClick={() => void recoverCopy(draft.project)}>
+                Recover draft as a copy
+              </button>
+              <button
+                onClick={() =>
+                  void clearDraft(draft)
+                    .then(dismissRecovery)
+                    .catch((cause: unknown) => setError(errorText(cause)))
+                }
+              >
+                Discard this draft
+              </button>
+            </div>
+          ))}
+          <button onClick={dismissRecovery}>Use saved version; keep drafts</button>
+        </section>
+      )}
       {visibleError && (
         <div className="error-banner" role="alert">
           <span>{visibleError}</span>
+          <button onClick={() => setSupport(diagnosticSummary(nativeIOS ? 'ios' : 'desktop'))}>
+            Inspect support summary
+          </button>
           <button
             aria-label="Dismiss error"
             onClick={() => {

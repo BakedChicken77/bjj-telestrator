@@ -36,6 +36,62 @@ import CryptoKit
              "annotations": [annotation()], "voiceovers": [BJJJSON]()])
         return try store.save(result, creating: true)
     }
+    func testSharedConformanceAndIdempotentMigration() throws {
+        let url = try XCTUnwrap(Bundle(for: BJJNativeTests.self).url(forResource: "project-conformance", withExtension: "json"))
+        let fixtures = try BJJValidate.object(JSONSerialization.jsonObject(with: Data(contentsOf: url)), "fixtures")
+        let cases = try BJJValidate.objects(fixtures["cases"], "cases", maximum: 100)
+        for item in cases {
+            let value = try BJJValidate.object(item["document"], "document")
+            if item["valid"] as? Bool == true { XCTAssertNoThrow(try BJJProject(value), item["name"] as! String) }
+            else { XCTAssertThrowsError(try BJJProject(value), item["name"] as! String) }
+        }
+        let migrated = try BJJProject(BJJValidate.object(cases[0]["document"], "legacy"))
+        XCTAssertTrue(NSDictionary(dictionary: migrated.json).isEqual(to: fixtures["migrationExpected"] as! BJJJSON))
+        XCTAssertTrue(NSDictionary(dictionary: migrated.json).isEqual(to: try BJJProject(migrated.json).json))
+    }
+    func testMigrationRetainsExactOriginalAndConditionalSaveExport() throws {
+        let p = try project(); let path = try store.directory(p.id).appendingPathComponent("project.json")
+        var legacy = p.json; legacy["schemaVersion"] = 1; legacy.removeValue(forKey: "revision"); legacy.removeValue(forKey: "requiredCapabilities")
+        let bytes = try JSONSerialization.data(withJSONObject: legacy, options: [.prettyPrinted])
+        try bytes.write(to: path)
+        let migrated = try store.load(p.id)
+        XCTAssertEqual(migrated.revision, 1)
+        XCTAssertEqual(try Data(contentsOf: path.deletingLastPathComponent().appendingPathComponent("project.pre-migration-v1.json")), bytes)
+        let saved = try store.save(migrated)
+        XCTAssertEqual(saved.revision, 2)
+        XCTAssertThrowsError(try store.save(migrated))
+        let service = try BJJService(store: store)
+        XCTAssertThrowsError(try service.createExport(p.id, expectedRevision: 1))
+        XCTAssertEqual(try store.load(p.id).revision, 2)
+    }
+    func testRecoveryJournalAndIndependentCopy() throws {
+        let p = try project()
+        var json = p.json; json["projectName"] = "Recovered edit"
+        let writer = UUID().uuidString.lowercased(), first = UUID().uuidString.lowercased(), second = UUID().uuidString.lowercased()
+        let draft: BJJJSON = ["version": 1, "writerId": writer, "draftId": first, "project": json, "savedAt": BJJProject.now()]
+        try store.writeDraft(draft)
+        XCTAssertEqual(try BJJStore(root: root).recoveryDrafts(p.id).count, 1)
+        var newer = draft; newer["draftId"] = second
+        try store.writeDraft(newer)
+        try store.clearDraft(p.id, writer: writer, draft: first)
+        XCTAssertEqual(try store.recoveryDrafts(p.id).count, 1)
+        let copy = try store.recoverCopy(BJJProject(json))
+        XCTAssertNotEqual(copy.id, p.id)
+        XCTAssertNotEqual(copy.annotations[0]["id"] as? String, p.annotations[0]["id"] as? String)
+        XCTAssertEqual(try Data(contentsOf: store.asset(copy.id, copy.source["asset"] as! String)), try Data(contentsOf: store.asset(p.id, p.source["asset"] as! String)))
+        XCTAssertEqual(try store.load(p.id).name, p.name)
+        try store.clearDraft(p.id, writer: writer, draft: second)
+        XCTAssertEqual(try store.recoveryDrafts(p.id).count, 0)
+    }
+    func testRecordingRecoveryCommitsARevisionBeforeExport() throws {
+        let p = try project(); _ = try clip(p)
+        XCTAssertEqual(try store.load(p.id).revision, p.revision)
+        XCTAssertEqual(try store.load(p.id).voiceovers.count, 0)
+        let recovered = try store.loadRecoveringRecordings(p.id)
+        XCTAssertEqual(recovered.revision, p.revision + 1)
+        XCTAssertEqual(recovered.voiceovers.count, 1)
+        XCTAssertEqual(try store.load(p.id).voiceovers.count, 1)
+    }
     func testBridgeRegistersMediaHandlerOnFreshConfiguration() throws {
         let controller = BJJViewController()
         controller.loadViewIfNeeded()
@@ -114,10 +170,15 @@ import CryptoKit
         let reopened = try BJJStore(root: root).load(p.id)
         XCTAssertEqual(reopened.voiceovers.count, 1)
         _ = try store.save(reopened)
-        _ = try store.save(p)
+        XCTAssertThrowsError(try store.save(p)) // stale edits must never overwrite
+        var removal = p.json
+        removal["revision"] = try store.load(p.id).revision
+        _ = try store.save(BJJProject(removal))
         XCTAssertEqual(try store.load(p.id).voiceovers.count, 0)
         XCTAssertNoThrow(try store.asset(p.id, take.s("asset")))
-        _ = try store.save(reopened)
+        var undo = reopened.json
+        undo["revision"] = try store.load(p.id).revision
+        _ = try store.save(BJJProject(undo))
         XCTAssertEqual(try store.load(p.id).voiceovers.count, 1)
     }
     private func silentVideo(_ url: URL, rotated: Bool = false) async throws {

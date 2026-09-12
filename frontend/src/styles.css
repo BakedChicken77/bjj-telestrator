@@ -1057,3 +1057,33 @@ progress::-webkit-progress-value {
     max-height: 180px;
   }
 }
+
+.recovery-banner {
+  background: #252f46;
+  color: #fff;
+  padding: 12px 20px;
+  border-bottom: 2px solid #f3bf4a;
+}
+.recovery-banner button {
+  margin: 4px;
+  min-height: 44px;
+}
+.support-dialog {
+  max-width: min(680px, 92vw);
+  max-height: 85dvh;
+  overflow: auto;
+  padding: 24px;
+}
+.support-dialog::backdrop {
+  background: #0009;
+}
+.support-dialog pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 45dvh;
+  overflow: auto;
+}
+.support-dialog button {
+  min-height: 44px;
+  margin: 4px;
+}

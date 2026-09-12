@@ -11,6 +11,8 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from PIL import Image
+
 from app.media import probe_media
 from app.models import Project
 from app.renderer import (
@@ -23,7 +25,6 @@ from app.renderer import (
     safe_asset,
     segment_timeline,
 )
-from PIL import Image
 
 STAMP = "2026-09-05T00:00:00Z"
 

@@ -12,7 +12,8 @@ public class BJJNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDeleg
     public let pluginMethods: [CAPPluginMethod] = [
         "listProjects", "getProject", "importVideo", "saveProject", "deleteProject", "listExports",
         "createExport", "getExport", "cancelExport", "getAssetURL", "shareExport",
-        "prepareRecording", "startRecording", "stopRecording"
+        "prepareRecording", "startRecording", "stopRecording", "getCapabilities",
+        "writeRecoveryDraft", "getRecoveryDrafts", "clearRecoveryDraft", "recoverProjectCopy", "shareDiagnostics"
     ].map { CAPPluginMethod(name: $0, returnType: CAPPluginReturnPromise) }
     private var service: BJJService?
     private var startupError: String?
@@ -36,6 +37,9 @@ public class BJJNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDeleg
         observations.append(NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
             self?.interrupted("Recording saved before the app moved to the background.")
         })
+        observations.append(NotificationCenter.default.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.notifyListeners("appSuspending", data: [:])
+        })
         observations.append(NotificationCenter.default.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] note in
             if (note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt) == AVAudioSession.InterruptionType.began.rawValue {
                 self?.interrupted("Recording saved after an audio interruption.")
@@ -51,15 +55,37 @@ public class BJJNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDeleg
                 if service == nil { service = try BJJService(store: BJJStore()) }
                 guard let service else { throw BJJError.invalid(startupError ?? "Unable to open local project storage.") }
                 call.resolve(try await work(service))
-            } catch { call.reject(error.localizedDescription) }
+            } catch {
+                if let domain = error as? BJJError { call.reject(domain.localizedDescription, domain.code) }
+                else { call.reject("Unable to access local project storage. Check free space and retry.", "STORAGE_UNAVAILABLE") }
+            }
         }
     }
     private func id(_ call: CAPPluginCall, _ key: String = "projectId") throws -> String { try BJJValidate.uuid(call.getString(key)) }
+    @objc func getCapabilities(_ call: CAPPluginCall) { call.resolve(BJJProjectMigrations.capabilities) }
+    @objc func writeRecoveryDraft(_ call: CAPPluginCall) {
+        perform(call) { service in try service.store.writeDraft(BJJValidate.object(call.getObject("draft"), "recovery draft")); return [:] }
+    }
+    @objc func getRecoveryDrafts(_ call: CAPPluginCall) {
+        perform(call) { [self] service in ["drafts": try service.store.recoveryDrafts(id(call))] }
+    }
+    @objc func clearRecoveryDraft(_ call: CAPPluginCall) {
+        perform(call) { [self] service in
+            try service.store.clearDraft(id(call), writer: id(call, "writerId"), draft: id(call, "draftId")); return [:]
+        }
+    }
+    @objc func recoverProjectCopy(_ call: CAPPluginCall) {
+        perform(call) { service in
+            ["project": try service.store.recoverCopy(BJJProject(BJJValidate.object(call.getObject("project"), "recovery project"))).json]
+        }
+    }
     @objc func listProjects(_ call: CAPPluginCall) { perform(call) { service in ["projects": try service.store.list()] } }
-    @objc func getProject(_ call: CAPPluginCall) { perform(call) { [self] service in ["project": try service.store.load(id(call)).json] } }
+    @objc func getProject(_ call: CAPPluginCall) { perform(call) { [self] service in ["project": try service.store.loadRecoveringRecordings(id(call)).json] } }
     @objc func saveProject(_ call: CAPPluginCall) {
         perform(call) { service in
             let value = try BJJValidate.object(call.getObject("project"), "project")
+            let revision = try BJJValidate.number(call.getDouble("expectedRevision"), "expected revision", 1...9007199254740991, integer: true)
+            guard revision == (value["revision"] as? NSNumber)?.doubleValue else { throw BJJError.domain("REVISION_REQUIRED", "The request and project revisions do not match.") }
             return ["project": try service.store.save(BJJProject(value)).json]
         }
     }
@@ -71,7 +97,23 @@ public class BJJNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDeleg
         }
     }
     @objc func listExports(_ call: CAPPluginCall) { perform(call) { [self] service in ["jobs": try service.listExports(id(call))] } }
-    @objc func createExport(_ call: CAPPluginCall) { perform(call) { [self] service in ["job": try service.createExport(id(call)).json()] } }
+    @objc func createExport(_ call: CAPPluginCall) {
+        perform(call) { [self] service in
+            let revision = try BJJValidate.number(call.getDouble("expectedRevision"), "expected revision", 1...9007199254740991, integer: true)
+            return ["job": try service.createExport(id(call), expectedRevision: Int(revision)).json()]
+        }
+    }
+    @objc func shareDiagnostics(_ call: CAPPluginCall) {
+        perform(call) { [self] _ in
+            guard let text = call.getString("text"), text.utf8.count < 32768,
+                  let host = bridge?.viewController else { throw BJJError.invalid("The support summary is unavailable.") }
+            let sheet = UIActivityViewController(activityItems: [text], applicationActivities: nil)
+            sheet.popoverPresentationController?.sourceView = host.view
+            sheet.popoverPresentationController?.sourceRect = CGRect(x: host.view.bounds.midX, y: host.view.bounds.midY, width: 1, height: 1)
+            host.present(sheet, animated: true)
+            return [:]
+        }
+    }
     @objc func getExport(_ call: CAPPluginCall) { perform(call) { [self] service in ["job": try service.job(id(call, "jobId")).json()] } }
     @objc func cancelExport(_ call: CAPPluginCall) { perform(call) { [self] service in ["job": try service.cancel(id(call, "jobId")).json()] } }
     @objc func getAssetURL(_ call: CAPPluginCall) {

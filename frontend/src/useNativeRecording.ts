@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import type { PluginListenerHandle } from '@capacitor/core';
-import { api } from './api';
+import { flushActiveSave } from './project/saveSession';
 import { isNativeIOS, nativeAPI, nativeBridge } from './native';
 import { useEditor } from './store';
 import { voiceoverSchema, type Voiceover } from './model';
@@ -43,8 +43,7 @@ export function useNativeRecording(videoRef: RefObject<HTMLVideoElement | null>)
         .then(async (clip) => {
           if (clip && projectId.current) {
             retainClip(projectId.current, clip);
-            const current = useEditor.getState().project;
-            if (current?.projectId === projectId.current) await api.save(current);
+            await flushActiveSave();
           }
         })
         .catch((cause: unknown) => {
@@ -127,7 +126,7 @@ export function useNativeRecording(videoRef: RefObject<HTMLVideoElement | null>)
       projectId.current = project.projectId;
       startTime.current = undefined;
       // Persist edits before native interruption handling can append a recovered take.
-      await api.save(project);
+      await flushActiveSave();
       await nativeBridge.prepareRecording({ projectId: project.projectId });
       active.current = true;
       if (!mounted.current) {
