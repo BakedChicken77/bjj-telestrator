@@ -154,13 +154,15 @@ def test_permanent_delete_protects_active_snapshot_and_rejects_stale_reference(c
     assert client.delete(endpoint).status_code == 409
     client.post(f"/api/exports/{job['jobId']}/cancel")
     application.state.jobs.close()
-    assert client.delete(endpoint).status_code == 204
-    assert client.get(endpoint + '/audio').status_code == 400
-    assert client.get(f"/api/projects/{project['projectId']}").json()['voiceovers'] == []
-    # Permanent deletion advanced storage revision; reload its revision before
-    # testing that the old recording reference itself is rejected.
-    project['revision'] = client.get(f"/api/projects/{project['projectId']}").json()['revision']
-    assert save_project(client, project).status_code == 400
+    # Terminal snapshots and undo still own the immutable recording after cancel.
+    assert client.delete(endpoint).status_code == 409
+    assert client.get(endpoint + '/audio').status_code == 200
+    assert client.get(f"/api/projects/{project['projectId']}").json()['voiceovers'][0]['id'] == clip['id']
+    project['voiceovers'] = []
+    assert save_project(client, project).status_code == 200
+    project['voiceovers'] = [clip]
+    assert save_project(client, project).status_code == 200
+
 
 
 @pytest.mark.parametrize('contents,mime,start,status', [

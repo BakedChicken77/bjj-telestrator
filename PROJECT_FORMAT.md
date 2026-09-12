@@ -152,3 +152,36 @@ copied directory plus `project.pre-migration-v1.json` with the previous binary f
 prior-version recovery. That copy excludes later edits by design; never overwrite
 the newer project to pretend to downgrade it. Phone rollback must preserve the
 app container and bundle identity. Do not uninstall to roll back.
+
+## P1.06 storage sidecars and immutable export input
+
+The project remains schema 2. Storage-owned files do not enter undo or autosave:
+
+- `assets.json`: `{version: 1, assets: [...]}`. Each asset has a generated UUID
+  `assetId`, `kind` (`source`, `proxy`, `voiceover`), safe `reference`, integer
+  `byteSize`, lowercase SHA-256 `sha256`, and immutable `metadata`.
+- `assets.cache.json`: local filesystem fingerprints used to avoid rehashing
+  unchanged assets. This cache is disposable; the manifest's content identity is
+  retained and a differing source is rejected.
+- `exports/inputs/<job UUID>.json`: `{version: 1, projectId, revision,
+  requiredCapabilities, project, assets, output}`. `project` is the full immutable
+  revision; `assets` includes its source and referenced recordings, even muted
+  takes. Proxies are not required by an export retry. `output` specifies `[0,duration)`,
+  oriented even dimensions, fps, current quality settings, MP4/H.264/AAC/yuv420p,
+  `supported-sdr-v1` color policy and `linear-mix-v1` audio policy. These names
+  preserve the current SDR path and existing platform audio limitations.
+
+Jobs add `retryOf`, `retryAvailable`, `outputAvailable`, and `errorCode` to the
+existing `projectRevision`. A retry has a fresh job UUID and the old revision;
+cleanup sets output availability false and retains the input. Legacy jobs remain
+visible but have no retry input. Stored input version/output/capability mismatch,
+UUID/reference corruption and hash mismatch cannot silently export current edits.
+See `tests/fixtures/export-plan-conformance.json` and
+[decision 002](docs/decisions/002-durable-export-inputs.md).
+
+Runtime capabilities add `exportRetry`, `storageBreakdown` and
+`exportFileCleanup`. HTTP/native equivalents are project-scoped storage inspection,
+retry by job UUID, and completed-file removal by job UUID. Clients provide no
+asset path. Source/recording files are never reclaimed by this work package;
+manual checkpoints, project trash, portable packages and full reference-based
+collection remain later work.

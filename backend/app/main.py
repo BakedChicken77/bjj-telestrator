@@ -18,6 +18,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from .assets import proxy_estimate, recording_estimate, require_space, space_estimate, storage_summary
 from .config import Config
 from .errors import DomainError, conflict
 from .jobs import JobManager
@@ -94,6 +95,19 @@ class LocalRequestGuard:
         await self.app(scope, limited_receive, send)
 
 
+class ExportFileResponse(FileResponse):
+    """Release the output lease even when a client disconnects or sending fails."""
+    def __init__(self, path: Path, manager: JobManager, job: Job):
+        super().__init__(path, media_type='video/mp4', filename=job.filename)
+        self.manager, self.job = manager, job
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            await run_in_threadpool(self.manager.release_output, self.job)
+
+
 def create_app(config: Config | None = None) -> FastAPI:
     settings = config or Config()
     store = ProjectStore(settings.data_dir)
@@ -129,7 +143,8 @@ def create_app(config: Config | None = None) -> FastAPI:
     async def os_error(_request: Request, exc: OSError) -> JSONResponse:
         log.exception('Filesystem operation failed', exc_info=exc)
         detail = 'Insufficient disk space' if exc.errno == errno.ENOSPC else 'Could not access project storage'
-        return JSONResponse({'detail': detail}, status_code=507 if exc.errno == errno.ENOSPC else 500)
+        return JSONResponse({'detail': detail, 'code': 'STORAGE_LOW' if exc.errno == errno.ENOSPC else 'STORAGE_UNAVAILABLE'},
+                            status_code=507 if exc.errno == errno.ENOSPC else 500)
 
     @application.exception_handler(Exception)
     async def unexpected_error(_request: Request, exc: Exception) -> JSONResponse:
@@ -175,18 +190,20 @@ def create_app(config: Config | None = None) -> FastAPI:
         source_path, proxy_path = asset_path(folder, source_asset), asset_path(folder, proxy_asset)
         success = False
         try:
+            require_space(folder, space_estimate('import', incoming=file.size or 0, output=0))
             count = 0
             with source_path.open('xb') as destination:
                 while chunk := await file.read(1024 * 1024):
                     count += len(chunk)
                     if count > settings.max_upload_bytes:
                         raise HTTPException(413, 'Upload exceeds the configured size limit')
+                    if count % (16 * 1024**2) < len(chunk):
+                        require_space(folder, space_estimate('import', output=0))
                     await run_in_threadpool(destination.write, chunk)
             if not count:
                 raise HTTPException(422, 'The uploaded file is empty')
-            if shutil.disk_usage(folder).free < max(count, 16 * 1024**2):
-                raise HTTPException(507, 'Not enough disk space to create an editing proxy')
             source = await run_in_threadpool(probe_media, source_path, source_asset, original_name)
+            require_space(folder, proxy_estimate(source.durationSec))
             await run_in_threadpool(create_proxy, source_path, proxy_path, source)
             proxy = await run_in_threadpool(probe_media, proxy_path, proxy_asset, original_name)
             now = utc_now()
@@ -251,12 +268,28 @@ def create_app(config: Config | None = None) -> FastAPI:
             if not asset_path(store.project_dir(project_id), project.source.asset).is_file():
                 raise HTTPException(404, 'The original video asset is missing')
             store.validate_voiceovers(project)
+            store.acquire_lease(project_id)
+        try:
             return application.state.jobs.create(project)
+        finally:
+            store.release_lease(project_id)
 
     @application.get('/api/projects/{project_id}/exports')
     def list_exports(project_id: str) -> list[Job]:
         store.load(project_id)
         return application.state.jobs.list(project_id)
+
+    @application.get('/api/projects/{project_id}/storage')
+    def project_storage(project_id: str) -> dict:
+        return storage_summary(store, store.load(project_id))
+
+    @application.post('/api/exports/{job_id}/retry')
+    def retry_export(job_id: str) -> Job:
+        return application.state.jobs.retry(job_id)
+
+    @application.delete('/api/exports/{job_id}/file')
+    def remove_export_file(job_id: str) -> Job:
+        return application.state.jobs.remove_output(job_id)
 
     @application.get('/api/exports/{job_id}')
     def export_status(job_id: str) -> Job:
@@ -268,13 +301,9 @@ def create_app(config: Config | None = None) -> FastAPI:
 
     @application.get('/api/exports/{job_id}/download')
     def download_export(job_id: str) -> FileResponse:
-        job = application.state.jobs.get(job_id)
-        if job.status != 'completed':
-            raise HTTPException(409, 'The export is not ready for download')
-        path = application.state.jobs.output_path(job)
-        if not path.is_file():
-            raise FileNotFoundError()
-        return FileResponse(path, media_type='video/mp4', filename=job.filename)
+        manager = application.state.jobs
+        job, path = manager.acquire_output(job_id)
+        return ExportFileResponse(path, manager, job)
 
     @application.post('/api/projects/{project_id}/voiceovers', response_model=Voiceover)
     async def upload_voiceover(project_id: str, file: Annotated[UploadFile, File()],
@@ -290,8 +319,10 @@ def create_app(config: Config | None = None) -> FastAPI:
             raise HTTPException(415, 'Choose a microphone recording in WebM, Ogg, WAV, or MP4 audio format')
         clip_id = str(uuid4())
         temporary = store.project_dir(project_id) / 'temp' / f'voiceover-{clip_id}'
-        temporary.mkdir()
+        store.acquire_lease(project_id)
         try:
+            temporary.mkdir()
+            require_space(temporary, recording_estimate(project.source.durationSec - startSec, file.size or 0))
             uploaded, normalized = temporary / 'upload.bin', temporary / 'normalized.wav'
             received = 0
             limit = min(settings.max_upload_bytes, settings.max_voiceover_bytes)
@@ -304,9 +335,7 @@ def create_app(config: Config | None = None) -> FastAPI:
             if not received:
                 raise HTTPException(422, 'The recording is empty. Check the microphone and try again.')
             remaining = project.source.durationSec - startSec
-            required_space = min(remaining * 96000, received * 100) + 16 * 1024**2
-            if shutil.disk_usage(temporary).free < required_space:
-                raise HTTPException(507, 'Not enough disk space to process the recording')
+            require_space(temporary, recording_estimate(remaining))
             audio = await run_in_threadpool(normalize_voiceover, uploaded, normalized, remaining)
             clip = Voiceover(id=clip_id, asset=f'voiceover/{clip_id}.wav', startSec=startSec,
                              durationSec=audio.duration_sec, endSec=startSec + audio.duration_sec,
@@ -318,6 +347,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         finally:
             await file.close()
             shutil.rmtree(temporary, ignore_errors=True)
+            store.release_lease(project_id)
 
     @application.get('/api/projects/{project_id}/voiceovers/{clip_id}/audio')
     def voiceover_audio(project_id: str, clip_id: str) -> FileResponse:

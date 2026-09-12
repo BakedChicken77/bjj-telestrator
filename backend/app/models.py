@@ -267,6 +267,10 @@ class Job(Model):
     jobId: str
     projectId: str
     projectRevision: int | None = None
+    retryOf: str | None = None
+    retryAvailable: bool = False
+    outputAvailable: bool = False
+    errorCode: str | None = None
     status: Literal['queued', 'running', 'completed', 'failed', 'cancelled'] = 'queued'
     progress: Annotated[float, Field(ge=0, le=100)] = 0
     renderedSec: Annotated[float, Field(ge=0)] = 0

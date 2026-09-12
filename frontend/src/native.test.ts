@@ -14,6 +14,9 @@ const harness = vi.hoisted(() => ({
     createExport: vi.fn(),
     getExport: vi.fn(),
     cancelExport: vi.fn(),
+    retryExport: vi.fn(),
+    removeExportFile: vi.fn(),
+    getProjectStorage: vi.fn(),
     stopRecording: vi.fn(),
   },
 }));
@@ -35,6 +38,30 @@ beforeEach(() => {
 });
 
 describe('desktop / standalone iPhone API routing', () => {
+  it('retries native snapshots and removes only completed outputs without posting project JSON', async () => {
+    harness.native = true;
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    const job = {
+      jobId: 'attempt',
+      projectId: 'project',
+      projectRevision: 2,
+      retryAvailable: true,
+    };
+    harness.plugin.retryExport.mockResolvedValue({ job });
+    harness.plugin.removeExportFile.mockResolvedValue({ job: { ...job, outputAvailable: false } });
+    harness.plugin.getProjectStorage.mockResolvedValue({
+      sourceBytes: 123,
+      recordingsRetained: true,
+    });
+    expect(await api.retryExport('old-attempt')).toEqual(job);
+    expect(harness.plugin.retryExport).toHaveBeenCalledWith({ jobId: 'old-attempt' });
+    expect((await api.removeExportFile('attempt')).outputAvailable).toBe(false);
+    expect(harness.plugin.removeExportFile).toHaveBeenCalledWith({ jobId: 'attempt' });
+    expect((await api.storage('project')).recordingsRetained).toBe(true);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it('keeps browser media on the desktop HTTP routes', async () => {
     expect(await mediaURL('example')).toBe('/api/projects/example/video');
     expect(await voiceoverURL('example', 'clip')).toBe(

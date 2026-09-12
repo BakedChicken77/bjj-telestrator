@@ -48,6 +48,11 @@ def asset_path(project_dir: Path, relative: str) -> Path:
             or relative.startswith('/') or any(v in ('', '.', '..') for v in relative.split('/'))):
         raise StorageError('Invalid asset reference')
     root = project_dir.resolve()
+    cursor = root
+    for part in relative.split('/'):
+        cursor = cursor / part
+        if cursor.is_symlink():
+            raise StorageError('Symbolic links are not supported for project assets')
     result = (root / relative).resolve()
     if not result.is_relative_to(root) or result == root:
         raise StorageError('Invalid asset reference')
@@ -72,6 +77,17 @@ class ProjectStore:
         self.root = (data_dir / 'projects').resolve()
         self.root.mkdir(parents=True, exist_ok=True)
         self.lock = threading.RLock()
+        self.asset_lock = threading.RLock()
+        self.leases: dict[str, int] = {}
+
+    def acquire_lease(self, project_id: str) -> None:
+        with self.lock:
+            self.load(project_id)
+            self.leases[project_id] = self.leases.get(project_id, 0) + 1
+
+    def release_lease(self, project_id: str) -> None:
+        with self.lock:
+            self.leases[project_id] = max(0, self.leases.get(project_id, 0) - 1)
 
     def project_dir(self, project_id: str) -> Path:
         folder = (self.root / require_uuid(project_id)).resolve()
@@ -175,6 +191,8 @@ class ProjectStore:
 
     def delete(self, project_id: str) -> None:
         with self.lock:
+            if self.leases.get(project_id, 0):
+                raise DomainError('ASSET_BUSY', 'Finish or cancel active media operations before deleting this project.', 409)
             self.load(project_id)
             shutil.rmtree(self.project_dir(project_id))
 
@@ -269,10 +287,5 @@ class ProjectStore:
 
     def delete_voiceover(self, project_id: str, clip_id: str) -> None:
         with self.lock:
-            clip = self.voiceover_metadata(project_id, clip_id)
-            project = self.load(project_id)
-            project.voiceovers = [item for item in project.voiceovers if item.id != clip_id]
-            self.save(project)
-            folder = self.project_dir(project_id)
-            asset_path(folder, clip.asset).unlink(missing_ok=True)
-            (folder / 'voiceover' / f'{clip.id}.json').unlink(missing_ok=True)
+            self.voiceover_metadata(project_id, clip_id)
+            raise DomainError('ASSET_RETAINED', 'Remove the take in the editor. Recording files are retained for undo, recovery and export retry.', 409)

@@ -49,7 +49,7 @@ import CryptoKit
         XCTAssertTrue(NSDictionary(dictionary: migrated.json).isEqual(to: fixtures["migrationExpected"] as! BJJJSON))
         XCTAssertTrue(NSDictionary(dictionary: migrated.json).isEqual(to: try BJJProject(migrated.json).json))
     }
-    func testMigrationRetainsExactOriginalAndConditionalSaveExport() throws {
+    func testMigrationRetainsExactOriginalAndConditionalSaveExport() async throws {
         let p = try project(); let path = try store.directory(p.id).appendingPathComponent("project.json")
         var legacy = p.json; legacy["schemaVersion"] = 1; legacy.removeValue(forKey: "revision"); legacy.removeValue(forKey: "requiredCapabilities")
         let bytes = try JSONSerialization.data(withJSONObject: legacy, options: [.prettyPrinted])
@@ -61,7 +61,8 @@ import CryptoKit
         XCTAssertEqual(saved.revision, 2)
         XCTAssertThrowsError(try store.save(migrated))
         let service = try BJJService(store: store)
-        XCTAssertThrowsError(try service.createExport(p.id, expectedRevision: 1))
+        do { _ = try await service.createExport(p.id, expectedRevision: 1); XCTFail("Stale export must be rejected") }
+        catch { XCTAssertEqual((error as? BJJError)?.code, "PROJECT_CONFLICT") }
         XCTAssertEqual(try store.load(p.id).revision, 2)
     }
     func testRecoveryJournalAndIndependentCopy() throws {
@@ -82,6 +83,81 @@ import CryptoKit
         XCTAssertEqual(try store.load(p.id).name, p.name)
         try store.clearDraft(p.id, writer: writer, draft: second)
         XCTAssertEqual(try store.recoveryDrafts(p.id).count, 0)
+    }
+    func testSharedExportPlanConformanceAndCachedAssetIdentity() throws {
+        let url = try XCTUnwrap(Bundle(for: BJJNativeTests.self).url(forResource: "export-plan-conformance", withExtension: "json"))
+        let fixtures = try store.readJSON(url)
+        for item in fixtures["cases"] as! [BJJJSON] {
+            let value = item["plan"] as! BJJJSON
+            if item["valid"] as? Bool == true {
+                XCTAssertNoThrow(try BJJRenderPlan(value, projectId: "11111111-1111-4111-8111-111111111111", revision: 1), item["name"] as! String)
+            } else {
+                XCTAssertThrowsError(try BJJRenderPlan(value, projectId: "11111111-1111-4111-8111-111111111111", revision: 1), item["name"] as! String)
+            }
+        }
+        let p = try project()
+        let plan = try BJJRenderPlan(store: store, project: p)
+        let again = try BJJRenderPlan(store: store, project: store.save(p))
+        XCTAssertTrue(NSArray(array: plan.json["assets"] as! [BJJJSON]).isEqual(to: again.json["assets"] as! [BJJJSON]))
+        let source = try store.asset(p.id, p.source.s("asset"))
+        let bytes = try Data(contentsOf: source)
+        try Data([1]).write(to: source)
+        XCTAssertThrowsError(try plan.verify(store))
+        XCTAssertThrowsError(try BJJAssets.manifest(store, p))
+        try bytes.write(to: source)
+        XCTAssertNoThrow(try plan.verify(store))
+        let cancel = BJJJobCancellation(); cancel.cancel()
+        XCTAssertThrowsError(try plan.verify(store, cancellation: cancel))
+        let estimate = BJJAssets.exportEstimate(p)
+        XCTAssertGreaterThan(estimate.n("requiredBytes"), estimate.n("outputBytes") + estimate.n("workingBytes"))
+        XCTAssertThrowsError(try store.checkSpace(required: Int64.max))
+        try store.acquireLease(p.id)
+        XCTAssertThrowsError(try store.delete(p.id))
+        store.releaseLease(p.id)
+        let summary = try BJJAssets.summary(store, p)
+        XCTAssertEqual(summary.n("sourceBytes"), 1)
+        XCTAssertEqual(summary.n("proxyBytes"), 1)
+        XCTAssertEqual(summary["recordingsRetained"] as? Bool, true)
+        let unsafe = try store.directory(p.id).appendingPathComponent("exports/inputs")
+        let outside = root.appendingPathComponent("outside")
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: unsafe, withDestinationURL: outside)
+        XCTAssertThrowsError(try store.safeURL(p.id, "exports/inputs/test.json"))
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: outside.path), [])
+
+    }
+    func testInterruptedExportRetryRetainsRevisionAndRecording() async throws {
+        let initial = try project()
+        let take = try clip(initial)
+        let p = try store.loadRecoveringRecordings(initial.id)
+        let service = try BJJService(store: store)
+        let job = try await service.createExport(p.id)
+        _ = try service.cancel(job.jobId)
+        let path = try BJJRenderPlan.path(store, job)
+        let input = try Data(contentsOf: path)
+        var edited = p.json; edited["annotations"] = [BJJJSON](); edited["voiceovers"] = [BJJJSON]()
+        let saved = try store.save(BJJProject(edited))
+        var interrupted = job; interrupted.status = "running"
+        try JSONEncoder().encode(interrupted).write(to: path.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("\(job.jobId).json"), options: .atomic)
+        let restarted = try BJJService(store: BJJStore(root: root))
+        XCTAssertEqual(try restarted.job(job.jobId).errorCode, "EXPORT_INTERRUPTED")
+        let retry = try restarted.retryExport(job.jobId)
+        XCTAssertEqual(retry.projectRevision, p.revision)
+        XCTAssertEqual(retry.retryOf, job.jobId)
+        XCTAssertNotEqual(retry.jobId, job.jobId)
+        XCTAssertEqual(try Data(contentsOf: BJJRenderPlan.path(store, retry)), input)
+        XCTAssertThrowsError(try restarted.removeExportFile(retry.jobId))
+        _ = try restarted.cancel(retry.jobId)
+        XCTAssertEqual(try store.load(p.id).revision, saved.revision)
+        XCTAssertEqual(try store.load(p.id).annotations.count, 0)
+        XCTAssertEqual(try store.load(p.id).voiceovers.count, 0)
+        let retained = try BJJRenderPlan.read(store, retry)
+        XCTAssertEqual(retained.project.voiceovers.count, 1)
+        XCTAssertNoThrow(try retained.verify(store))
+        XCTAssertNoThrow(try store.asset(p.id, take.s("asset")))
+        // Copying a snapshot under another project cannot substitute its assets.
+        var wrong = try store.readJSON(path); wrong["projectId"] = UUID().uuidString.lowercased()
+        XCTAssertThrowsError(try BJJRenderPlan(wrong, projectId: p.id, revision: p.revision))
     }
     func testRecordingRecoveryCommitsARevisionBeforeExport() throws {
         let p = try project(); _ = try clip(p)
@@ -263,7 +339,7 @@ import CryptoKit
         var json = migrated.json; json["annotations"] = [annotation()]
         let project = try store.save(BJJProject(json))
         XCTAssertEqual(project.revision, 2)
-        let job = try service.createExport(project.id, expectedRevision: project.revision)
+        let job = try await service.createExport(project.id, expectedRevision: project.revision)
         XCTAssertEqual(job.projectRevision, project.revision)
         let deadline = Date().addingTimeInterval(90)
         while ["queued", "running"].contains(try service.job(job.jobId).status) && Date() < deadline { try await Task.sleep(nanoseconds: 100_000_000) }
@@ -282,6 +358,31 @@ import CryptoKit
         let originalAudioEnergy = try await audioEnergy(output, from: 0.2, to: 0.8)
         XCTAssertGreaterThan(originalAudioEnergy, 0.05)
         XCTAssertEqual(try BJJStore(root: root).load(project.id).annotations.count, 1)
+        var later = project.json; later["annotations"] = [BJJJSON]()
+        let current = try store.save(BJJProject(later))
+        // A new service instance reads a durable job input after edits/restart.
+        let restarted = try BJJService(store: store)
+        let retry = try restarted.retryExport(job.jobId)
+        XCTAssertEqual(retry.projectRevision, project.revision)
+        let retryDeadline = Date().addingTimeInterval(90)
+        while ["queued", "running"].contains(try restarted.job(retry.jobId).status) && Date() < retryDeadline { try await Task.sleep(nanoseconds: 100_000_000) }
+        let completedRetry = try restarted.job(retry.jobId)
+        XCTAssertEqual(completedRetry.status, "completed", completedRetry.error ?? "")
+        let retryOutput = try restarted.acquireExportFile(retry.jobId)
+        XCTAssertGreaterThan(try redPixels(retryOutput, time: 1), 500)
+        XCTAssertEqual(try redPixels(retryOutput, time: 2), 0)
+        let retryAudio = try await audioEnergy(retryOutput, from: 0.2, to: 0.8)
+        XCTAssertGreaterThan(retryAudio, 0.05)
+        XCTAssertThrowsError(try restarted.removeExportFile(retry.jobId))
+        restarted.releaseExportFile(retry.jobId)
+        let bytes = try retryOutput.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+        print("P1.06 native retry: avc1/aac 320x180 duration=4 bytes=\(bytes) source_sha256=\(try BJJAssets.digest(store.asset(project.id, project.source.s("asset"))))")
+        XCTAssertEqual(try restarted.removeExportFile(retry.jobId).outputAvailable, false)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: retryOutput.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: try BJJRenderPlan.path(store, retry).path))
+        XCTAssertEqual(try store.load(project.id).revision, current.revision)
+        XCTAssertEqual(before, SHA256.hash(data: try Data(contentsOf: store.asset(project.id, project.source.s("asset")))))
+
         XCTAssertEqual(try Data(contentsOf: folder.appendingPathComponent("project.pre-migration-v1.json")), legacyBytes)
     }
     func testRotatedSilentVideoExportsPortrait() async throws {
@@ -334,10 +435,10 @@ import CryptoKit
         let after = try await audioEnergy(output, from: 2.3, to: 2.8)
         XCTAssertLessThan(before, 0.005); XCTAssertGreaterThan(active, 0.08); XCTAssertLessThan(after, 0.005)
     }
-    func testQueuedJobCancellationPersists() throws {
+    func testQueuedJobCancellationPersists() async throws {
         let project = try project()
         let service = try BJJService(store: store)
-        let job = try service.createExport(project.id)
+        let job = try await service.createExport(project.id)
         XCTAssertEqual(job.status, "queued")
         XCTAssertEqual(try service.cancel(job.jobId).status, "cancelled")
         XCTAssertEqual(try BJJService(store: store).job(job.jobId).status, "cancelled")

@@ -1087,3 +1087,39 @@ progress::-webkit-progress-value {
   min-height: 44px;
   margin: 4px;
 }
+
+.project-storage {
+  margin-block: 1rem;
+  padding: 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.project-storage summary {
+  cursor: pointer;
+  min-height: 44px;
+  align-content: center;
+}
+.project-storage table {
+  width: 100%;
+  margin-block: 0.5rem;
+  text-align: left;
+  border-collapse: collapse;
+}
+.project-storage th,
+.project-storage td {
+  padding: 0.35rem;
+  overflow-wrap: anywhere;
+}
+.project-storage td {
+  text-align: right;
+  white-space: nowrap;
+}
+.project-storage p,
+.export-recovery p {
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+.export-recovery button {
+  min-height: 44px;
+  margin: 0.25rem 0.5rem 0.25rem 0;
+}

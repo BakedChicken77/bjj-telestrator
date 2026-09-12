@@ -165,3 +165,26 @@ Native copy work is synchronous and has a remaining responsiveness/device gate f
 large projects; tracked storage jobs are the next P1.06 work package. Edit drafts
 contain project JSON, never source bytes. Support summaries are allowlisted,
 user-initiated and inspectable; no telemetry or automatic transfer was added.
+
+## Durable export/recovery foundations (P1.06)
+
+`assets.py` / `BJJAssets.swift` maintain lazy, incrementally hashed asset manifests
+and operation space estimates. `render_plan.py` / `BJJRenderPlan.swift` validate
+immutable versioned job inputs. `JobManager` / `BJJService` persist those inputs
+before queueing, revalidate assets before and after rendering, probe staged MP4s,
+and finalize atomically. Restart marks interrupted work failed and offers a new
+attempt from the original revision. Retrying always starts at zero.
+
+The shared `ExportRecovery` controls display revision/staleness, retry and completed
+MP4 cleanup. `ProjectStorage` displays a per-project breakdown and estimates.
+Capability reporting hides these controls when an older local service lacks them.
+New routes: `GET /api/projects/{id}/storage`, `POST /api/exports/{id}/retry`, and
+`DELETE /api/exports/{id}/file`; corresponding native bridge calls remain local.
+
+Project leases cover queued/running jobs and downloads/share sheets; cleanup
+cannot remove a leased output. All source/recording assets are retained, including
+removed takes. Permanent individual-take deletion now fails explicitly because
+undo/recovery/export inputs may still own it. No new project schema, cloud service,
+media library or state framework is introduced. Disk estimates do not reserve OS
+space or guarantee completion; write failures clean temporary work and retain
+committed inputs. Detailed contracts/limitations: [decision 002](docs/decisions/002-durable-export-inputs.md).

@@ -21,6 +21,32 @@ export interface ExportJob {
   filename: string | null;
   createdAt: string;
   projectRevision?: number;
+  retryOf?: string | null;
+  retryAvailable?: boolean;
+  outputAvailable?: boolean;
+  errorCode?: string | null;
+}
+export interface SpaceEstimate {
+  operation: string;
+  incomingBytes: number;
+  outputBytes: number;
+  workingBytes: number;
+  safetyBytes: number;
+  requiredBytes: number;
+}
+export interface ProjectStorage {
+  projectId: string;
+  revision: number;
+  sourceBytes: number;
+  proxyBytes: number;
+  recordingBytes: number;
+  exportBytes: number;
+  temporaryBytes: number;
+  metadataBytes: number;
+  totalBytes: number;
+  availableBytes: number;
+  exportEstimate: SpaceEstimate;
+  recordingsRetained: boolean;
 }
 export interface RuntimeCapabilities {
   schemaVersion: number;
@@ -28,6 +54,9 @@ export interface RuntimeCapabilities {
   conditionalSave: boolean;
   conditionalExport: boolean;
   recoveryCopy: boolean;
+  exportRetry?: boolean;
+  storageBreakdown?: boolean;
+  exportFileCleanup?: boolean;
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -118,6 +147,10 @@ const desktopAPI = {
     }),
   exportJob: (id: string) => request<ExportJob>(`/api/exports/${id}`),
   cancelExport: (id: string) => request<ExportJob>(`/api/exports/${id}/cancel`, { method: 'POST' }),
+  retryExport: (id: string) => request<ExportJob>(`/api/exports/${id}/retry`, { method: 'POST' }),
+  removeExportFile: (id: string) =>
+    request<ExportJob>(`/api/exports/${id}/file`, { method: 'DELETE' }),
+  storage: (id: string) => request<ProjectStorage>(`/api/projects/${id}/storage`),
 };
 
 /** Keep the verified desktop HTTP path; iOS uses an entirely local native service. */
@@ -137,4 +170,9 @@ export const api = {
   exportJob: (id: string) => (isNativeIOS() ? nativeAPI.exportJob(id) : desktopAPI.exportJob(id)),
   cancelExport: (id: string) =>
     isNativeIOS() ? nativeAPI.cancelExport(id) : desktopAPI.cancelExport(id),
+  retryExport: (id: string) =>
+    isNativeIOS() ? nativeAPI.retryExport(id) : desktopAPI.retryExport(id),
+  removeExportFile: (id: string) =>
+    isNativeIOS() ? nativeAPI.removeExportFile(id) : desktopAPI.removeExportFile(id),
+  storage: (id: string) => (isNativeIOS() ? nativeAPI.storage(id) : desktopAPI.storage(id)),
 };

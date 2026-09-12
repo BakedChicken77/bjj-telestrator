@@ -19,7 +19,9 @@ is authorized by mentioning those modules.
 | P1.01 | device/staging verification pending | Baseline and fresh candidate CI verified; candidate-specific signing/device template and release gate prepared. Run fresh signed-install/update and Windows/Docker acceptance. |
 | P1.02 | automatically verified | TypeScript, Python and Swift conformance plus migration/edit/export/reopen passed. Physical-device migration/reopen is still part of release acceptance. |
 | P1.03 | automatically verified | Local and native CI recovery/revision tests pass. Physical interruption, storage failure and VoiceOver acceptance remain pending. |
-| P1.04–P1.08 | not started | P1.06 storage/reference foundations are next, then P1.04 media, P1.05 packages, P1.07 accessibility and P1.08 profiling. Recovery-copy helpers do not complete P1.06. |
+| P1.06 — storage/export slice | implemented | Full local regression and native CI in progress. |
+| P1.06 — remaining recovery work | not started | Durable checkpoints, recently deleted projects, general duplication and broader reference-aware cleanup remain a separate vertical change. |
+| P1.04–P1.05, P1.07–P1.08 | not started | Continue after the P1.06 storage/reference foundations. |
 | P2.01–P2.08 | not started | Follow Phase 1 save/media/asset contracts and the brief's batch order. |
 | P3.01–P3.07 | not started | Requires Phase 2 transport/timeline/export contracts. |
 | P4.01–P4.06 | not started | Requires explicit review composition; no source-time reinterpretation. |
@@ -58,6 +60,31 @@ is bounded and cannot preserve an edit before it has actually been journaled.
   decision record and DEVICE_ACCEPTANCE updated.
 - Next eligible package: P1.06 reference/space/snapshot foundations. The whole of
   Phase 1 is not accepted by completion of this first package.
+
+### Current work package — P1.06 storage/export foundations
+
+Authorized by Steve's “Proceed”. Starting commit:
+`dd0d0843ccc912fb5fa0cdd8e036979e7d9f6262`, branch
+`codex/p1-storage-foundations`, stacked on draft PR #8. The starting tree passed
+all CI gates in [run 34718720639](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34718720639).
+
+Selected scope: incremental cached asset checksums, project storage breakdown,
+operation space estimates, durable versioned export inputs, restart-from-zero
+retry of the same revision, validated atomic MP4 finalization, and safe completed
+output cleanup. Apply to desktop and native iOS with working shared controls.
+Retain every source and recording, including removed takes; no unreferenced-audio
+garbage collection until undo, checkpoints, recovery and job ownership are fully
+represented. Manual checkpoints, recently deleted project recovery, general
+Duplicate project and package staging remain explicit subsequent P1.06/P1.05 work.
+This work package does not complete P1.06 or authorize a release.
+
+Implementation now includes Python/Swift immutable job inputs and shared fixture
+validation, source/recording retention, safe output cleanup and real shared editor
+controls. Automated verification is in progress. The first backend run passed
+123 tests, and the focused browser storage/retry workflow passed; final results
+and native CI will be recorded before the work package is declared verified.
+No physical device, signed installation or Windows/Docker acceptance is claimed.
+
 
 ## Historical delivery records
 

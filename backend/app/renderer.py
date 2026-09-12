@@ -377,7 +377,8 @@ def render_export(
                 detail = log.read()[-12000:]
                 logger.error(json.dumps({"event": "export_encoder_failed", "code": code, "detail": detail}))
                 if "No space left on device" in detail:
-                    raise RuntimeError("Not enough disk space to complete the export.")
+                    from .errors import DomainError
+                    raise DomainError("STORAGE_LOW", "Storage filled during export. Free space and retry this revision.", 507)
                 raise RuntimeError("FFmpeg could not render this video. Check the backend logs for details.")
         if not output.is_file() or output.stat().st_size == 0:
             raise RuntimeError("The encoder did not create an output video.")

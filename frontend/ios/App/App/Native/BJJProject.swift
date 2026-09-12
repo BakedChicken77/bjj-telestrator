@@ -224,6 +224,18 @@ struct BJJProject {
 final class BJJStore {
     let root: URL
     private let lock = NSRecursiveLock()
+    let assetLock = NSLock()
+    private var leases: [String: Int] = [:]
+
+    func acquireLease(_ id: String) throws {
+        lock.lock(); defer { lock.unlock() }
+        _ = try load(id)
+        leases[id, default: 0] += 1
+    }
+    func releaseLease(_ id: String) {
+        lock.lock(); defer { lock.unlock() }
+        leases[id] = max(0, leases[id, default: 0] - 1)
+    }
     init(root: URL? = nil) throws {
         self.root = root ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("BJJTelestrator/projects", isDirectory: true)
         try FileManager.default.createDirectory(at: self.root, withIntermediateDirectories: true)
@@ -237,11 +249,25 @@ final class BJJStore {
         return directory
     }
     func asset(_ id: String, _ reference: String) throws -> URL {
+        let url = try safeURL(id, reference)
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            throw BJJError.domain("ASSET_MISSING", "A project media asset is missing. Restore its original file.")
+        }
+        return url
+    }
+    func safeURL(_ id: String, _ reference: String) throws -> URL {
         try BJJValidate.asset(reference)
         let directory = try directory(id).resolvingSymlinksInPath()
+        var cursor = directory
+        for part in reference.split(separator: "/") {
+            cursor.appendPathComponent(String(part))
+            if (try? cursor.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == true {
+                throw BJJError.domain("ASSET_UNSAFE", "Symbolic links are not supported for project files.")
+            }
+        }
         let url = directory.appendingPathComponent(reference).resolvingSymlinksInPath()
-        guard url.path.hasPrefix(directory.path + "/"), FileManager.default.fileExists(atPath: url.path) else {
-            throw BJJError.invalid("A project media asset is missing. Reimport the original video.")
+        guard url.path.hasPrefix(directory.path + "/") else {
+            throw BJJError.domain("ASSET_UNSAFE", "Unsafe project file reference.")
         }
         return url
     }
@@ -376,6 +402,7 @@ final class BJJStore {
     }
     func delete(_ id: String) throws {
         lock.lock(); defer { lock.unlock() }
+        guard leases[id, default: 0] == 0 else { throw BJJError.domain("ASSET_BUSY", "Finish or cancel active media operations before deleting this project.") }
         try FileManager.default.removeItem(at: directory(id))
     }
     static func sanitized(_ name: String) -> String {
@@ -386,6 +413,6 @@ final class BJJStore {
     func checkSpace(required: Int64) throws {
         let attributes = try FileManager.default.attributesOfFileSystem(forPath: root.path)
         let available = (attributes[.systemFreeSize] as? NSNumber)?.int64Value ?? 0
-        guard available >= required else { throw BJJError.invalid("Not enough free space on this iPhone. Free some storage and try again.") }
+        guard available >= required else { throw BJJError.domain("STORAGE_LOW", "Not enough free space on this iPhone. Free storage or remove completed MP4s, then retry.") }
     }
 }

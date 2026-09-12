@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- P1.06 storage/export slice: retained asset checksums, storage estimates/breakdown,
+  restart-safe retry of immutable saved revisions, and safe completed-MP4 cleanup.
+  Desktop exports are probed before atomic publication. Individual recording files
+  remain retained for undo/recovery; permanent whole-project deletion is unchanged.
+
 - P1.02: schema-2 migration with retained original JSON, runtime capabilities,
   conditional saves/exports, and cross-runtime conformance fixtures.
 - P1.03: serialized save acknowledgments, recovery drafts/copies, explicit stale

@@ -13,6 +13,10 @@ struct BJJExportJob: Codable {
     var filename: String?
     let createdAt: String
     var projectRevision: Int? = nil
+    var retryOf: String? = nil
+    var retryAvailable: Bool? = nil
+    var outputAvailable: Bool? = nil
+    var errorCode: String? = nil
     func json() throws -> BJJJSON {
         var value = try BJJValidate.object(JSONSerialization.jsonObject(with: JSONEncoder().encode(self)), "export")
         value["error"] = error.map { $0 as Any } ?? NSNull()
@@ -26,6 +30,9 @@ struct BJJExportJob: Codable {
     private var jobs: [String: BJJExportJob] = [:]
     private var queue: [String] = []
     private var snapshots: [String: BJJProject] = [:]
+    private var reservations: [String: Int64] = [:]
+    private var cancellations: [String: BJJJobCancellation] = [:]
+    private var shares: [String: Int] = [:]
     private var renderer: BJJRenderer?
     private var activeJob: String?
     private var background: UIBackgroundTaskIdentifier = .invalid
@@ -46,11 +53,17 @@ struct BJJExportJob: Codable {
                 do {
                     var job = try JSONDecoder().decode(BJJExportJob.self, from: Data(contentsOf: path))
                     try BJJValidate.uuid(job.jobId); try BJJValidate.uuid(job.projectId)
-                    guard job.projectId == folder.lastPathComponent else { continue }
+                    guard job.projectId == folder.lastPathComponent, path.deletingPathExtension().lastPathComponent == job.jobId else { continue }
+                    job.retryAvailable = FileManager.default.fileExists(atPath: try BJJRenderPlan.path(store, job).path)
                     if ["running", "queued"].contains(job.status) {
                         job.status = "failed"
-                        job.error = "The app closed before this export finished. Start a new export and keep the app open."
+                        job.errorCode = "EXPORT_INTERRUPTED"
+                        job.error = job.retryAvailable == true ? "The app closed before this export finished. Retry this revision from the beginning and keep the app open." : "The app closed before this export finished. Render the current review."
+                        if let name = job.filename, name == URL(fileURLWithPath: name).lastPathComponent {
+                            try? FileManager.default.removeItem(at: exportFolder.appendingPathComponent(name))
+                        }
                     }
+                    job.outputAvailable = job.status == "completed" && job.filename.map { $0 == URL(fileURLWithPath: $0).lastPathComponent && FileManager.default.fileExists(atPath: exportFolder.appendingPathComponent($0).path) } == true
                     jobs[job.jobId] = job
                     try persist(job)
                 } catch { logger.error("Unreadable export metadata: \(error.localizedDescription, privacy: .public)") }
@@ -62,7 +75,7 @@ struct BJJExportJob: Codable {
         }
     }
     private func persist(_ job: BJJExportJob) throws {
-        let url = try store.directory(job.projectId).appendingPathComponent("exports/\(job.jobId).json")
+        let url = try store.safeURL(job.projectId, "exports/\(job.jobId).json")
         try JSONEncoder().encode(job).write(to: url, options: .atomic)
     }
     func listExports(_ projectId: String) throws -> [BJJJSON] {
@@ -74,30 +87,86 @@ struct BJJExportJob: Codable {
         guard let job = jobs[id] else { throw BJJError.invalid("This export does not exist.") }
         return job
     }
-    func createExport(_ projectId: String, expectedRevision: Int? = nil) throws -> BJJExportJob {
+    func createExport(_ projectId: String, expectedRevision: Int? = nil) async throws -> BJJExportJob {
         let project = try store.load(projectId)
         if let expectedRevision, project.revision != expectedRevision {
             throw BJJError.domain("PROJECT_CONFLICT", "The saved project changed. Reopen it before exporting.")
         }
+        try store.acquireLease(projectId)
+        do {
+            let plan = try await BJJAssets.offMain { [store] in try BJJRenderPlan(store: store, project: project) }
+            return try enqueue(plan)
+        } catch { store.releaseLease(projectId); throw error }
+    }
+    func retryExport(_ id: String) throws -> BJJExportJob {
+        let previous = try job(id)
+        guard !["queued", "running"].contains(previous.status) else { throw BJJError.domain("JOB_ACTIVE", "Finish or cancel this attempt before retrying.") }
+        let plan = try BJJRenderPlan.read(store, previous)
+        try store.acquireLease(previous.projectId)
+        do { return try enqueue(plan, retryOf: id) }
+        catch { store.releaseLease(previous.projectId); throw error }
+    }
+    private func enqueue(_ plan: BJJRenderPlan, retryOf: String? = nil) throws -> BJJExportJob {
+        let project = plan.project
         guard project.exportSettings.n("fps") <= 60 else { throw BJJError.invalid("Choose an export frame rate of 60 fps or less on iPhone.") }
-        try store.checkSpace(required: Int64(project.duration * 2_000_000) + 100_000_000)
+        guard reservations.count < 8 else { throw BJJError.invalid("The export queue is full. Wait for a job to finish.") }
+        let estimate = BJJAssets.exportEstimate(project)
+        let required = (estimate["requiredBytes"] as! NSNumber).int64Value
+        try store.checkSpace(required: required + reservations.values.reduce(0, +))
         let id = UUID().uuidString.lowercased()
         let stamp = BJJProject.now().replacingOccurrences(of: ":", with: "-")
         let name = "\(BJJStore.sanitized(project.name))-annotated-\(stamp)-\(id.prefix(8)).mp4"
-        let job = BJJExportJob(jobId: id, projectId: projectId, status: "queued", progress: 0, renderedSec: 0,
-                               filename: name, createdAt: BJJProject.now(), projectRevision: project.revision)
-        jobs[id] = job; snapshots[id] = project; queue.append(id)
-        try persist(job)
+        let job = BJJExportJob(jobId: id, projectId: project.id, status: "queued", progress: 0, renderedSec: 0,
+                               filename: name, createdAt: BJJProject.now(), projectRevision: project.revision,
+                               retryOf: retryOf, retryAvailable: true, outputAvailable: false)
+        let path = try BJJRenderPlan.path(store, job)
+        do {
+            try FileManager.default.createDirectory(at: path.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try store.writeJSON(plan.json, to: path)
+            try persist(job)
+        } catch { try? FileManager.default.removeItem(at: path); throw error }
+        jobs[id] = job; snapshots[id] = project; queue.append(id); reservations[id] = required
+        cancellations[id] = BJJJobCancellation()
         Task { startNext() }
         return job
+    }
+    func storageSummary(_ projectId: String) async throws -> BJJJSON {
+        let project = try store.load(projectId)
+        return try await BJJAssets.offMain { [store] in try BJJAssets.summary(store, project) }
+    }
+    func removeExportFile(_ id: String) throws -> BJJExportJob {
+        var item = try job(id)
+        guard item.status == "completed", activeJob != id, shares[id, default: 0] == 0 else {
+            throw BJJError.domain("ASSET_BUSY", "Finish rendering or sharing this MP4 before removing it.")
+        }
+        guard let name = item.filename, name == URL(fileURLWithPath: name).lastPathComponent, name.hasSuffix(".mp4") else { throw BJJError.invalid("Invalid export filename.") }
+        item.outputAvailable = false; try persist(item); jobs[id] = item
+        let path = try store.safeURL(item.projectId, "exports/\(name)")
+        if FileManager.default.fileExists(atPath: path.path) { try FileManager.default.removeItem(at: path) }
+        return item
+    }
+    func acquireExportFile(_ id: String) throws -> URL {
+        let url = try exportedFile(id), item = try job(id)
+        try store.acquireLease(item.projectId); shares[id, default: 0] += 1
+        return url
+    }
+    func releaseExportFile(_ id: String) {
+        if shares[id, default: 0] > 0, let item = jobs[id] {
+            shares[id, default: 0] -= 1; store.releaseLease(item.projectId)
+        }
     }
     func cancel(_ id: String, reason: String? = nil) throws -> BJJExportJob {
         var item = try job(id)
         guard ["queued", "running"].contains(item.status) else { return item }
         item.status = "cancelled"; item.error = reason
-        jobs[id] = item; try persist(item)
+        jobs[id] = item
         queue.removeAll { $0 == id }
-        if activeJob == id { renderer?.cancel() } else { snapshots.removeValue(forKey: id) }
+        cancellations[id]?.cancel()
+        if activeJob == id { renderer?.cancel() } else {
+            snapshots.removeValue(forKey: id); reservations.removeValue(forKey: id); cancellations.removeValue(forKey: id)
+            store.releaseLease(item.projectId)
+        }
+        try persist(item)
         return item
     }
     func deleteProject(_ id: String) throws {
@@ -109,7 +178,7 @@ struct BJJExportJob: Codable {
     }
     func exportedFile(_ id: String) throws -> URL {
         let job = try job(id)
-        guard job.status == "completed", let name = job.filename, name == URL(fileURLWithPath: name).lastPathComponent else {
+        guard job.status == "completed", job.outputAvailable != false, let name = job.filename, name == URL(fileURLWithPath: name).lastPathComponent else {
             throw BJJError.invalid("The MP4 is not ready to share.")
         }
         return try store.asset(job.projectId, "exports/\(name)")
@@ -118,6 +187,7 @@ struct BJJExportJob: Codable {
         guard activeJob == nil, let id = queue.first, let project = snapshots[id] else { return }
         queue.removeFirst(); activeJob = id
         let worker = BJJRenderer(); renderer = worker
+        let cancellation = cancellations[id]!
         jobs[id]?.status = "running"
         if let job = jobs[id] { try? persist(job) }
         UIApplication.shared.isIdleTimerDisabled = true
@@ -133,13 +203,18 @@ struct BJJExportJob: Codable {
             defer {
                 if let temporary { try? FileManager.default.removeItem(at: temporary) }
                 renderer = nil; activeJob = nil; snapshots.removeValue(forKey: id)
+                reservations.removeValue(forKey: id); cancellations.removeValue(forKey: id); store.releaseLease(project.id)
                 UIApplication.shared.isIdleTimerDisabled = false
                 endBackgroundTask(); startNext()
             }
             do {
+                let plan = try BJJRenderPlan.read(store, jobs[id]!)
+                try store.checkSpace(required: (BJJAssets.exportEstimate(project)["requiredBytes"] as! NSNumber).int64Value)
+                try await BJJAssets.offMain { [store] in try plan.verify(store, cancellation: cancellation) }
+                try cancellation.check()
                 let source = try store.asset(project.id, project.source.s("asset"))
                 let media = try await BJJMedia.inspect(source, reference: project.source.s("asset"), originalName: project.source.s("originalFilename"))
-                let staging = try store.directory(project.id).appendingPathComponent("temp/\(id).mp4")
+                let staging = try store.safeURL(project.id, "temp/\(id).mp4")
                 temporary = staging
                 logger.info("Export started: \(id, privacy: .public)")
                 try await worker.render(media: media, project: project, store: store, output: staging) { [weak self] seconds in
@@ -156,19 +231,27 @@ struct BJJExportJob: Codable {
                     !($0["muted"] as! Bool) && $0.n("gain") * project.settings.n("voiceoverMasterGain") > 0
                 }
                 guard probe.json.s("codec") == "avc1", abs(probe.videoRange.duration.seconds - project.duration) <= tolerance,
-                      probe.orientedSize == BJJRenderer.outputSize(media.orientedSize),
+                      probe.orientedSize == BJJRenderer.outputSize(CGSize(width: project.source.n("displayWidth"), height: project.source.n("displayHeight"))),
                       (probe.json["hasAudio"] as? Bool) == expectedAudio,
                       !expectedAudio || probe.json["audioCodec"] as? String == "aac" else {
                     logger.error("Export validation: video=\(probe.json.s("codec"), privacy: .public), audio=\(String(describing: probe.json["audioCodec"]), privacy: .public), duration=\(probe.videoRange.duration.seconds), expected=\(project.duration), width=\(probe.orientedSize.width), height=\(probe.orientedSize.height)")
                     throw BJJError.invalid("The completed MP4 failed its codec, dimensions, audio or duration check. Try exporting again.")
                 }
-                let target = try store.directory(project.id).appendingPathComponent("exports/\(jobs[id]!.filename!)")
+                try await BJJAssets.offMain { [store] in try plan.verify(store, cancellation: cancellation) }
+                try cancellation.check()
+                let target = try store.safeURL(project.id, "exports/\(jobs[id]!.filename!)")
                 try FileManager.default.moveItem(at: staging, to: target)
-                jobs[id]?.status = "completed"; jobs[id]?.progress = 100; jobs[id]?.renderedSec = project.duration
+                jobs[id]?.status = "completed"; jobs[id]?.progress = 100; jobs[id]?.renderedSec = project.duration; jobs[id]?.outputAvailable = true
+                do { try persist(jobs[id]!) }
+                catch { try? FileManager.default.removeItem(at: target); throw error }
                 logger.info("Export completed: \(id, privacy: .public)")
             } catch {
                 if jobs[id]?.status != "cancelled" {
-                    jobs[id]?.status = "failed"; jobs[id]?.error = error.localizedDescription
+                    jobs[id]?.status = "failed"; jobs[id]?.outputAvailable = false
+                    let domain = error as? BJJError
+                    let lowSpace = (error as NSError).code == NSFileWriteOutOfSpaceError
+                    jobs[id]?.errorCode = lowSpace ? "STORAGE_LOW" : domain?.code ?? "EXPORT_FAILED"
+                    jobs[id]?.error = lowSpace ? "Storage filled during export. Free space and retry this revision." : domain?.localizedDescription ?? "Export failed. Check source media and available storage, then retry this revision."
                     logger.error("Export failed: \(id, privacy: .public), \(error.localizedDescription, privacy: .public)")
                 }
             }
@@ -181,7 +264,7 @@ struct BJJExportJob: Codable {
     func importFile(_ input: URL, originalName: String) async throws -> BJJProject {
         let size = try input.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
         guard size > 0, size <= 4 * 1024 * 1024 * 1024 else { throw BJJError.invalid("Choose a nonempty video smaller than 4 GiB.") }
-        try store.checkSpace(required: Int64(size) * 2 + 250_000_000)
+        try store.checkSpace(required: (BJJAssets.estimate("import", output: 0, incoming: Int64(size))["requiredBytes"] as! NSNumber).int64Value)
         let (id, folder) = try store.createDirectory()
         do {
             let ext = input.pathExtension.lowercased()
@@ -195,6 +278,7 @@ struct BJJExportJob: Codable {
                 }
             }
             let media = try await BJJMedia.inspect(source, reference: reference, originalName: originalName)
+            try store.checkSpace(required: (BJJAssets.proxyEstimate(media.videoRange.duration.seconds)["requiredBytes"] as! NSNumber).int64Value)
             let proxyRef = "proxy/\(UUID().uuidString.lowercased()).mp4"
             let proxy = folder.appendingPathComponent(proxyRef)
             let encoder = BJJRenderer()
