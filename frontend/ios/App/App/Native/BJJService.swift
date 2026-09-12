@@ -42,6 +42,13 @@ struct BJJExportJob: Codable {
         self.store = store
         let folders = try FileManager.default.contentsOfDirectory(at: store.root, includingPropertiesForKeys: nil)
         for folder in folders where UUID(uuidString: folder.lastPathComponent) != nil {
+            if FileManager.default.fileExists(atPath: folder.appendingPathComponent("save-transaction.json").path) {
+                do { _ = try store.load(folder.lastPathComponent) }
+                catch {
+                    logger.error("A project has a pending save that requires recovery.")
+                    continue // Preserve this folder and keep other projects available.
+                }
+            }
             if !FileManager.default.fileExists(atPath: folder.appendingPathComponent("project.json").path) {
                 // An import killed by iOS has no committed project and can be retried
                 // from its untouched Photos/Files original.

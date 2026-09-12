@@ -223,6 +223,7 @@ struct BJJProject {
 
 final class BJJStore {
     let root: URL
+    private let writeFile: (Data, URL) throws -> Void
     private let lock = NSRecursiveLock()
     let assetLock = NSLock()
     private var leases: [String: Int] = [:]
@@ -236,8 +237,9 @@ final class BJJStore {
         lock.lock(); defer { lock.unlock() }
         leases[id] = max(0, leases[id, default: 0] - 1)
     }
-    init(root: URL? = nil) throws {
+    init(root: URL? = nil, writeFile: @escaping (Data, URL) throws -> Void = { data, url in try data.write(to: url, options: .atomic) }) throws {
         self.root = root ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("BJJTelestrator/projects", isDirectory: true)
+        self.writeFile = writeFile
         try FileManager.default.createDirectory(at: self.root, withIntermediateDirectories: true)
     }
     func directory(_ id: String) throws -> URL {
@@ -279,10 +281,11 @@ final class BJJStore {
     func writeJSON(_ json: BJJJSON, to url: URL) throws {
         let data = try JSONSerialization.data(withJSONObject: json, options: [.sortedKeys])
         guard data.count < 32 * 1024 * 1024 else { throw BJJError.invalid("Project metadata exceeds 32 MiB. Reduce annotation points or the number of objects.") }
-        try data.write(to: url, options: .atomic)
+        try writeFile(data, url)
     }
     func load(_ id: String) throws -> BJJProject {
         lock.lock(); defer { lock.unlock() }
+        try finishSaveTransaction(id)
         let url = try directory(id).appendingPathComponent("project.json")
         var json = try readJSON(url)
         let validated = try BJJProject(json)
@@ -329,18 +332,26 @@ final class BJJStore {
     }
     func save(_ input: BJJProject, creating: Bool = false, acknowledgeRecordings: Bool = true) throws -> BJJProject {
         lock.lock(); defer { lock.unlock() }
+        let previous = creating ? nil : try load(input.id)
+        if let previous, previous.revision != input.revision {
+            throw BJJError.domain("PROJECT_CONFLICT", "This project changed in another session. Keep your edits as a copy or reload the saved version.")
+        }
         var pending = try pendingRecordings(input.id)
         var merged = input.json
         var clips = input.voiceovers
         for (id, value) in pending {
             if clips.contains(where: { $0["id"] as? String == id }) {
                 if acknowledgeRecordings { pending.removeValue(forKey: id) }
-            } else { clips.append(try BJJValidate.object(value, "recovered recording")) }
+            } else if previous?.voiceovers.contains(where: { $0["id"] as? String == id }) != true {
+                clips.append(try BJJValidate.object(value, "recovered recording"))
+            }
+            // Once this transaction publishes the take, it is no longer pending.
+            // A later intentional removal must not recover it for a second time.
+            if acknowledgeRecordings { pending.removeValue(forKey: id) }
         }
         merged["voiceovers"] = clips
         let project = try BJJProject(merged)
-        if !creating {
-            let previous = try load(project.id)
+        if let previous {
             guard previous.revision == project.revision else {
                 throw BJJError.domain("PROJECT_CONFLICT", "This project changed in another session. Keep your edits as a copy or reload the saved version.")
             }
@@ -368,9 +379,33 @@ final class BJJStore {
         guard !creating || !FileManager.default.fileExists(atPath: target.path) else { throw BJJError.invalid("This project already exists.") }
         json["revision"] = creating ? 1 : project.revision + 1
         json["updatedAt"] = BJJProject.now()
-        try writeJSON(json, to: directory(project.id).appendingPathComponent("project.json"))
-        try writeJSON(pending, to: directory(project.id).appendingPathComponent("voiceover/pending.json"))
+        try writeJSON(["version": 1, "expectedRevision": previous?.revision ?? 0,
+                       "project": json, "pendingRecordings": pending],
+                      to: safeURL(project.id, "save-transaction.json"))
+        try finishSaveTransaction(project.id)
         return try BJJProject(json)
+    }
+    private func finishSaveTransaction(_ id: String) throws {
+        let journal = try safeURL(id, "save-transaction.json")
+        guard FileManager.default.fileExists(atPath: journal.path) else { return }
+        let transaction = try readJSON(journal)
+        try BJJValidate.number(transaction["version"], "save transaction version", 1...1, integer: true)
+        let expected = Int(try BJJValidate.number(transaction["expectedRevision"], "prior revision", 0...9007199254740990, integer: true))
+        let project = try BJJProject(BJJValidate.object(transaction["project"], "save transaction project"))
+        let pending = try BJJValidate.object(transaction["pendingRecordings"], "pending recordings")
+        guard project.id == id, project.revision == expected + 1 else { throw BJJError.domain("PROJECT_CORRUPT", "The pending save does not match this project.") }
+        let path = try safeURL(id, "project.json")
+        if FileManager.default.fileExists(atPath: path.path) {
+            let current = try BJJProject(readJSON(path))
+            guard current.revision == expected || (current.revision == project.revision && NSDictionary(dictionary: current.json).isEqual(to: project.json)) else {
+                throw BJJError.domain("PROJECT_CONFLICT", "A pending save conflicts with newer storage. Preserve this project and recover a copy.")
+            }
+        } else if expected != 0 { throw BJJError.domain("PROJECT_CORRUPT", "The prior document for this pending save is missing.") }
+        // Replay is idempotent after either atomic write. The journal remains
+        // durable until both the document and its recording receipts are stored.
+        try writeJSON(project.json, to: path)
+        try writeJSON(pending, to: safeURL(id, "voiceover/pending.json"))
+        try FileManager.default.removeItem(at: journal)
     }
     func recordings(_ id: String) throws -> BJJJSON {
         let url = try directory(id).appendingPathComponent("voiceover/assets.json")

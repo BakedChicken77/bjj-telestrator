@@ -126,6 +126,31 @@ import CryptoKit
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: outside.path), [])
 
     }
+    func testInterruptedRecordingAcknowledgmentReplaysAtomically() throws {
+        let initial = try project()
+        let take = try clip(initial)
+        var failOnce = true
+        let failing = try BJJStore(root: root, writeFile: { data, url in
+            if failOnce && url.lastPathComponent == "pending.json" {
+                failOnce = false
+                throw CocoaError(.fileWriteOutOfSpace)
+            }
+            try data.write(to: url, options: .atomic)
+        })
+        XCTAssertThrowsError(try failing.loadRecoveringRecordings(initial.id))
+        let journal = try store.safeURL(initial.id, "save-transaction.json")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: journal.path))
+        let restarted = try BJJStore(root: root)
+        let recovered = try restarted.load(initial.id)
+        XCTAssertEqual(recovered.revision, initial.revision + 1)
+        XCTAssertEqual(recovered.voiceovers.count, 1)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: journal.path))
+        var removal = recovered.json; removal["voiceovers"] = [BJJJSON]()
+        let removed = try restarted.save(BJJProject(removal))
+        XCTAssertEqual(removed.voiceovers.count, 0)
+        XCTAssertEqual(try BJJStore(root: root).loadRecoveringRecordings(initial.id).voiceovers.count, 0)
+        XCTAssertNoThrow(try restarted.asset(initial.id, take.s("asset")))
+    }
     func testInterruptedExportRetryRetainsRevisionAndRecording() async throws {
         let initial = try project()
         let take = try clip(initial)

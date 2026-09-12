@@ -11,7 +11,7 @@ frontend checks passed. The new browser storage/retry/reopen workflow passed
 (19.2 s test, 25.6 s with setup) after correcting its initial accessible-button
 selector. The old isolated job fake was given an explicit fake validator; a separate
 test proves the real validator rejects those non-MP4 bytes. No assertion gate or
-render timeout was disabled. The final full run and native CI are pending below.
+render timeout was disabled. The full local run passed: 125 backend tests (78.03 s), 91 frontend tests, 12 repository tests and 12 browser tests (3.6 min), plus all lint/type/build/format checks.
 
 A focused real export evidence run passed in 5.17 s: H.264, no audio, 320×180,
 4.0 seconds, 6,448 bytes. At 0.9/1.0/1.9/2.0 seconds, red pixels matched the
@@ -22,7 +22,7 @@ The source SHA-256 stayed
 Native tests add the shared 16-case input corpus, revision retry after restart,
 retained recording references, cancellation, lease/space/path guards, and real
 H.264/AAC retry with timed pixels and audio energy. `npm run ios:sync` passed.
-Xcode compilation/tests/archive still need fresh CI for this work package.
+The first native CI run compiled successfully and passed the real native retry export (H.264/AAC, 320×180, 4 s, 26,570 bytes), but one recording-journal assertion failed: a just-recovered take could reappear after removal. The assertion is retained; native save now journals the document and recording acknowledgments as one recoverable transaction. A write-failure replay test was added. Fresh CI is required for this fix.
 Physical signed install/update, interrupted recording, low-space/share-sheet
 behavior, thermal/memory/20-minute performance and Windows 11/Docker acceptance
 remain open. No HDR, package transfer, checkpoints or trash recovery is claimed.

@@ -62,3 +62,11 @@ inputs. No new project schema migration occurs in this slice. Returning to a
 schema-2 build without retry support loses retry controls and retention guards;
 use a separate preserved copy and never overwrite newer data to simulate a
 lossless downgrade. A schema-1 binary still cannot safely read schema-2 projects.
+
+Native CI exposed a recording-acknowledgment bug during immediate removal after
+recovery. `save-transaction.json` now durably pairs the next project revision and
+remaining recording journal. An interrupted two-file installation replays only
+against its expected prior revision or identical already-installed revision.
+Recovery clears receipts once committed, so a later intentional removal stays
+removed. This internal sidecar does not add editable project fields or history
+state. Keep it with the project during backup/rollback; do not delete it manually.
