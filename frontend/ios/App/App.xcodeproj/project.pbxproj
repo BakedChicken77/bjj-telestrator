@@ -27,6 +27,9 @@
 		E8960943DC6B0CF6A89E0D0F = {isa = PBXBuildFile; fileRef = FED0CACB9B0A262AB8C18307;};
 		6077BD82ACC7C2D35AF5B306 = {isa = PBXBuildFile; fileRef = 44A95B4B17BE3FA0A4576AED;};
 		34C8798CFA7D90D784962368 = {isa = PBXBuildFile; fileRef = EAB160585DDCE994D316EA85;};
+		5D6D9A6272569E0B1BA92C42 = {isa = PBXBuildFile; fileRef = DC533040243815D931B63128;};
+		091E37617DA55412397ACA97 = {isa = PBXBuildFile; fileRef = C3FB81060B2CE2326EB07B55;};
+		4F642E8E2EA8E79AF8A373DC = {isa = PBXBuildFile; fileRef = 611409C32D2003589A19C233;};
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -53,6 +56,9 @@
 		FED0CACB9B0A262AB8C18307 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJProjectMigrations.swift"; sourceTree = "<group>";};
 		44A95B4B17BE3FA0A4576AED = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJProjectRecovery.swift"; sourceTree = "<group>";};
 		EAB160585DDCE994D316EA85 = {isa = PBXFileReference; lastKnownFileType = text.json; path = "../../../../tests/fixtures/project-conformance.json"; sourceTree = "<group>";};
+		DC533040243815D931B63128 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJAssets.swift"; sourceTree = "<group>";};
+		C3FB81060B2CE2326EB07B55 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJRenderPlan.swift"; sourceTree = "<group>";};
+		611409C32D2003589A19C233 = {isa = PBXFileReference; lastKnownFileType = text.json; path = "../../../../tests/fixtures/export-plan-conformance.json"; sourceTree = "<group>";};
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -90,6 +96,8 @@
 		504EC3061FED79650016851F /* App */ = {
 			isa = PBXGroup;
 			children = (
+				C3FB81060B2CE2326EB07B55,
+				DC533040243815D931B63128,
 				624D1D62CAC247172FAB6012,
 				B6DE8DE90A23549110E26D4D,
 				0B68BAB90854D1594409F8D9,
@@ -112,7 +120,8 @@
 			path = App;
 			sourceTree = "<group>";
 		};
-		A5A37748E95AD12DB4552552 = {isa = PBXGroup; children = (94E7B890A3B96DEF8434ACC0, EAB160585DDCE994D316EA85,); path = AppTests; sourceTree = "<group>";};
+		A5A37748E95AD12DB4552552 = {isa = PBXGroup; children = (
+				611409C32D2003589A19C233,94E7B890A3B96DEF8434ACC0, EAB160585DDCE994D316EA85,); path = AppTests; sourceTree = "<group>";};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -198,7 +207,8 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		C07A97930E4E5BC84D76F326 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (34C8798CFA7D90D784962368,); runOnlyForDeploymentPostprocessing = 0;};
+		C07A97930E4E5BC84D76F326 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (
+				4F642E8E2EA8E79AF8A373DC,34C8798CFA7D90D784962368,); runOnlyForDeploymentPostprocessing = 0;};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -206,6 +216,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				091E37617DA55412397ACA97,
+				5D6D9A6272569E0B1BA92C42,
 				508F2335ED33A61F4DF232CB,
 				DBB4CB707D525095EF87036A,
 				6922D58CAEC63F9844868D0E,

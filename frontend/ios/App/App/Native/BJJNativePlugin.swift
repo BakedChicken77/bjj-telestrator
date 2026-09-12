@@ -13,7 +13,8 @@ public class BJJNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDeleg
         "listProjects", "getProject", "importVideo", "saveProject", "deleteProject", "listExports",
         "createExport", "getExport", "cancelExport", "getAssetURL", "shareExport",
         "prepareRecording", "startRecording", "stopRecording", "getCapabilities",
-        "writeRecoveryDraft", "getRecoveryDrafts", "clearRecoveryDraft", "recoverProjectCopy", "shareDiagnostics"
+        "writeRecoveryDraft", "getRecoveryDrafts", "clearRecoveryDraft", "recoverProjectCopy", "shareDiagnostics",
+        "getProjectStorage", "retryExport", "removeExportFile"
     ].map { CAPPluginMethod(name: $0, returnType: CAPPluginReturnPromise) }
     private var service: BJJService?
     private var startupError: String?
@@ -100,8 +101,17 @@ public class BJJNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDeleg
     @objc func createExport(_ call: CAPPluginCall) {
         perform(call) { [self] service in
             let revision = try BJJValidate.number(call.getDouble("expectedRevision"), "expected revision", 1...9007199254740991, integer: true)
-            return ["job": try service.createExport(id(call), expectedRevision: Int(revision)).json()]
+            return ["job": try await service.createExport(id(call), expectedRevision: Int(revision)).json()]
         }
+    }
+    @objc func getProjectStorage(_ call: CAPPluginCall) {
+        perform(call) { [self] service in try await service.storageSummary(id(call)) }
+    }
+    @objc func retryExport(_ call: CAPPluginCall) {
+        perform(call) { [self] service in ["job": try service.retryExport(id(call, "jobId")).json()] }
+    }
+    @objc func removeExportFile(_ call: CAPPluginCall) {
+        perform(call) { [self] service in ["job": try service.removeExportFile(id(call, "jobId")).json()] }
     }
     @objc func shareDiagnostics(_ call: CAPPluginCall) {
         perform(call) { [self] _ in
@@ -137,12 +147,16 @@ public class BJJNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDeleg
         Task { @MainActor in
             do {
                 guard let service, let host = bridge?.viewController else { throw BJJError.invalid("The share sheet is unavailable.") }
-                let url = try service.exportedFile(id(call, "jobId"))
+                let jobId = try id(call, "jobId")
+                let url = try service.acquireExportFile(jobId)
                 let sheet = UIActivityViewController(activityItems: [url], applicationActivities: nil)
                 sheet.popoverPresentationController?.sourceView = host.view
                 sheet.popoverPresentationController?.sourceRect = CGRect(x: host.view.bounds.midX, y: host.view.bounds.midY, width: 1, height: 1)
                 sheet.completionWithItemsHandler = { _, completed, _, error in
-                    if let error { call.reject(error.localizedDescription) } else { call.resolve(["completed": completed]) }
+                    Task { @MainActor in
+                        service.releaseExportFile(jobId)
+                        if let error { call.reject(error.localizedDescription) } else { call.resolve(["completed": completed]) }
+                    }
                 }
                 host.present(sheet, animated: true)
             } catch { call.reject(error.localizedDescription) }
@@ -221,7 +235,7 @@ public class BJJNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDeleg
                 AVAudioSession.sharedInstance().requestRecordPermission { continuation.resume(returning: $0) }
             }
             guard allowed else { throw BJJError.invalid("Microphone access is denied. Allow BJJ Telestrator in iPhone Settings → Privacy & Security → Microphone.") }
-            try service.store.checkSpace(required: 100_000_000)
+            try service.store.checkSpace(required: (BJJAssets.recordingEstimate(project.duration)["requiredBytes"] as! NSNumber).int64Value)
             let session = AVAudioSession.sharedInstance()
             try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
             try session.setPreferredSampleRate(48000); try session.setActive(true)

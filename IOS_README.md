@@ -134,3 +134,20 @@ while large media is copied; progressive/cancellable storage jobs belong to P1.0
 Use [DEVICE_ACCEPTANCE.md](docs/DEVICE_ACCEPTANCE.md) for the exact signed-build
 checklist and result fields. Retain the same bundle identity when installing an
 update over projects. Never uninstall as a routine rollback step.
+
+### Storage and export recovery (P1.06 work package)
+
+The export panel now shows local storage breakdown and estimated additional export
+space. After a restart, **Retry revision … from start** renders the original saved
+review; **Render MP4** renders current confirmed edits. Keep the app open as before.
+First-export inventory preparation hashes large originals off the main thread;
+queued/running jobs remain cancellable, while initial inventory preparation has
+no separate cancel control yet. Integrity checks are incremental and never pass
+large media through JavaScript.
+
+**Remove MP4** reclaims a completed output and retains its retry input and all source
+and recording assets. An active share sheet protects that file until dismissed.
+Old jobs without saved inputs cannot retry their old edits. Whole-project deletion
+is still permanent; recently deleted recovery, checkpoints and Files `.bjjproj`
+transfer remain later work. Simulator/CI verification does not establish physical
+low-space, share-sheet, thermal or 20-minute performance acceptance.

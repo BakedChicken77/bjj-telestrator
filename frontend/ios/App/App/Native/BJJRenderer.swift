@@ -243,8 +243,8 @@ final class BJJRenderer {
     }
     static func outputSize(_ source: CGSize, maximum: CGFloat? = nil) -> CGSize {
         let scale = maximum.map { min(1, $0 / max(source.width, source.height)) } ?? 1
-        return CGSize(width: max(2, (source.width * scale / 2).rounded() * 2),
-                      height: max(2, (source.height * scale / 2).rounded() * 2))
+        return CGSize(width: max(2, (source.width * scale / 2).rounded(.toNearestOrEven) * 2),
+                      height: max(2, (source.height * scale / 2).rounded(.toNearestOrEven) * 2))
     }
     func render(media: BJJMedia, project: BJJProject?, store: BJJStore, output: URL,
                 proxy: Bool = false, progress: @escaping (Double) -> Void) async throws {

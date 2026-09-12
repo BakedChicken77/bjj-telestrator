@@ -1,5 +1,33 @@
 # Verification record
 
+## P1.06 storage/export work package — 2026-09-12
+
+Starting commit: `dd0d0843ccc912fb5fa0cdd8e036979e7d9f6262`, whose complete CI
+passed in [run 34718720639](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34718720639).
+Branch: `codex/p1-storage-foundations`, stacked on draft PR #8.
+
+Initial checks: 123 backend tests passed in 80.52 s, including real MP4 retries;
+frontend checks passed. The new browser storage/retry/reopen workflow passed
+(19.2 s test, 25.6 s with setup) after correcting its initial accessible-button
+selector. The old isolated job fake was given an explicit fake validator; a separate
+test proves the real validator rejects those non-MP4 bytes. No assertion gate or
+render timeout was disabled. The full local run passed: 125 backend tests (78.03 s), 91 frontend tests, 12 repository tests and 12 browser tests (3.6 min), plus all lint/type/build/format checks.
+
+A focused real export evidence run passed in 5.17 s: H.264, no audio, 320×180,
+4.0 seconds, 6,448 bytes. At 0.9/1.0/1.9/2.0 seconds, red pixels matched the
+original `[1,2)` cue after restart and removal of that cue from current edits.
+The source SHA-256 stayed
+`89441d06c652971cfba6065c85cb59999b2bea81f812977be4b0d91ab57cb9d5`.
+
+Native tests add the shared 16-case input corpus, revision retry after restart,
+retained recording references, cancellation, lease/space/path guards, and real
+H.264/AAC retry with timed pixels and audio energy. `npm run ios:sync` passed.
+The first native CI run compiled successfully and passed the real native retry export (H.264/AAC, 320×180, 4 s, 26,570 bytes), but one recording-journal assertion failed: a just-recovered take could reappear after removal. The assertion is retained; native save now journals the document and recording acknowledgments as one recoverable transaction. A write-failure replay test was added. Fresh CI is required for this fix.
+Physical signed install/update, interrupted recording, low-space/share-sheet
+behavior, thermal/memory/20-minute performance and Windows 11/Docker acceptance
+remain open. No HDR, package transfer, checkpoints or trash recovery is claimed.
+
+
 ## P1.02 / P1.03 first vertical package — 2026-09-12
 
 Starting commit: `f5323b3b270e3836d7df10309d1684cf8d98e9ca` (live main checked

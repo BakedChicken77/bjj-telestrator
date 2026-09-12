@@ -1,6 +1,6 @@
 import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor/core';
 import { projectSchema, readProject, voiceoverSchema, type Project, type Voiceover } from './model';
-import type { ExportJob, ProjectSummary, RuntimeCapabilities } from './api';
+import type { ExportJob, ProjectSummary, ProjectStorage, RuntimeCapabilities } from './api';
 import type { Draft } from './project/saveSession';
 
 /** JSON crosses this bridge; video and microphone bytes stay in the iOS sandbox. */
@@ -32,6 +32,9 @@ export interface BJJNativePlugin {
   }): Promise<{ job: ExportJob }>;
   getExport(options: { jobId: string }): Promise<{ job: ExportJob }>;
   cancelExport(options: { jobId: string }): Promise<{ job: ExportJob }>;
+  retryExport(options: { jobId: string }): Promise<{ job: ExportJob }>;
+  removeExportFile(options: { jobId: string }): Promise<{ job: ExportJob }>;
+  getProjectStorage(options: { projectId: string }): Promise<ProjectStorage>;
   getAssetURL(options: {
     projectId: string;
     kind: 'video' | 'voiceover';
@@ -113,6 +116,9 @@ export const nativeAPI = {
     (await nativeBridge.createExport({ projectId, expectedRevision })).job,
   exportJob: async (jobId: string) => (await nativeBridge.getExport({ jobId })).job,
   cancelExport: async (jobId: string) => (await nativeBridge.cancelExport({ jobId })).job,
+  retryExport: async (jobId: string) => (await nativeBridge.retryExport({ jobId })).job,
+  removeExportFile: async (jobId: string) => (await nativeBridge.removeExportFile({ jobId })).job,
+  storage: async (projectId: string) => nativeBridge.getProjectStorage({ projectId }),
   stopRecording: async (startSec?: number): Promise<Voiceover | null> => {
     const result = await nativeBridge.stopRecording({ startSec });
     return result.clip ? voiceoverSchema.parse(result.clip) : null;

@@ -148,3 +148,22 @@ the summary includes app/build and bounded error codes, with no project/media da
 Exports wait for a confirmed save and carry its revision. Update the editor and
 local service together; older clients cannot save or export schema-2 documents.
 See [PROJECT_FORMAT.md](PROJECT_FORMAT.md) and [device acceptance](docs/DEVICE_ACCEPTANCE.md).
+
+### Storage and retrying an export
+
+In **Export MP4**, expand **Project storage** to see originals, proxy, recordings,
+completed MP4s, temporary work and available device space. The next export estimate
+includes working files and a safety margin; actual MP4 size can differ.
+
+Every new export retains its saved revision. **Retry revision … from start** makes
+a fresh attempt at that revision, including after an application/server restart.
+**Render MP4** uses your latest confirmed edits. Earlier outputs are labeled when
+newer edits exist. **Remove MP4** removes only that completed file; its retry input,
+source and recording assets remain. Downloads are protected from concurrent cleanup.
+Older exports created before this feature have no saved retry input.
+
+Removed narration stays available for undo and old exports. Whole-project deletion
+remains permanent in this work package. Checkpoints, recently deleted recovery and
+portable `.bjjproj` backup/restore are not yet implemented. Preserve original media
+and existing project folders before updating. Physical iPhone/Windows acceptance
+remains separate from automated CI.

@@ -130,6 +130,13 @@ def main() -> None:
     section("PBXBuildFile", conformance_build, f"isa = PBXBuildFile; fileRef = {conformance};")
     child(group, "children", conformance)
     child(resources, "files", conformance_build)
+    export_fixture, export_build = uid("test:export-plan-file"), uid("test:export-plan-build")
+    section("PBXFileReference", export_fixture,
+            'isa = PBXFileReference; lastKnownFileType = text.json; path = "../../../../tests/fixtures/export-plan-conformance.json"; sourceTree = "<group>";')
+    section("PBXBuildFile", export_build, f"isa = PBXBuildFile; fileRef = {export_fixture};")
+    child(group, "children", export_fixture)
+    child(resources, "files", export_build)
+
     section(
         "PBXContainerItemProxy",
         proxy,

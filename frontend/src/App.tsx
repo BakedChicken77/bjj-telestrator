@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, type ExportJob, type ProjectSummary } from './api';
+import { ProjectStorage } from './components/ProjectStorage';
+import { ExportRecovery } from './components/ExportRecovery';
 import { useEditor } from './store';
 import type { Project, Tool } from './model';
 import { VideoStage } from './components/VideoStage';
@@ -137,6 +139,7 @@ export default function App() {
   const [busy, setBusy] = useState<string | null>('Opening your workspace…');
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [storageTools, setStorageTools] = useState(false);
   const [mobilePanel, setMobilePanel] = useState<'timeline' | 'properties'>('timeline');
   const {
     status,
@@ -163,6 +166,13 @@ export default function App() {
     async function start() {
       try {
         const capabilities = await api.capabilities();
+        setStorageTools(
+          !!(
+            capabilities.exportRetry &&
+            capabilities.storageBreakdown &&
+            capabilities.exportFileCleanup
+          ),
+        );
         if (
           !capabilities.conditionalSave ||
           !capabilities.conditionalExport ||
@@ -813,6 +823,7 @@ export default function App() {
                       </>
                     )}
                     {job.status === 'completed' &&
+                      job.outputAvailable !== false &&
                       (nativeIOS ? (
                         <button
                           className="download-button"
@@ -834,10 +845,33 @@ export default function App() {
                         </a>
                       ))}
                     {job.error && <p className="dialog-error">{job.error}</p>}
+                    {storageTools && (
+                      <ExportRecovery
+                        job={job}
+                        revision={project.revision}
+                        dirty={status !== 'saved'}
+                        onJob={(next) =>
+                          setJobs((list) => [
+                            next,
+                            ...list.filter((item) => item.jobId !== next.jobId),
+                          ])
+                        }
+                        onError={(cause) => setError(errorText(cause))}
+                      />
+                    )}
                   </article>
                 ))
               )}
             </div>
+            {storageTools && (
+              <ProjectStorage
+                projectId={project.projectId}
+                revision={project.revision}
+                outputs={jobs
+                  .map((job) => `${job.jobId}:${job.status}:${String(job.outputAvailable)}`)
+                  .join(',')}
+              />
+            )}
             {visibleError && (
               <p className="dialog-error" role="alert">
                 {visibleError}

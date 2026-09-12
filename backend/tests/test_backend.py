@@ -173,7 +173,7 @@ def test_job_completion_failure_cancel_and_recovery(tmp_path: Path) -> None:
         progress(10)
         output.write_bytes(b'export')
 
-    manager = JobManager(store, renderer=renderer)
+    manager = JobManager(store, renderer=renderer, validator=lambda _path, _project: None)
     job = manager.create(project)
     project.projectName = 'mutated after export'
     assert wait_job(manager, job.jobId) == 'completed'
