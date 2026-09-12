@@ -25,6 +25,7 @@ from app.renderer import (
     safe_asset,
     segment_timeline,
 )
+from app.storage import ProjectStore
 
 STAMP = "2026-09-05T00:00:00Z"
 
@@ -152,13 +153,28 @@ def test_ffmpeg_argument_generation(tmp_path: Path) -> None:
 
 @pytest.mark.integration
 def test_real_export_pixels_audio_duration_and_source_preserved(tmp_path: Path) -> None:
-    source = tmp_path / "source" / "original.mp4"
+    store = ProjectStore(tmp_path / "projects")
+    project_id = str(uuid4())
+    folder = store.create_dir(project_id)
+    source = folder / "source" / "original.mp4"
     make_source(source)
     checksum = hashlib.sha256(source.read_bytes()).hexdigest()
     project = make_project(source, [annotation()])
-    output = tmp_path / "exports" / "rendered.mp4"
+    legacy = project.model_dump(mode="json")
+    legacy.update(projectId=project_id, schemaVersion=1)
+    del legacy["revision"]
+    del legacy["requiredCapabilities"]
+    original_json = json.dumps(legacy, indent=3).encode()
+    (folder / "project.json").write_bytes(original_json)
+    migrated = store.load(project_id)
+    assert migrated.schemaVersion == 2 and migrated.revision == 1
+    assert (folder / "project.pre-migration-v1.json").read_bytes() == original_json
+    migrated.projectName = "Edited after reopening version 1"
+    project = store.save(migrated)
+    assert project.revision == 2
+    output = folder / "exports" / "rendered.mp4"
     progress: list[float] = []
-    render_export(project, tmp_path, output, tmp_path / "temp", progress.append, threading.Event())
+    render_export(project, folder, output, folder / "temp", progress.append, threading.Event())
     metadata = probe_media(output, "exports/rendered.mp4", "rendered.mp4")
     assert metadata.codec == "h264"
     assert metadata.audioCodec == "aac"
@@ -172,7 +188,9 @@ def test_real_export_pixels_audio_duration_and_source_preserved(tmp_path: Path) 
     assert math.sqrt(sum(value * value for value in values) / len(values)) > 1000
     assert hashlib.sha256(source.read_bytes()).hexdigest() == checksum
     assert progress[-1] == 3
-    assert not list((tmp_path / "temp").iterdir())
+    assert not list((folder / "temp").iterdir())
+    assert ProjectStore(tmp_path / "projects").load(project_id) == project
+    assert (folder / "project.pre-migration-v1.json").read_bytes() == original_json
 
 
 @pytest.mark.integration

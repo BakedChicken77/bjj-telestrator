@@ -252,9 +252,19 @@ import CryptoKit
         let before = SHA256.hash(data: try Data(contentsOf: source))
         let service = try BJJService(store: store)
         let imported = try await service.importFile(source, originalName: "synthetic.mp4")
-        var json = imported.json; json["annotations"] = [annotation()]
+        let folder = try store.directory(imported.id)
+        var legacy = imported.json
+        legacy["schemaVersion"] = 1; legacy.removeValue(forKey: "revision"); legacy.removeValue(forKey: "requiredCapabilities")
+        let legacyBytes = try JSONSerialization.data(withJSONObject: legacy, options: [.prettyPrinted])
+        try legacyBytes.write(to: folder.appendingPathComponent("project.json"))
+        let migrated = try store.load(imported.id)
+        XCTAssertEqual(migrated.revision, 1)
+        XCTAssertEqual(try Data(contentsOf: folder.appendingPathComponent("project.pre-migration-v1.json")), legacyBytes)
+        var json = migrated.json; json["annotations"] = [annotation()]
         let project = try store.save(BJJProject(json))
-        let job = try service.createExport(project.id)
+        XCTAssertEqual(project.revision, 2)
+        let job = try service.createExport(project.id, expectedRevision: project.revision)
+        XCTAssertEqual(job.projectRevision, project.revision)
         let deadline = Date().addingTimeInterval(90)
         while ["queued", "running"].contains(try service.job(job.jobId).status) && Date() < deadline { try await Task.sleep(nanoseconds: 100_000_000) }
         let completedJob = try service.job(job.jobId)
@@ -272,6 +282,7 @@ import CryptoKit
         let originalAudioEnergy = try await audioEnergy(output, from: 0.2, to: 0.8)
         XCTAssertGreaterThan(originalAudioEnergy, 0.05)
         XCTAssertEqual(try BJJStore(root: root).load(project.id).annotations.count, 1)
+        XCTAssertEqual(try Data(contentsOf: folder.appendingPathComponent("project.pre-migration-v1.json")), legacyBytes)
     }
     func testRotatedSilentVideoExportsPortrait() async throws {
         let source = try await sourceVideo(rotated: true)
