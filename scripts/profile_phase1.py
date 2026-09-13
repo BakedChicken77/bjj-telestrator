@@ -56,6 +56,10 @@ def main():
     parser.add_argument(
         "--export", action="store_true", help="Also run the generated 20-minute export"
     )
+    parser.add_argument(
+        "--existing-library", type=Path,
+        help="Remeasure an existing generated library without copying or regenerating media",
+    )
     options = parser.parse_args()
     options.output.mkdir(parents=True, exist_ok=False)
     template = json.loads(
@@ -82,25 +86,28 @@ def main():
             )
         annotations.append(cue)
     template["annotations"] = annotations
-    library = ProjectStore(options.output / "library")
-    print("Preparing 200 metadata-only records (no video copies).", flush=True)
-    for index in range(200):
-        document = {
-            **template,
-            "projectId": str(uuid4()),
-            "projectName": f"Synthetic review {index}",
-        }
-        atomic_json(
-            library.project_dir(document["projectId"]) / "project.json", document
-        )
+    library_root = options.existing_library or options.output / "library"
+    library = ProjectStore(library_root)
+    if options.existing_library is None:
+        print("Preparing 200 metadata-only records (no video copies).", flush=True)
+        for index in range(200):
+            document = {
+                **template,
+                "projectId": str(uuid4()),
+                "projectName": f"Synthetic review {index}",
+            }
+            atomic_json(
+                library.project_dir(document["projectId"]) / "project.json", document
+            )
     durations = []
     for _ in range(3):
         started = time.perf_counter()
-        records = library.list()
+        records = ProjectStore(library_root).list()
         durations.append(time.perf_counter() - started)
         assert len(records) == 200 and all(
             record["annotationCount"] == 100 for record in records
         )
+        print(f"Library listing {len(durations)}: {durations[-1]:.3f} seconds", flush=True)
     report = {
         "platform": platform.platform(),
         "python": platform.python_version(),
@@ -111,6 +118,7 @@ def main():
         "libraryListSeconds": durations,
         **peak_memory(),
     }
+    (options.output / "report.json").write_text(json.dumps(report, indent=2) + "\n")
     if options.export:
         store = ProjectStore(options.output / "export-device")
         identifier = str(uuid4())

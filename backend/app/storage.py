@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import re
 import shutil
+import stat
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
@@ -14,7 +16,7 @@ from uuid import UUID, uuid4
 from pydantic import ValidationError
 
 from .errors import DomainError, conflict
-from .migrations import MAX_REVISION, migrate_document
+from .migrations import CAPABILITIES, MAX_REVISION, SCHEMA_VERSION, migrate_document
 from .models import Project, Voiceover
 
 log = logging.getLogger(__name__)
@@ -176,18 +178,79 @@ class ProjectStore:
             saved = project.model_copy(update={'updatedAt': utc_now(),
                                                'revision': old.revision + 1 if existing else 1}, deep=True)
             atomic_json(folder / 'project.json', saved.model_dump(mode='json'))
+            self._cache_summary(saved)
             return saved
 
+    @staticmethod
+    def _summary_fingerprint(path: Path) -> list[int]:
+        value = path.lstat()
+        if not stat.S_ISREG(value.st_mode):
+            raise StorageError('Project metadata must be a regular file')
+        return [value.st_dev, value.st_ino, value.st_size, value.st_mtime_ns, value.st_ctime_ns]
+
+    @staticmethod
+    def _summary(project: Project) -> dict[str, object]:
+        return {'projectId': project.projectId, 'projectName': project.projectName,
+                'updatedAt': project.updatedAt, 'durationSec': project.source.durationSec,
+                'annotationCount': len(project.annotations), 'revision': project.revision}
+
+    def _cache_summary(self, project: Project, fingerprint: list[int] | None = None) -> None:
+        # Disposable display metadata. Failure after a durable save is not a
+        # failed save; open/save/export still validate the authoritative document.
+        try:
+            folder = self.project_dir(project.projectId)
+            current = self._summary_fingerprint(folder / 'project.json')
+            if fingerprint is not None and current != fingerprint:
+                return
+            atomic_json(asset_path(folder, 'project.index.json'), {
+                'version': 1, 'schemaVersion': SCHEMA_VERSION, 'capabilities': list(CAPABILITIES),
+                'fingerprint': current, 'summary': self._summary(project)})
+        except (OSError, StorageError):
+            log.warning('Could not refresh disposable project summary', extra={'projectId': project.projectId})
+
+    def _list_summary(self, project_id: str) -> dict[str, object]:
+        folder = self.project_dir(project_id)
+        fingerprint = self._summary_fingerprint(folder / 'project.json')
+        try:
+            path = asset_path(folder, 'project.index.json')
+            with path.open('rb') as handle:
+                data = handle.read(8193)
+            if len(data) > 8192:
+                raise ValueError('Oversized index')
+            index = json.loads(data)
+            if (index['version'] != 1 or index['schemaVersion'] != SCHEMA_VERSION
+                    or index['capabilities'] != list(CAPABILITIES) or index['fingerprint'] != fingerprint):
+                raise ValueError('Stale index')
+            item = index['summary']
+            if (set(item) != {'projectId', 'projectName', 'updatedAt', 'durationSec', 'annotationCount', 'revision'}
+                    or item['projectId'] != project_id
+                    or not isinstance(item['projectName'], str) or not item['projectName'].strip()
+                    or not 1 <= len(item['projectName']) <= 160
+                    or not isinstance(item['updatedAt'], str) or len(item['updatedAt']) > 80
+                    or type(item['durationSec']) not in (float, int) or not math.isfinite(item['durationSec'])
+                    or not 0 < item['durationSec'] <= 86400
+                    or type(item['annotationCount']) is not int or not 0 <= item['annotationCount'] <= 2000
+                    or type(item['revision']) is not int or not 1 <= item['revision'] <= MAX_REVISION):
+                raise ValueError('Invalid index')
+            if datetime.fromisoformat(item['updatedAt'].replace('Z', '+00:00')).tzinfo is None:
+                raise ValueError('Invalid index timestamp')
+            return item
+        except (OSError, StorageError, ValueError, KeyError, TypeError, OverflowError, RecursionError):
+            project = self.load(project_id)
+            self._cache_summary(project, fingerprint)
+            return self._summary(project)
+
     def list(self) -> list[dict[str, object]]:
+        with self.lock:
+            return self._list_locked()
+
+    def _list_locked(self) -> list[dict[str, object]]:
         projects = []
         for directory in self.root.iterdir():
             if not directory.is_dir() or not (directory / 'project.json').is_file():
                 continue
             try:
-                project = self.load(directory.name)
-                projects.append({'projectId': project.projectId, 'projectName': project.projectName,
-                                 'updatedAt': project.updatedAt, 'durationSec': project.source.durationSec,
-                                 'annotationCount': len(project.annotations), 'revision': project.revision})
+                projects.append(self._list_summary(directory.name))
             except DomainError as exc:
                 # Keep upgrade-required/corrupt projects visible and recoverable.
                 projects.append({'projectId': directory.name, 'projectName': 'Unavailable project',

@@ -168,7 +168,7 @@ enum BJJAssets {
                 let properties = try file.resourceValues(forKeys: [.isSymbolicLinkKey, .isRegularFileKey, .fileSizeKey])
                 guard properties.isSymbolicLink != true else { throw BJJError.domain("CLEANUP_BLOCKED", "Linked recovery files must be repaired before preview cleanup.") }
                 guard properties.isRegularFile == true, file.pathExtension == "json" else { continue }
-                if file.deletingLastPathComponent() == folder && ["assets.json", "assets.cache.json"].contains(file.lastPathComponent) { continue }
+                if file.deletingLastPathComponent() == folder && ["assets.json", "assets.cache.json", "project.index.json"].contains(file.lastPathComponent) { continue }
                 total += Int64(properties.fileSize ?? 0)
                 guard (properties.fileSize ?? 0) <= 32 * 1024 * 1024, total <= 256 * mib else { throw BJJError.domain("CLEANUP_BLOCKED", "Recovery metadata exceeds the bounded cleanup scan. Files were retained.") }
                 do { try collect(BJJPackageJSON.read(Data(contentsOf: file))) }

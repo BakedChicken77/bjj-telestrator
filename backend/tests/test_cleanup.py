@@ -24,6 +24,7 @@ def test_cleanup_preserves_live_recovery_leases_and_grace_period(media):
     os.utime(paths[1], None)  # New unreferenced preview remains under grace.
     atomic_json(folder / 'checkpoints' / f'{uuid4()}.json', {'version': 1, 'input': {'project': {'proxy': {'asset': f'proxy/{paths[2].name}'}}}})
     atomic_json(folder / 'recovery' / f'{uuid4()}.json', {'version': 1, 'project': {'proxy': {'asset': f'proxy/{paths[3].name}'}}})
+    (folder / 'project.index.json').write_bytes(b'broken disposable summary')
     assert preview_cleanup(store, project.projectId)['files'] == 1
     store.acquire_lease(project.projectId)
     try:

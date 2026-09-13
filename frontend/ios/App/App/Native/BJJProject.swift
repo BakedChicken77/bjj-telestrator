@@ -330,7 +330,7 @@ final class BJJStore {
         var results: [BJJJSON] = []
         for folder in folders where UUID(uuidString: folder.lastPathComponent) != nil {
             if FileManager.default.fileExists(atPath: folder.appendingPathComponent("project.json").path) {
-                do { results.append(try load(folder.lastPathComponent).summary()) }
+                do { results.append(try listSummary(folder.lastPathComponent)) }
                 catch {
                     results.append(["projectId": folder.lastPathComponent, "projectName": "Unavailable project",
                                     "updatedAt": "", "durationSec": 0, "annotationCount": 0,
@@ -339,6 +339,61 @@ final class BJJStore {
             }
         }
         return results.sorted { ($0["updatedAt"] as! String) > ($1["updatedAt"] as! String) }
+    }
+    private func summaryFingerprint(_ id: String) throws -> [String] {
+        let url = try safeURL(id, "project.json")
+        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+        guard attributes[.type] as? FileAttributeType == .typeRegular,
+              let size = attributes[.size] as? NSNumber,
+              let inode = attributes[.systemFileNumber] as? NSNumber,
+              let modified = attributes[.modificationDate] as? Date,
+              let created = attributes[.creationDate] as? Date else {
+            throw BJJError.invalid("Project metadata must be a regular file.")
+        }
+        return [size.stringValue, inode.stringValue,
+                String(modified.timeIntervalSince1970.bitPattern), String(created.timeIntervalSince1970.bitPattern)]
+    }
+    private func cacheSummary(_ project: BJJProject, fingerprint: [String]? = nil) {
+        // This file owns no assets and never authorizes an open, save or export.
+        // A cache failure must not turn an already committed save into a failure.
+        do {
+            let current = try summaryFingerprint(project.id)
+            if let fingerprint, fingerprint != current { return }
+            try writeJSON(["version": 1, "schemaVersion": BJJProjectMigrations.currentVersion,
+                           "capabilities": BJJProjectMigrations.supported, "fingerprint": current,
+                           "summary": project.summary()], to: safeURL(project.id, "project.index.json"))
+        } catch { /* The next listing rebuilds from the authoritative project. */ }
+    }
+    private func listSummary(_ id: String) throws -> BJJJSON {
+        // Even a matching index cannot bypass completion of an interrupted save.
+        try finishSaveTransaction(id)
+        let fingerprint = try summaryFingerprint(id)
+        do {
+            let handle = try FileHandle(forReadingFrom: safeURL(id, "project.index.json"))
+            defer { try? handle.close() }
+            let bytes = try handle.read(upToCount: 8193) ?? Data()
+            guard bytes.count <= 8192 else { throw BJJError.invalid("Oversized project index.") }
+            let index = try BJJValidate.object(JSONSerialization.jsonObject(with: bytes), "project index")
+            guard index["version"] as? Int == 1,
+                  index["schemaVersion"] as? Int == BJJProjectMigrations.currentVersion,
+                  index["capabilities"] as? [String] == BJJProjectMigrations.supported,
+                  index["fingerprint"] as? [String] == fingerprint else { throw BJJError.invalid("Stale project index.") }
+            let item = try BJJValidate.object(index["summary"], "project summary")
+            guard Set(item.keys) == Set(["projectId", "projectName", "updatedAt", "durationSec", "annotationCount", "revision"]),
+                  try BJJValidate.uuid(item["projectId"]) == id else { throw BJJError.invalid("Invalid project index.") }
+            let name = try BJJValidate.string(item["projectName"], "project name", max: 160)
+            guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw BJJError.invalid("Empty project name.") }
+            try BJJValidate.timestamp(item["updatedAt"])
+            let duration = try BJJValidate.number(item["durationSec"], "duration", 0...86400)
+            guard duration > 0 else { throw BJJError.invalid("Empty project duration.") }
+            try BJJValidate.number(item["annotationCount"], "annotation count", 0...2000, integer: true)
+            try BJJValidate.number(item["revision"], "revision", 1...9007199254740991, integer: true)
+            return item
+        } catch {
+            let project = try load(id)
+            cacheSummary(project, fingerprint: fingerprint)
+            return project.summary()
+        }
     }
     func save(_ input: BJJProject, creating: Bool = false, acknowledgeRecordings: Bool = true, replacingProxy: Bool = false) throws -> BJJProject {
         lock.lock(); defer { lock.unlock() }
@@ -389,7 +444,9 @@ final class BJJStore {
                        "project": json, "pendingRecordings": pending],
                       to: safeURL(project.id, "save-transaction.json"))
         try finishSaveTransaction(project.id)
-        return try BJJProject(json)
+        let saved = try BJJProject(json)
+        cacheSummary(saved)
+        return saved
     }
     private func finishSaveTransaction(_ id: String) throws {
         let journal = try safeURL(id, "save-transaction.json")

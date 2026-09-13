@@ -58,6 +58,7 @@ import CryptoKit
         for file in [stale, pinned, recent] { try Data([1, 2, 3]).write(to: file) }
         for file in [stale, pinned] { try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSinceNow: -172800)], ofItemAtPath: file.path) }
         try store.writeJSON(["version": 1, "retainedProxy": "proxy/\(pinned.lastPathComponent)"], to: folder.appendingPathComponent("retained.json"))
+        try Data("broken disposable summary".utf8).write(to: folder.appendingPathComponent("project.index.json"))
         XCTAssertEqual(try BJJAssets.previewCleanup(store, id: project.id)["files"] as? Int, 1)
         try store.acquireLease(project.id)
         XCTAssertThrowsError(try BJJAssets.previewCleanup(store, id: project.id, revision: project.revision, remove: true))
@@ -239,6 +240,47 @@ import CryptoKit
         XCTAssertThrowsError(try versions.checkpoint(original.id, revision: restored.revision, label: "Stale"))
         XCTAssertThrowsError(try versions.restoreCheckpoint(original.id, checkpoint: checkpoint.s("checkpointId"), revision: restored.revision))
     }
+    func testProjectSummaryRebuildsAndInvalidatesWithoutChangingSource() throws {
+        let original = try project()
+        let index = try store.safeURL(original.id, "project.index.json")
+        let documentURL = try store.safeURL(original.id, "project.json")
+        let originalBytes = try Data(contentsOf: documentURL)
+        let sourceURL = try store.asset(original.id, original.source.s("asset"))
+        let sourceBytes = try Data(contentsOf: sourceURL)
+        XCTAssertEqual(try BJJStore(root: root).list().first?.s("projectName"), original.name)
+        for corrupt in [Data("invalid".utf8), Data(repeating: 32, count: 8193)] {
+            try corrupt.write(to: index, options: .atomic)
+            XCTAssertEqual(try store.list().first?.s("projectName"), original.name)
+            XCTAssertEqual(try Data(contentsOf: documentURL), originalBytes)
+            XCTAssertEqual(try store.readJSON(index)["version"] as? Int, 1)
+        }
+        try FileManager.default.removeItem(at: index)
+        XCTAssertEqual(try store.list().first?.s("projectName"), original.name)
+        var edited = original.json
+        edited["projectName"] = "Revisão changed outside the running store"
+        try store.writeJSON(edited, to: documentURL)
+        XCTAssertEqual(try store.list().first?.s("projectName"), edited.s("projectName"))
+        edited["schemaVersion"] = 99
+        try store.writeJSON(edited, to: documentURL)
+        XCTAssertEqual(try store.list().first?.s("unavailableCode"), "SCHEMA_UNSUPPORTED")
+        XCTAssertThrowsError(try store.load(original.id))
+        XCTAssertEqual(try Data(contentsOf: sourceURL), sourceBytes)
+    }
+    func testProjectSummaryWriteFailureKeepsSaveConfirmed() throws {
+        let original = try project()
+        let failing = try BJJStore(root: root, writeFile: { data, url in
+            if url.lastPathComponent == "project.index.json" { throw CocoaError(.fileWriteOutOfSpace) }
+            try data.write(to: url, options: .atomic)
+        })
+        var edited = original.json
+        edited["projectName"] = "Saved despite a full cache disk"
+        edited["annotations"] = [BJJJSON]()
+        let saved = try failing.save(BJJProject(edited))
+        XCTAssertEqual(saved.revision, original.revision + 1)
+        XCTAssertEqual(try failing.list().first?.s("projectName"), edited.s("projectName"))
+        XCTAssertEqual(try store.load(original.id).annotations.count, 0)
+        XCTAssertEqual(try store.load(original.id).revision, saved.revision)
+    }
     func testCheckpointWriteFailurePreservesCurrentReview() throws {
         let original = try project()
         let versions = BJJProjectVersions(store: store)
@@ -411,6 +453,7 @@ import CryptoKit
         let journal = try store.safeURL(initial.id, "save-transaction.json")
         XCTAssertTrue(FileManager.default.fileExists(atPath: journal.path))
         let restarted = try BJJStore(root: root)
+        XCTAssertEqual(try restarted.list().first?["revision"] as? Int, initial.revision + 1)
         let recovered = try restarted.load(initial.id)
         XCTAssertEqual(recovered.revision, initial.revision + 1)
         XCTAssertEqual(recovered.voiceovers.count, 1)

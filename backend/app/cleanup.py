@@ -41,8 +41,8 @@ def candidates(store: ProjectStore, project_id: str, now: float | None = None) -
             if count > 100_000:
                 raise DomainError('CLEANUP_BLOCKED', 'This project has too many files to safely check retention.', 409)
             path = Path(root) / name
-            if path.suffix != '.json' or path == folder / 'assets.json' or path == folder / 'assets.cache.json':
-                continue  # Inventory records describe assets; they do not own them.
+            if path.suffix != '.json' or (path.parent == folder and path.name in ('assets.json', 'assets.cache.json', 'project.index.json')):
+                continue  # Inventories and disposable summaries do not own assets.
             if path.is_symlink() or path.stat().st_size > 32 * 1024**2:
                 raise DomainError('CLEANUP_BLOCKED', 'Recovery metadata needs repair before preview cleanup.', 409)
             total += path.stat().st_size
