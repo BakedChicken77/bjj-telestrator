@@ -147,4 +147,47 @@ enum BJJAssets {
             }
         }
     }
+    static func previewCleanup(_ store: BJJStore, id: String, revision: Int? = nil, remove: Bool = false, now: Date = Date()) throws -> BJJJSON {
+        try store.locked {
+            let project = try store.load(id)
+            if remove, project.revision != revision { throw BJJError.domain("PROJECT_CONFLICT", "The project changed. Save and retry cleanup.") }
+            try store.requireUnleased(id)
+            let folder = try store.directory(id)
+            var references: Set<String> = [project.proxy.s("asset")]
+            func collect(_ value: Any, depth: Int = 0) throws {
+                guard depth <= 64 else { throw BJJError.domain("CLEANUP_BLOCKED", "Recovery metadata is too deeply nested. Preview files were retained.") }
+                if let text = value as? String, text.hasPrefix("proxy/") { references.insert(text) }
+                else if let array = value as? [Any] { for item in array { try collect(item, depth: depth + 1) } }
+                else if let object = value as? BJJJSON { for item in object.values { try collect(item, depth: depth + 1) } }
+            }
+            guard let files = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey]) else { throw BJJError.domain("CLEANUP_BLOCKED", "Recovery files could not be checked.") }
+            var count = 0, total: Int64 = 0
+            for case let file as URL in files {
+                count += 1
+                guard count <= 100_000 else { throw BJJError.domain("CLEANUP_BLOCKED", "This project has too many files to safely check retention.") }
+                let properties = try file.resourceValues(forKeys: [.isSymbolicLinkKey, .isRegularFileKey, .fileSizeKey])
+                guard properties.isSymbolicLink != true else { throw BJJError.domain("CLEANUP_BLOCKED", "Linked recovery files must be repaired before preview cleanup.") }
+                guard properties.isRegularFile == true, file.pathExtension == "json" else { continue }
+                if file.deletingLastPathComponent() == folder && ["assets.json", "assets.cache.json"].contains(file.lastPathComponent) { continue }
+                total += Int64(properties.fileSize ?? 0)
+                guard (properties.fileSize ?? 0) <= 32 * 1024 * 1024, total <= 256 * mib else { throw BJJError.domain("CLEANUP_BLOCKED", "Recovery metadata exceeds the bounded cleanup scan. Files were retained.") }
+                do { try collect(BJJPackageJSON.read(Data(contentsOf: file))) }
+                catch { throw BJJError.domain("CLEANUP_BLOCKED", "Damaged recovery metadata prevents safe cleanup. Files were retained.") }
+            }
+            let proxy = try store.safeURL(id, "proxy")
+            let candidates = try FileManager.default.contentsOfDirectory(at: proxy, includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey, .fileSizeKey])
+            var eligible = [URL](), bytes: Int64 = 0
+            for file in candidates {
+                let name = file.deletingPathExtension().lastPathComponent
+                guard file.pathExtension == "mp4", UUID(uuidString: name)?.uuidString.lowercased() == name,
+                      !references.contains("proxy/\(file.lastPathComponent)") else { continue }
+                let values = try file.resourceValues(forKeys: [.contentModificationDateKey, .isRegularFileKey, .fileSizeKey])
+                if values.isRegularFile == true, let date = values.contentModificationDate, now.timeIntervalSince(date) >= 86400 {
+                    eligible.append(file); bytes += Int64(values.fileSize ?? 0)
+                }
+            }
+            if remove { for file in eligible { try FileManager.default.removeItem(at: file) } }
+            return ["files": eligible.count, "bytes": bytes, "graceHours": 24, "removed": remove]
+        }
+    }
 }

@@ -225,9 +225,12 @@ class ProjectStore:
         source_store = source_store or self
         with self.lock:
             original = source_store.load(draft.projectId)
-            for field in ('source', 'proxy', 'createdAt'):
+            for field in ('source', 'createdAt'):
                 if getattr(original, field) != getattr(draft, field):
                     raise StorageError('Recovery cannot change imported media metadata')
+            # A regenerated preview is derived from the same immutable source.
+            # Resolve it here so stale drafts never authorize arbitrary asset paths.
+            draft = draft.model_copy(update={'proxy': original.proxy})
             source_store.validate_voiceovers(draft)
             old_folder = source_store.project_dir(draft.projectId)
             entries = manifest_assets(source_store, draft, proxy=True)

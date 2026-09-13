@@ -48,6 +48,24 @@ def ratio(value: object, default: float = 1) -> float:
         return default
 
 
+def hdr_side_data(video: dict[str, Any]) -> list[dict[str, Any]]:
+    """Preserve bounded native probe facts; the delivery policy uses a fixed peak.
+
+    Absence means the probe did not expose static metadata, not that the source
+    lacks HDR. The untouched source remains the authoritative bitstream.
+    """
+    result = []
+    for side in video.get('side_data_list', [])[:32]:
+        if not any(token in side.get('side_data_type', '').lower() for token in ('mastering', 'content light', 'dovi')):
+            continue
+        item = {str(key)[:100]: value for key, value in list(side.items())[:64]
+                if isinstance(value, (str, int, float, bool))
+                and (not isinstance(value, str) or len(value) <= 512)
+                and (not isinstance(value, float) or math.isfinite(value))}
+        result.append(item)
+    return result
+
+
 def parse_probe(data: dict[str, Any], asset: str, original_filename: str) -> Media:
     video = next((v for v in data.get('streams', []) if v.get('codec_type') == 'video'
                   and not v.get('disposition', {}).get('attached_pic')), None)
@@ -87,7 +105,8 @@ def parse_probe(data: dict[str, Any], asset: str, original_filename: str) -> Med
                      colorMatrix=video.get('color_space', 'unknown'), colorRange=video.get('color_range', 'unknown'),
                      dolbyVision=any('DOVI' in side.get('side_data_type', '') for side in video.get('side_data_list', [])),
                      averageFrameRateRational=video.get('avg_frame_rate', '0/0'),
-                     nominalFrameRateRational=video.get('r_frame_rate', '0/0'), timeBase=video.get('time_base', 'unknown'))
+                     nominalFrameRateRational=video.get('r_frame_rate', '0/0'), timeBase=video.get('time_base', 'unknown'),
+                     frameTimingInspection='stream-metadata', hdrMetadata={'provider': 'ffprobe', 'entries': hdr_side_data(video)})
     except (KeyError, TypeError, ValueError) as exc:
         raise MediaError('The video metadata is incomplete or invalid') from exc
 

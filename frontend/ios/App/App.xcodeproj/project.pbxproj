@@ -33,6 +33,17 @@
 		AE7B7702FDB3AC626938F495 = {isa = PBXBuildFile; fileRef = E844101F5F80837C9418E01C;};
 		EA818F39D15161682D8CE3A6 = {isa = PBXBuildFile; fileRef = 953EEBC42CDDB61A535324AE;};
 		028C1F41097071DDEB55A7F7 = {isa = PBXBuildFile; fileRef = C79F983F1064F0A52BAD2C31;};
+		071E4F326FF58E2C9A7043A2 = {isa = PBXBuildFile; productRef = B731938DAA243747390956C3;};
+		CF756B2876D37F4B8BB14D01 = {isa = PBXBuildFile; fileRef = C9EA53E37CEFD31D4FD2E55A;};
+		6CD98C3E0620E1FB602E664F = {isa = PBXBuildFile; fileRef = 65D45A5D9A23B84ABDE4DA5C;};
+		E85A3B241EE83DEC3FA1BA90 = {isa = PBXBuildFile; fileRef = 566D972D489435B6AB2DB02E;};
+		7E2A5A56FC45A0A602577F61 = {isa = PBXBuildFile; fileRef = 8F9A03B968D98F9B64D493EE;};
+		5715EDCC5112F33CC022E77E = {isa = PBXBuildFile; fileRef = 365DDA6A67754651C623496B;};
+		9E7C12F412DE8F0B499CFB9A = {isa = PBXBuildFile; fileRef = D2F40119B6AEE101CE409B21;};
+		77E5B3EF5BBC84654DC1E873 = {isa = PBXBuildFile; fileRef = E5F33159378A53B9F3E09AC3;};
+		FC0476D5980ED08D9851D024 = {isa = PBXBuildFile; fileRef = 0B40AB0179C695E4C83659CE;};
+		2D84DFA6B57353A8CFF30672 = {isa = PBXBuildFile; fileRef = ADD978D2E19741D762A3D9D2;};
+		B6B1128AA01C77E2EA35AA06 = {isa = PBXBuildFile; fileRef = C115D7A3EB2A3DD49BEF79F4;};
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -65,6 +76,16 @@
 		E844101F5F80837C9418E01C = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJProjectVersions.swift"; sourceTree = "<group>";};
 		953EEBC42CDDB61A535324AE = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJMediaJobs.swift"; sourceTree = "<group>";};
 		C79F983F1064F0A52BAD2C31 = {isa = PBXFileReference; lastKnownFileType = text.json; path = "../../../../tests/fixtures/hdr-conformance.json"; sourceTree = "<group>";};
+		C9EA53E37CEFD31D4FD2E55A = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJPackageArchive.swift"; sourceTree = "<group>";};
+		65D45A5D9A23B84ABDE4DA5C = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJPackageJSON.swift"; sourceTree = "<group>";};
+		566D972D489435B6AB2DB02E = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJProjectPackage.swift"; sourceTree = "<group>";};
+		8F9A03B968D98F9B64D493EE = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJPackageJobs.swift"; sourceTree = "<group>";};
+		365DDA6A67754651C623496B = {isa = PBXFileReference; lastKnownFileType = text.json; path = "../../../../tests/fixtures/package-conformance.json"; sourceTree = "<group>";};
+		D2F40119B6AEE101CE409B21 = {isa = PBXFileReference; lastKnownFileType = text.json; path = "../../../../tests/fixtures/media-timing-conformance.json"; sourceTree = "<group>";};
+		E5F33159378A53B9F3E09AC3 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJPackageArchive.swift"; sourceTree = "<group>";};
+		0B40AB0179C695E4C83659CE = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJPackageJSON.swift"; sourceTree = "<group>";};
+		ADD978D2E19741D762A3D9D2 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJPackageJobs.swift"; sourceTree = "<group>";};
+		C115D7A3EB2A3DD49BEF79F4 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJProjectPackage.swift"; sourceTree = "<group>";};
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -73,6 +94,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */,
+				071E4F326FF58E2C9A7043A2,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -102,7 +124,11 @@
 		504EC3061FED79650016851F /* App */ = {
 			isa = PBXGroup;
 			children = (
-				953EEBC42CDDB61A535324AE,
+				C115D7A3EB2A3DD49BEF79F4,
+				ADD978D2E19741D762A3D9D2,
+				0B40AB0179C695E4C83659CE,
+				E5F33159378A53B9F3E09AC3,
+				953EEBC42CDDB61A535324AE,8F9A03B968D98F9B64D493EE,566D972D489435B6AB2DB02E,65D45A5D9A23B84ABDE4DA5C,C9EA53E37CEFD31D4FD2E55A,
 				E844101F5F80837C9418E01C,
 				C3FB81060B2CE2326EB07B55,
 				DC533040243815D931B63128,
@@ -129,7 +155,7 @@
 			sourceTree = "<group>";
 		};
 		A5A37748E95AD12DB4552552 = {isa = PBXGroup; children = (
-				611409C32D2003589A19C233,94E7B890A3B96DEF8434ACC0, EAB160585DDCE994D316EA85,); path = AppTests; sourceTree = "<group>";};
+				611409C32D2003589A19C233,94E7B890A3B96DEF8434ACC0, EAB160585DDCE994D316EA85,C79F983F1064F0A52BAD2C31,365DDA6A67754651C623496B,D2F40119B6AEE101CE409B21,); path = AppTests; sourceTree = "<group>";};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -148,6 +174,7 @@
 			name = App;
 			packageProductDependencies = (
 				4D22ABE82AF431CB00220026 /* CapApp-SPM */,
+				B731938DAA243747390956C3,
 			);
 			productName = App;
 			productReference = 504EC3041FED79650016851F /* App.app */;
@@ -189,6 +216,7 @@
 			mainGroup = 504EC2FB1FED79650016851F;
 			packageReferences = (
 				D4C12C0A2AAA248700AAC8A2 /* XCLocalSwiftPackageReference "CapApp-SPM" */,
+				C58873755F442891AB1F56A9,
 			);
 			productRefGroup = 504EC3051FED79650016851F /* Products */;
 			projectDirPath = "";
@@ -216,7 +244,7 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		C07A97930E4E5BC84D76F326 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (
-				4F642E8E2EA8E79AF8A373DC,34C8798CFA7D90D784962368,028C1F41097071DDEB55A7F7,); runOnlyForDeploymentPostprocessing = 0;};
+				4F642E8E2EA8E79AF8A373DC,34C8798CFA7D90D784962368,028C1F41097071DDEB55A7F7,5715EDCC5112F33CC022E77E,9E7C12F412DE8F0B499CFB9A,); runOnlyForDeploymentPostprocessing = 0;};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -224,7 +252,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				EA818F39D15161682D8CE3A6,
+				B6B1128AA01C77E2EA35AA06,
+				2D84DFA6B57353A8CFF30672,
+				FC0476D5980ED08D9851D024,
+				77E5B3EF5BBC84654DC1E873,
+				EA818F39D15161682D8CE3A6,7E2A5A56FC45A0A602577F61,E85A3B241EE83DEC3FA1BA90,6CD98C3E0620E1FB602E664F,CF756B2876D37F4B8BB14D01,
 				AE7B7702FDB3AC626938F495,
 				091E37617DA55412397ACA97,
 				5D6D9A6272569E0B1BA92C42,
@@ -443,6 +475,10 @@
 		1EC52B6C10AE382DEF6395CC = {isa = XCConfigurationList; buildConfigurations = (AA447992491A6798B3293040, E9A60BD7052C95D485B99EC6,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;};
 /* End XCConfigurationList section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		C58873755F442891AB1F56A9 = {isa = XCRemoteSwiftPackageReference; repositoryURL = "https://github.com/weichsel/ZIPFoundation.git"; requirement = {kind = revision; revision = 22787ffb59de99e5dc1fbfe80b19c97a904ad48d;};};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCLocalSwiftPackageReference section */
 		D4C12C0A2AAA248700AAC8A2 /* XCLocalSwiftPackageReference "CapApp-SPM" */ = {
 			isa = XCLocalSwiftPackageReference;
@@ -456,6 +492,7 @@
 			package = D4C12C0A2AAA248700AAC8A2 /* XCLocalSwiftPackageReference "CapApp-SPM" */;
 			productName = "CapApp-SPM";
 		};
+		B731938DAA243747390956C3 = {isa = XCSwiftPackageProductDependency; package = C58873755F442891AB1F56A9; productName = ZIPFoundation;};
 /* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 504EC2FC1FED79650016851F /* Project object */;

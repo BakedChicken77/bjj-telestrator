@@ -28,6 +28,7 @@ struct BJJExportJob: Codable {
 @MainActor final class BJJService {
     let store: BJJStore
     let mediaJobs: BJJMediaJobs
+    let packageJobs: BJJPackageJobs
     private var jobs: [String: BJJExportJob] = [:]
     private var queue: [String] = []
     private var snapshots: [String: BJJProject] = [:]
@@ -42,10 +43,12 @@ struct BJJExportJob: Codable {
     init(store: BJJStore) throws {
         self.store = store
         self.mediaJobs = try BJJMediaJobs(store: store)
+        self.packageJobs = try BJJPackageJobs(store: store)
         mediaJobs.activityChanged = { [weak self] in
             guard let self else { return }
-            UIApplication.shared.isIdleTimerDisabled = activeJob != nil || mediaJobs.active
+            UIApplication.shared.isIdleTimerDisabled = activeJob != nil || mediaJobs.active || packageJobs.active
         }
+        packageJobs.activityChanged = mediaJobs.activityChanged
         let folders = try FileManager.default.contentsOfDirectory(at: store.root, includingPropertiesForKeys: nil)
         for folder in folders where UUID(uuidString: folder.lastPathComponent) != nil {
             if (try? folder.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == true { continue }
@@ -224,7 +227,7 @@ struct BJJExportJob: Codable {
                 if let temporary { try? FileManager.default.removeItem(at: temporary) }
                 renderer = nil; activeJob = nil; snapshots.removeValue(forKey: id)
                 reservations.removeValue(forKey: id); cancellations.removeValue(forKey: id); store.releaseLease(project.id)
-                UIApplication.shared.isIdleTimerDisabled = mediaJobs.active
+                UIApplication.shared.isIdleTimerDisabled = mediaJobs.active || packageJobs.active
                 endBackgroundTask(); startNext()
             }
             do {

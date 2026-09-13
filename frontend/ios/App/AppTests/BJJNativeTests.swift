@@ -12,6 +12,136 @@ import CryptoKit
         store = try BJJStore(root: root)
     }
     override func tearDownWithError() throws { try? FileManager.default.removeItem(at: root) }
+    func testHighFrameRateAndVariablePTSKeepSourceTime() async throws {
+        let fixture = try XCTUnwrap(Bundle(for: BJJNativeTests.self).url(forResource: "media-timing-conformance", withExtension: "json"))
+        for item in try store.readJSON(fixture)["cases"] as! [BJJJSON] {
+            let original = root.appendingPathComponent("\(item.s("name")).mp4")
+            try XCTUnwrap(Data(base64Encoded: item.s("movieBase64"))).write(to: original)
+            let media = try await BJJMedia.inspect(original, reference: "source/original.mp4", originalName: "original.mp4")
+            let reader = try AVAssetReader(asset: media.asset)
+            let samples = AVAssetReaderTrackOutput(track: media.video, outputSettings: nil)
+            samples.alwaysCopiesSampleData = false
+            XCTAssertTrue(reader.canAdd(samples)); reader.add(samples)
+            XCTAssertTrue(reader.startReading())
+            var timestamps = [Double]()
+            while let sample = samples.copyNextSampleBuffer() { timestamps.append(CMSampleBufferGetPresentationTimeStamp(sample).seconds) }
+            XCTAssertEqual(reader.status, .completed)
+            timestamps.sort()
+            let expected = (item["ptsTicks"] as! [NSNumber]).map { $0.doubleValue / item.n("timescale") }
+            XCTAssertEqual(timestamps.count, expected.count)
+            for (actual, expected) in zip(timestamps, expected) { XCTAssertEqual(actual, expected, accuracy: 0.000001) }
+            let imported = try await BJJService(store: store).importFile(original, originalName: "timing.mp4")
+            var document = imported.json; document["annotations"] = [annotation(start: 0.5, end: 1.5)]
+            let project = try store.save(BJJProject(document))
+            let output = root.appendingPathComponent("\(item.s("name"))-export.mp4")
+            try await BJJRenderer().render(media: media, project: project, store: store, output: output) { _ in }
+            for movie in [try store.asset(project.id, project.proxy.s("asset")), output] {
+                let result = try await BJJMedia.inspect(movie, reference: "proxy/result.mp4", originalName: "result.mp4")
+                XCTAssertEqual(result.fps, 30, accuracy: 0.001)
+                XCTAssertEqual(result.videoRange.duration.seconds, 2, accuracy: 0.1)
+                XCTAssertEqual(try dominantPixels(movie, time: 29.0 / 30, channel: 1), 0)
+                XCTAssertGreaterThan(try dominantPixels(movie, time: 1, channel: 1), 40000)
+            }
+            XCTAssertEqual(try redPixels(output, time: 14.0 / 30), 0)
+            XCTAssertGreaterThan(try redPixels(output, time: 0.5), 1500)
+            XCTAssertGreaterThan(try redPixels(output, time: 44.0 / 30), 1500)
+            XCTAssertEqual(try redPixels(output, time: 1.5), 0)
+            XCTAssertEqual(try BJJAssets.digest(store.asset(project.id, project.source.s("asset"))), item.s("sha256"))
+        }
+    }
+    func testPreviewCleanupRetainsReferencesGraceAndLeases() throws {
+        let project = try project()
+        let folder = try store.directory(project.id)
+        let stale = folder.appendingPathComponent("proxy/\(UUID().uuidString.lowercased()).mp4")
+        let pinned = folder.appendingPathComponent("proxy/\(UUID().uuidString.lowercased()).mp4")
+        let recent = folder.appendingPathComponent("proxy/\(UUID().uuidString.lowercased()).mp4")
+        for file in [stale, pinned, recent] { try Data([1, 2, 3]).write(to: file) }
+        for file in [stale, pinned] { try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSinceNow: -172800)], ofItemAtPath: file.path) }
+        try store.writeJSON(["version": 1, "retainedProxy": "proxy/\(pinned.lastPathComponent)"], to: folder.appendingPathComponent("retained.json"))
+        XCTAssertEqual(try BJJAssets.previewCleanup(store, id: project.id)["files"] as? Int, 1)
+        try store.acquireLease(project.id)
+        XCTAssertThrowsError(try BJJAssets.previewCleanup(store, id: project.id, revision: project.revision, remove: true))
+        store.releaseLease(project.id)
+        let result = try BJJAssets.previewCleanup(store, id: project.id, revision: project.revision, remove: true)
+        XCTAssertEqual(result["files"] as? Int, 1)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: stale.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: pinned.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: recent.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: try store.asset(project.id, project.source.s("asset")).path))
+        try Data("{broken".utf8).write(to: folder.appendingPathComponent("retained.json"))
+        XCTAssertThrowsError(try BJJAssets.previewCleanup(store, id: project.id, revision: project.revision, remove: true))
+    }
+    func testPackageQueuedCancellationAndInterruptedStagingRecovery() throws {
+        let jobs = try BJJPackageJobs(store: store)
+        let cancelled = UUID().uuidString.lowercased()
+        _ = try jobs.create(operation: "restore", requestId: cancelled)
+        XCTAssertEqual(try jobs.cancel(cancelled).s("status"), "cancelled")
+        XCTAssertEqual(try jobs.create(operation: "restore", requestId: cancelled).s("status"), "cancelled")
+        let pending = UUID().uuidString.lowercased()
+        _ = try jobs.create(operation: "restore", requestId: pending)
+        let partial = try jobs.path(pending, "staging")
+        try FileManager.default.createDirectory(at: partial, withIntermediateDirectories: false)
+        try Data([1, 2, 3]).write(to: partial.appendingPathComponent("uncommitted"))
+        let reopened = try BJJPackageJobs(store: store)
+        XCTAssertEqual(try reopened.get(pending).s("errorCode"), "PACKAGE_INTERRUPTED")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: partial.path))
+        XCTAssertEqual(try reopened.get(cancelled).s("status"), "cancelled")
+        try reopened.remove(pending)
+        XCTAssertThrowsError(try reopened.get(pending))
+        XCTAssertThrowsError(try reopened.path("../outside", "job.json"))
+    }
+    func testPortablePackageSharedFixturesAndNativeRoundTrip() async throws {
+        let fixture = try XCTUnwrap(Bundle(for: BJJNativeTests.self).url(forResource: "package-conformance", withExtension: "json"))
+        let value = try store.readJSON(fixture)
+        var exported = false
+        for item in value["cases"] as! [BJJJSON] {
+            let id = UUID().uuidString.lowercased()
+            let source = root.appendingPathComponent("\(id).bjjproj"), staging = root.appendingPathComponent("stage-\(id)")
+            try XCTUnwrap(Data(base64Encoded: item.s("archiveBase64"))).write(to: source)
+            if item["valid"] as! Bool {
+                let copy = try await BJJProjectPackage.restore(store, source: source, staging: staging, id: id, work: BJJPackageWork())
+                XCTAssertNotEqual(copy.id, "11111111-1111-4111-8111-111111111111")
+                XCTAssertEqual(copy.revision, 1)
+                XCTAssertEqual(copy.annotations[0].n("startSec"), 0.5)
+                XCTAssertEqual(copy.annotations[0].n("endSec"), 1.5)
+                XCTAssertEqual(copy.voiceovers[0].n("startSec"), 0.75)
+                XCTAssertEqual(copy.voiceovers[0].n("endSec"), 1)
+                XCTAssertEqual(try BJJAssets.digest(store.asset(copy.id, copy.source.s("asset"))), value.s("sourceSHA256"))
+                XCTAssertEqual(try BJJAssets.digest(store.asset(copy.id, copy.voiceovers[0].s("asset"))), value.s("voiceoverSHA256"))
+                if !exported {
+                    exported = true
+                    var edit = copy.json; edit["projectName"] = "Edited native restored review"
+                    let saved = try store.save(BJJProject(edit))
+                    let backup = root.appendingPathComponent("native-backup.bjjproj")
+                    try await BJJAssets.offMain { [store = self.store!] in
+                        try BJJProjectPackage.backup(store, project: saved, output: backup, includeProxy: false, work: BJJPackageWork())
+                    }
+                    let again = try await BJJProjectPackage.restore(store, source: backup, staging: root.appendingPathComponent("again"), id: UUID().uuidString.lowercased(), work: BJJPackageWork())
+                    XCTAssertNotEqual(again.annotations[0].s("id"), saved.annotations[0].s("id"))
+                    XCTAssertNotEqual(again.voiceovers[0].s("id"), saved.voiceovers[0].s("id"))
+                    let original = try store.asset(again.id, again.source.s("asset"))
+                    let media = try await BJJMedia.inspect(original, reference: again.source.s("asset"), originalName: "synthetic.mp4")
+                    let output = root.appendingPathComponent("package-export.mp4")
+                    try await BJJRenderer().render(media: media, project: again, store: store, output: output) { _ in }
+                    let inspected = try await BJJMedia.inspect(output, reference: "exports/output.mp4", originalName: "output.mp4")
+                    XCTAssertEqual(inspected.json.s("codec"), "avc1")
+                    XCTAssertEqual(inspected.json.s("audioCodec"), "aac")
+                    XCTAssertEqual(inspected.videoRange.duration.seconds, 2, accuracy: 0.1)
+                    XCTAssertEqual(try redPixels(output, time: 0.25), 0)
+                    XCTAssertGreaterThan(try redPixels(output, time: 0.5), 1500)
+                    XCTAssertEqual(try redPixels(output, time: 1.5), 0)
+                    XCTAssertEqual(try BJJAssets.digest(original), value.s("sourceSHA256"))
+                    print("P1.05 native portable round trip: H264/AAC 320x180 2s, bytes=\(try output.resourceValues(forKeys: [.fileSizeKey]).fileSize!), source_sha256=\(value.s("sourceSHA256"))")
+                }
+            } else {
+                do {
+                    _ = try await BJJProjectPackage.restore(store, source: source, staging: staging, id: id, work: BJJPackageWork())
+                    XCTFail("Accepted invalid package: \(item.s("name"))")
+                } catch { XCTAssertFalse(FileManager.default.fileExists(atPath: try store.directory(id).path), item.s("name")) }
+            }
+            XCTAssertFalse(FileManager.default.fileExists(atPath: staging.path), item.s("name"))
+        }
+    }
     func testRealPQAndHLGProduceSDRBeforeCompositing() async throws {
         let fixture = try XCTUnwrap(Bundle(for: BJJNativeTests.self).url(forResource: "hdr-conformance", withExtension: "json"))
         let cases = try store.readJSON(fixture)["cases"] as! [BJJJSON]
@@ -580,6 +710,9 @@ import CryptoKit
         return output
     }
     private func redPixels(_ url: URL, time: Double) throws -> Int {
+        try dominantPixels(url, time: time, channel: 0)
+    }
+    private func dominantPixels(_ url: URL, time: Double, channel: Int) throws -> Int {
         let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
         generator.appliesPreferredTrackTransform = true
         generator.requestedTimeToleranceBefore = .zero; generator.requestedTimeToleranceAfter = .zero
@@ -590,7 +723,7 @@ import CryptoKit
                 bytesPerRow: image.width * 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
             context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
             let pixels = bytes.bindMemory(to: UInt8.self)
-            return stride(from: 0, to: pixels.count, by: 4).filter { pixels[$0] > 180 && pixels[$0 + 1] < 80 && pixels[$0 + 2] < 80 }.count
+            return stride(from: 0, to: pixels.count, by: 4).filter { pixels[$0 + channel] > 180 && pixels[$0 + (channel + 1) % 3] < 80 && pixels[$0 + (channel + 2) % 3] < 80 }.count
         }
     }
     func testRealNativeMP4ExportBurnsTimedPixelsAndPreservesSourceAudio() async throws {

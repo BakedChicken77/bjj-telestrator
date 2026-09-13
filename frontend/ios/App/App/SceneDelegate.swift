@@ -11,10 +11,13 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         window?.rootViewController = BJJViewController()
         window?.makeKeyAndVisible()
 
+        if let url = connectionOptions.urlContexts.first?.url { BJJPackageInbox.receive(url) }
+
         SceneDelegateProxy.shared.scene(scene, willConnectTo: session, options: connectionOptions)
     }
 
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+        if let url = URLContexts.first?.url { BJJPackageInbox.receive(url) }
         SceneDelegateProxy.shared.scene(scene, openURLContexts: URLContexts)
     }
 

@@ -99,6 +99,19 @@ struct BJJMedia {
             throw BJJError.domain("MEDIA_UNSUPPORTED", "HDR needs valid Rec.2020 primaries and matrix metadata. Choose a complete original or an SDR copy.")
         }
         metadata["timeBase"] = "1/\(range.duration.timescale)"
+        metadata["frameTimingInspection"] = "nominal-track-metadata"
+        let minimumFrameDuration = try await video.load(.minFrameDuration)
+        if minimumFrameDuration.isNumeric && minimumFrameDuration.value > 0 {
+            metadata["nominalFrameRateRational"] = "\(minimumFrameDuration.timescale)/\(minimumFrameDuration.value)"
+        }
+        var staticHDR = [BJJJSON]()
+        for (key, value) in extensions {
+            guard let name = key as? String, name.contains("MasteringDisplay") || name.contains("ContentLight") else { continue }
+            if let data = value as? Data, data.count <= 4096 {
+                staticHDR.append(["kind": name, "encoding": "base64", "data": data.base64EncodedString()])
+            }
+        }
+        metadata["hdrMetadata"] = ["provider": "CoreMedia", "entries": staticHDR]
         return BJJMedia(asset: asset, video: video, videoRange: range, naturalSize: size,
                         orientedSize: oriented, transform: normalized, fps: fps, json: metadata)
     }
