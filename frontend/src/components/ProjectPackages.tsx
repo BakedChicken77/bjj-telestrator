@@ -16,7 +16,22 @@ const stages = {
 };
 export function PackageStatus({ controller }: { controller: PackageController }) {
   const { job, error } = controller;
-  if (!job) return error ? <p role="alert">{error}</p> : null;
+  if (!job)
+    return error || controller.pendingRequest ? (
+      <section className="package-status" aria-label="Project package status">
+        {error ? (
+          <p role="alert">{error}</p>
+        ) : (
+          <p role="status">Checking package request status…</p>
+        )}
+        {controller.pendingRequest && (
+          <>
+            <button onClick={controller.retry}>Retry package status</button>
+            <button onClick={controller.dismiss}>Dismiss package status</button>
+          </>
+        )}
+      </section>
+    ) : null;
   const done = ['completed', 'cancelled', 'failed'].includes(job.status);
   const label =
     job.status === 'cancelled'
@@ -114,7 +129,7 @@ export function ProjectPackages({
         creates an independent copy.
       </p>
       {project && (
-        <fieldset disabled={busy}>
+        <fieldset disabled={busy || controller.pendingRequest}>
           <legend>Back up {project.projectName}</legend>
           <label>
             <input
@@ -136,7 +151,10 @@ export function ProjectPackages({
         </fieldset>
       )}
       {isNativeIOS() ? (
-        <button disabled={busy} onClick={() => void controller.startRestore()}>
+        <button
+          disabled={busy || controller.pendingRequest}
+          onClick={() => void controller.startRestore()}
+        >
           Restore project from Files
         </button>
       ) : (
@@ -145,7 +163,7 @@ export function ProjectPackages({
           <input
             type="file"
             accept=".bjjproj,.zip,application/zip"
-            disabled={busy}
+            disabled={busy || controller.pendingRequest}
             onChange={(event) => {
               const file = event.target.files?.[0];
               event.target.value = '';
@@ -157,7 +175,10 @@ export function ProjectPackages({
       {controller.pending && (
         <div role="group" aria-label="Package opened from Files">
           <p>A project package was opened from Files.</p>
-          <button disabled={busy} onClick={() => void controller.startRestore(undefined, true)}>
+          <button
+            disabled={busy || controller.pendingRequest}
+            onClick={() => void controller.startRestore(undefined, true)}
+          >
             Restore opened package
           </button>
           <button disabled={busy} onClick={() => void controller.dismissPending()}>

@@ -7,6 +7,35 @@ import { fileURLToPath } from 'node:url';
 const { test, expect } = playwright;
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
+test('a lost backup acknowledgement recovers the same durable request without duplication', async ({ page }) => {
+  await page.goto('/');
+  await page.getByLabel('Import video', { exact: true }).setInputFiles(path.join(root, 'tests/generated/silent.mp4'));
+  await expect(page.locator('video')).toBeVisible();
+  await page.getByRole('button', { name: 'Projects', exact: true }).click();
+  let created = '', creates = 0, connected = false;
+  await page.route('**/api/package-jobs', async (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    creates++;
+    created = route.request().postDataJSON().requestId;
+    const accepted = await route.fetch();
+    expect(accepted.status()).toBe(202);
+    await route.abort('connectionreset'); // Real service accepted; only acknowledgement is lost.
+  });
+  await page.route(/\/api\/package-jobs\/[0-9a-f-]{36}$/, async (route) => {
+    if (!connected) return route.abort('connectionreset');
+    return route.continue();
+  });
+  await page.getByRole('button', { name: 'Back up editable project', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Retry package status', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Back up editable project', exact: true })).toBeDisabled();
+  expect(await page.evaluate(() => localStorage.getItem('bjj:packageJob'))).toBe(created);
+  connected = true;
+  await page.getByRole('button', { name: 'Retry package status', exact: true }).click();
+  await expect(page.getByRole('link', { name: 'Download editable backup', exact: true })).toBeVisible();
+  expect(creates).toBe(1);
+  expect((await (await page.request.get(`/api/package-jobs/${created}`)).json()).status).toBe('completed');
+});
+
 for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 844 }]) {
   test(`editable package and non-drag controls at ${viewport.width}px`, async ({ page }) => {
     await page.setViewportSize(viewport);

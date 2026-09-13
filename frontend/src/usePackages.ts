@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api, type PackageJob } from './api';
+import { api, type PackageJob, type PackageRequest } from './api';
 import type { Project } from './model';
 import { isNativeIOS, nativeBridge } from './native';
 
@@ -41,6 +41,7 @@ export function usePackages({
   const [pending, setPending] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const generation = useRef(0);
+  const starting = useRef(false);
   const callbacks = useRef({ onBusy, onLoad, onError, onNotice });
   useEffect(() => {
     callbacks.current = { onBusy, onLoad, onError, onNotice };
@@ -105,34 +106,55 @@ export function usePackages({
     };
   }, [enabled, id, refresh]);
 
+  async function createAndTrack(options: Omit<PackageRequest, 'requestId'>) {
+    const requestId = crypto.randomUUID();
+    // Remember before sending: the service may accept a request whose response
+    // is lost. Retry status against this ID instead of creating another job.
+    remember(key, requestId);
+    try {
+      const created = await api.createPackage({ ...options, requestId });
+      track(created);
+      return created;
+    } catch (cause) {
+      setId(requestId);
+      setJob(null);
+      setError(
+        'The package request outcome is unconfirmed. Check its status before starting another.',
+      );
+      setRefresh((value) => value + 1);
+      throw cause;
+    }
+  }
   async function startBackup(includeProxy: boolean) {
+    if (starting.current || (id && !job)) return;
+    starting.current = true;
     onBusy('Preparing editable backup…');
     onError(null);
     try {
       const saved = await flush();
       if (!saved) throw new Error('Open a saved project before making a backup.');
-      track(
-        await api.createPackage({
-          requestId: crypto.randomUUID(),
-          operation: 'backup',
-          projectId: saved.projectId,
-          expectedRevision: saved.revision,
-          includeProxy,
-        }),
-      );
+      await createAndTrack({
+        operation: 'backup',
+        projectId: saved.projectId,
+        expectedRevision: saved.revision,
+        includeProxy,
+      });
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : 'Backup could not start.');
       onBusy(null);
+    } finally {
+      starting.current = false;
     }
   }
   async function startRestore(file?: File, fromInbox = false) {
+    if (starting.current || (id && !job)) return;
+    starting.current = true;
     onBusy('Restoring editable project…');
     onError(null);
     let created: PackageJob | undefined;
     try {
       await flush();
-      created = await api.createPackage({ requestId: crypto.randomUUID(), operation: 'restore' });
-      track(created);
+      created = await createAndTrack({ operation: 'restore' });
       if (isNativeIOS()) {
         const result = await nativeBridge.importPackage({ jobId: created.jobId, fromInbox });
         if (fromInbox) setPending(false);
@@ -153,6 +175,8 @@ export function usePackages({
         }
       }
       onBusy(null);
+    } finally {
+      starting.current = false;
     }
   }
   async function cancel() {
@@ -221,6 +245,7 @@ export function usePackages({
     job,
     error,
     pending,
+    pendingRequest: !!id && !job,
     refresh,
     track,
     startBackup,
@@ -235,6 +260,7 @@ export function usePackages({
       remember(key, null);
       setId(null);
       setJob(null);
+      setError(null);
       onBusy(null);
     },
   };
