@@ -319,9 +319,9 @@ public class BJJNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDeleg
                         try BJJMediaWork.copy(url, target, store: store, work: worker)
                         Task { @MainActor in
                             guard let self else { call.reject("Import was interrupted.", "MEDIA_INTERRUPTED"); return }
-                            photoLoads.removeValue(forKey: jobId)
+                            self.photoLoads.removeValue(forKey: jobId)
                             do { call.resolve(["project": try await service.mediaJobs.finishImport(jobId, originalName: name).json]) }
-                            catch { importFailure(call, jobId: jobId, error: error) }
+                            catch { self.importFailure(call, jobId: jobId, error: error) }
                         }
                     } catch {
                         Task { @MainActor in
