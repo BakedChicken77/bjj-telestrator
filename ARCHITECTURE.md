@@ -22,7 +22,7 @@ The client separates persisted `Project` data, transient editor state (playhead,
 
 ## Import and proxy flow
 
-An uploaded multipart file is spooled and copied in bounded chunks to a generated UUID project/source path with a configured size limit. Filenames are sanitized for display and downloads. FFprobe reads JSON stream metadata: codecs, dimensions, aspect ratios, rotation, frame rate, duration and audio presence. The backend preserves the original bytes, then creates an H.264/AAC MP4 proxy. The initial import request completes when that proxy is ready; the interface shows an indeterminate import/transcode state.
+An uploaded multipart file is spooled and copied in bounded chunks to a generated UUID project/source path with a configured size limit. Filenames are sanitized for display and downloads. FFprobe reads JSON stream metadata: codecs, dimensions, aspect ratios, rotation, frame rate, duration and audio presence. The backend preserves the original bytes, then creates an H.264/AAC MP4 proxy. The legacy import request still completes when its proxy is ready. New clients first reserve a tracked import job, then stream the upload while polling stage/progress and cancellation separately.
 
 Proxies have square pixels and baked display orientation. This makes browser rendering independent of codec-specific rotation support. The browser receives media metadata and project-relative references, never absolute server paths. Byte-range media responses permit seeking without downloading the entire proxy.
 
@@ -44,7 +44,7 @@ Output is constant-frame-rate video at the selected export FPS, initially the so
 
 Every project owns a UUID directory beneath the data root. All asset paths are relative and checked for containment when resolved. `project.json` is validated and saved using a same-directory temporary file followed by atomic replacement. The client debounces edits and shows save progress/failure. A project browser lists persistent documents so reopening does not depend on browser-local project data.
 
-Undo and redo keep at most 100 in-memory project snapshots; undo history and selection are intentionally session-local. Source/proxy identity and metadata are server-owned and cannot be replaced by a client project edit. Completed exports are retained. Project deletion requires an explicit UI confirmation.
+Undo and redo keep at most 100 in-memory project snapshots; undo history and selection are intentionally session-local. Source/proxy identity and metadata are server-owned and cannot be replaced by a client project edit. An unchanged missing derived preview does not block saving pending edits; source and recording checks remain required. Only the repair service can replace a preview, after validating it and checking the current revision. Completed exports are retained. Project deletion requires an explicit UI confirmation.
 
 ## Export renderer
 
@@ -216,3 +216,42 @@ UUID-scoped action. Export recovery is scoped to the restored project and never
 reclassifies unrelated running jobs. No automatic trash expiry or recording GC is
 introduced. Native pending save transactions and pre-migration files stay inside
 the moved directory. These are local recovery mechanisms, not portable backups.
+
+
+## Observable media preparation (P1.04 work package)
+
+`MediaJobs` / `BJJMediaJobs` reuse the existing FFmpeg / AVFoundation pipeline.
+Version-1 operation records live in `media-jobs/`, separate from project history.
+The shared hook remembers only an operation UUID, resumes status polling after
+reload and uses the existing adapter for real cancel/repair calls. Stage changes
+are durable; bounded copy/encoder progress is runtime state. Upload transfer and
+Photos retrieval remain indeterminate until bytes are measurable. Each manager
+allows at most two outstanding operations and retains at most 256 records.
+Desktop encodes serially; native work is asynchronous. No new dependencies.
+
+Files copy in 1 MiB chunks with cancellation and space checks. Photos copies its
+provider URL directly into project-owned staging before the callback expires,
+avoiding a second full-size temporary copy or JavaScript media strings. Desktop
+FFprobe/FFmpeg are cancellable subprocesses with bounded progress buffering.
+Both services inspect source timing/orientation, prepare a maximum-1920 / up-to-30
+fps preview, probe codec/dimensions/duration/audio and recheck source SHA-256.
+Repair leases the project, checks source metadata and the authoritative revision,
+then installs a generated preview reference and atomic project revision. Previous
+previews, originals, recordings, checkpoints and immutable export inputs remain
+retained. Path/setup failures also release the lease. Clients cannot supply
+arbitrary paths or invoke the internal media-replacement save flag.
+
+Restart marks unfinished work interrupted and removes uncommitted import staging.
+An import whose project was atomically installed is recovered as complete. An
+interrupted repair may already have a valid committed replacement; its status can
+be failed if the terminal operation record was not written. Reopening always uses
+the authoritative document. Retrying safely restarts preparation; there is no
+checkpoint resume or guarantee of iOS execution after backgrounding/force-quit.
+
+The viewport URL includes the current proxy reference as a cache discriminator;
+autosave alone does not reload video. Completing repair reopens the saved project,
+with the existing new-session undo behavior. Source logical duration is retained
+independently of proxy frame rounding. Inspection retains reported color/rational
+metadata, but does not infer exact PTS or CFR from average frame rate. Desktop
+explicitly rejects known PQ/HLG/Dolby Vision at import and export; native HDR
+rejection remains. HDR-to-SDR conversion and phone footage acceptance are pending.

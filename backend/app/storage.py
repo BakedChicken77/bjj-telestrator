@@ -149,23 +149,28 @@ class ProjectStore:
             except (ValidationError, ValueError) as exc:
                 raise DomainError('PROJECT_CORRUPT', 'The project document is damaged.') from exc
 
-    def save(self, project: Project, *, existing: bool = True) -> Project:
+    def save(self, project: Project, *, existing: bool = True, replacing_proxy: bool = False) -> Project:
         with self.lock:
             folder = self.project_dir(project.projectId)
             if existing:
                 old = self.load(project.projectId)
-                if (old.source.model_dump() != project.source.model_dump()
-                        or old.proxy.model_dump() != project.proxy.model_dump()
-                        or old.createdAt != project.createdAt):
-                    raise StorageError('Source video, proxy metadata, and creation time cannot be changed')
                 if project.revision != old.revision:
                     raise conflict(old.revision)
+                if (old.source.model_dump() != project.source.model_dump()
+                        or (not replacing_proxy and old.proxy.model_dump() != project.proxy.model_dump())
+                        or old.createdAt != project.createdAt):
+                    raise StorageError('Source video, proxy metadata, and creation time cannot be changed')
                 if old.revision >= MAX_REVISION:
                     raise StorageError('The project revision limit was reached. Recover this review as a copy.')
             elif (folder / 'project.json').exists():
                 raise StorageError('This project already exists')
             for media in (project.source, project.proxy):
-                if not asset_path(folder, media.asset).is_file():
+                path = asset_path(folder, media.asset)
+                # An absent derived preview must not prevent saving the edits
+                # that repair will preserve. New/replacement previews stay required.
+                if media is project.proxy and existing and not replacing_proxy and not path.exists():
+                    continue
+                if not path.is_file():
                     raise StorageError('A required video asset is missing')
             self.validate_voiceovers(project)
             saved = project.model_copy(update={'updatedAt': utc_now(),

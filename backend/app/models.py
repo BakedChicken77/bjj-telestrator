@@ -147,6 +147,16 @@ Annotation = Annotated[Line | Arrow | Rectangle | Ellipse | Freehand | Text,
 
 
 class Media(Model):
+    # Missing inspection fields remain absent in older documents, preserving
+    # immutable metadata across load/save until media is explicitly inspected.
+    transferFunction: Annotated[str, Field(min_length=1, max_length=100)] | None = Field(default=None, exclude_if=lambda v: v is None)
+    colorPrimaries: Annotated[str, Field(min_length=1, max_length=100)] | None = Field(default=None, exclude_if=lambda v: v is None)
+    colorMatrix: Annotated[str, Field(min_length=1, max_length=100)] | None = Field(default=None, exclude_if=lambda v: v is None)
+    colorRange: Annotated[str, Field(min_length=1, max_length=100)] | None = Field(default=None, exclude_if=lambda v: v is None)
+    dolbyVision: bool | None = Field(default=None, exclude_if=lambda v: v is None, strict=True)
+    averageFrameRateRational: Annotated[str, Field(min_length=1, max_length=100)] | None = Field(default=None, exclude_if=lambda v: v is None)
+    nominalFrameRateRational: Annotated[str, Field(min_length=1, max_length=100)] | None = Field(default=None, exclude_if=lambda v: v is None)
+    timeBase: Annotated[str, Field(min_length=1, max_length=100)] | None = Field(default=None, exclude_if=lambda v: v is None)
     asset: str
     videoStartSec: float = 0
     videoStreamIndex: Annotated[int, Field(ge=0)] = 0

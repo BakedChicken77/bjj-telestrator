@@ -27,6 +27,7 @@ struct BJJExportJob: Codable {
 
 @MainActor final class BJJService {
     let store: BJJStore
+    let mediaJobs: BJJMediaJobs
     private var jobs: [String: BJJExportJob] = [:]
     private var queue: [String] = []
     private var snapshots: [String: BJJProject] = [:]
@@ -40,6 +41,11 @@ struct BJJExportJob: Codable {
 
     init(store: BJJStore) throws {
         self.store = store
+        self.mediaJobs = try BJJMediaJobs(store: store)
+        mediaJobs.activityChanged = { [weak self] in
+            guard let self else { return }
+            UIApplication.shared.isIdleTimerDisabled = activeJob != nil || mediaJobs.active
+        }
         let folders = try FileManager.default.contentsOfDirectory(at: store.root, includingPropertiesForKeys: nil)
         for folder in folders where UUID(uuidString: folder.lastPathComponent) != nil {
             if (try? folder.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == true { continue }
@@ -218,7 +224,7 @@ struct BJJExportJob: Codable {
                 if let temporary { try? FileManager.default.removeItem(at: temporary) }
                 renderer = nil; activeJob = nil; snapshots.removeValue(forKey: id)
                 reservations.removeValue(forKey: id); cancellations.removeValue(forKey: id); store.releaseLease(project.id)
-                UIApplication.shared.isIdleTimerDisabled = false
+                UIApplication.shared.isIdleTimerDisabled = mediaJobs.active
                 endBackgroundTask(); startNext()
             }
             do {
@@ -276,52 +282,6 @@ struct BJJExportJob: Codable {
         if background != .invalid { UIApplication.shared.endBackgroundTask(background); background = .invalid }
     }
     func importFile(_ input: URL, originalName: String) async throws -> BJJProject {
-        let size = try input.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
-        guard size > 0, size <= 4 * 1024 * 1024 * 1024 else { throw BJJError.invalid("Choose a nonempty video smaller than 4 GiB.") }
-        try store.checkSpace(required: (BJJAssets.estimate("import", output: 0, incoming: Int64(size))["requiredBytes"] as! NSNumber).int64Value)
-        let (id, folder) = try store.createDirectory()
-        do {
-            let ext = input.pathExtension.lowercased()
-            let safeExtension = ["mov", "mp4", "m4v"].contains(ext) ? ext : "mov"
-            let reference = "source/\(UUID().uuidString.lowercased()).\(safeExtension)"
-            let source = folder.appendingPathComponent(reference)
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                DispatchQueue.global(qos: .userInitiated).async {
-                    do { try FileManager.default.copyItem(at: input, to: source); continuation.resume() }
-                    catch { continuation.resume(throwing: error) }
-                }
-            }
-            let media = try await BJJMedia.inspect(source, reference: reference, originalName: originalName)
-            try store.checkSpace(required: (BJJAssets.proxyEstimate(media.videoRange.duration.seconds)["requiredBytes"] as! NSNumber).int64Value)
-            let proxyRef = "proxy/\(UUID().uuidString.lowercased()).mp4"
-            let proxy = folder.appendingPathComponent(proxyRef)
-            let encoder = BJJRenderer()
-            let token = UIApplication.shared.beginBackgroundTask(withName: "BJJ video import") { encoder.cancel() }
-            UIApplication.shared.isIdleTimerDisabled = true
-            defer {
-                if token != .invalid { UIApplication.shared.endBackgroundTask(token) }
-                UIApplication.shared.isIdleTimerDisabled = activeJob != nil
-            }
-            try await encoder.render(media: media, project: nil, store: store, output: proxy, proxy: true) { _ in }
-            let proxyMedia = try await BJJMedia.inspect(proxy, reference: proxyRef, originalName: originalName)
-            var proxyJSON = proxyMedia.json
-            // Logical media time always belongs to the source, independent of frame rounding.
-            proxyJSON["durationSec"] = media.videoRange.duration.seconds
-            let now = BJJProject.now()
-            let title = String(URL(fileURLWithPath: originalName).deletingPathExtension().lastPathComponent.prefix(160)).trimmingCharacters(in: .whitespacesAndNewlines)
-            let project = try BJJProject([
-                "schemaVersion": 1, "projectId": id,
-                "projectName": title.isEmpty ? "Rolling review" : title,
-                "createdAt": now, "updatedAt": now, "source": media.json, "proxy": proxyJSON,
-                "settings": ["defaultAnnotationDuration": 5.0, "seekStepSec": 0.1, "largeSeekStepSec": 1.0,
-                             "originalAudioGain": 1.0, "originalAudioMuted": false, "voiceoverMasterGain": 1.0],
-                "exportSettings": ["fps": min(60, media.fps), "crf": 23, "preset": "medium"],
-                "annotations": [BJJJSON](), "voiceovers": [BJJJSON]()
-            ])
-            return try store.save(project, creating: true)
-        } catch {
-            try? FileManager.default.removeItem(at: folder)
-            throw error
-        }
+        try await mediaJobs.importFile(input, originalName: originalName)
     }
 }

@@ -7,6 +7,10 @@ const harness = vi.hoisted(() => ({
     listProjects: vi.fn(),
     getProject: vi.fn(),
     importVideo: vi.fn(),
+    createImportJob: vi.fn(),
+    getMediaJob: vi.fn(),
+    cancelMediaJob: vi.fn(),
+    repairProxy: vi.fn(),
     saveProject: vi.fn(),
     deleteProject: vi.fn(),
     duplicateProject: vi.fn(),
@@ -123,6 +127,30 @@ describe('desktop / standalone iPhone API routing', () => {
       '/api/projects/example/voiceovers/clip/audio',
     );
     expect(harness.plugin.getAssetURL).not.toHaveBeenCalled();
+  });
+  it('routes tracked import, cancellation and repair through the native service', async () => {
+    harness.native = true;
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    const projectId = fixture().projectId;
+    const job = { jobId: 'media-job', projectId, status: 'queued' };
+    harness.plugin.createImportJob.mockResolvedValue({ job });
+    harness.plugin.getMediaJob.mockResolvedValue({ job });
+    harness.plugin.cancelMediaJob.mockResolvedValue({ job: { ...job, status: 'cancelled' } });
+    harness.plugin.repairProxy.mockResolvedValue({ job });
+    harness.plugin.importVideo.mockResolvedValue({ cancelled: true });
+    expect(await api.createImportJob()).toEqual(job);
+    expect(await nativeAPI.importVideo('photos', job.jobId)).toBeNull();
+    expect(harness.plugin.importVideo).toHaveBeenCalledWith({ source: 'photos', jobId: job.jobId });
+    expect(await api.mediaJob(job.jobId)).toEqual(job);
+    expect((await api.cancelMediaJob(job.jobId)).status).toBe('cancelled');
+    expect(await api.repairProxy(projectId, 7)).toEqual(job);
+    expect(harness.plugin.repairProxy).toHaveBeenCalledWith({ projectId, expectedRevision: 7 });
+    harness.plugin.getAssetURL.mockResolvedValue({
+      url: `capacitor://localhost/bjj-media/${projectId}/video.mp4`,
+    });
+    expect(await mediaURL(projectId, 'proxy/new.mp4')).toContain('?preview=proxy%2Fnew.mp4');
+    expect(fetch).not.toHaveBeenCalled();
   });
   it('loads and validates a native project without an HTTP server', async () => {
     harness.native = true;

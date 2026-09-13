@@ -28,12 +28,27 @@ The container listens on its own network interface; Compose publishes it only to
 
 ## Editing workflow
 
-1. Import a video and wait for its browser editing proxy to finish.
+1. Import a video. Follow Copying, Inspecting, Preparing preview and Validating; use **Cancel preparation** to stop. Wait until the video is ready.
 2. Seek to a coaching moment, select a tool, and draw on the picture. Drawing pauses playback.
 3. Select an object in the picture or its timeline row. Move or resize it, edit style in the inspector, and drag its timing bar or trim either edge.
 4. Preview by playing or scrubbing. Each annotation appears at its start and disappears exactly at its end.
 5. Wait for **Saved** before closing the browser. Reopen projects through the project browser.
 6. Export. The job runs on the backend; its progress, cancellation and download remain available independently of browser playback.
+
+If a preview is missing, damaged or no longer plays, open **Projects → Repair preview**.
+The app first saves pending edits, then rebuilds the preview from the retained
+original in the same project. Drawings, narration and source timing stay intact.
+The repaired project reopens with a new saved revision and a fresh undo session.
+Old previews remain retained; repair needs space for a replacement. Keep the app
+open during preparation. After an interruption, reopen to check its status and
+start the import or repair again if needed; this restarts preparation.
+
+Previews are SDR H.264/AAC, at most 1920 pixels on the long edge and 30 fps.
+They may omit frames from a faster original; step controls are time steps, not
+exact source-frame navigation. Export continues to use the original source.
+Known PQ/HLG/Dolby Vision inputs are rejected on desktop until HDR conversion is
+verified. Native PQ/HLG rejection remains in place. HEVC alone does not mean HDR.
+Choose a supported SDR recording; no broad HDR support is claimed.
 
 The desktop interface consists of a project/save/export top bar, annotation toolbar, central video stage and playback controls, properties inspector, and zoomable annotation timeline. It is designed for a 1280×720 or larger display.
 

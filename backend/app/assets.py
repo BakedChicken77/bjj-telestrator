@@ -63,7 +63,7 @@ def required_assets(project: Project, *, proxy: bool = False) -> dict[str, tuple
     return result
 
 
-def manifest_assets(store: ProjectStore, project: Project, *, proxy: bool = False) -> list[dict]:
+def manifest_assets(store: ProjectStore, project: Project, *, proxy: bool = False, cancel: threading.Event | None = None) -> list[dict]:
     """Hash changed/new files incrementally; never silently replace an old identity."""
     folder = store.project_dir(project.projectId)
     path, cache_path = asset_path(folder, 'assets.json'), asset_path(folder, 'assets.cache.json')
@@ -93,7 +93,7 @@ def manifest_assets(store: ProjectStore, project: Project, *, proxy: bool = Fals
             if old and cache.get(reference) == stamp:
                 entry = old
             else:
-                digest = digest_file(file)
+                digest = digest_file(file, cancel) if cancel else digest_file(file)
                 if stamp != fingerprint(file):
                     raise DomainError('ASSET_CHANGED', 'A media file changed while it was being checked. Retry after restoring the original.')
                 if old and (old['sha256'] != digest or old['byteSize'] != file.stat().st_size):

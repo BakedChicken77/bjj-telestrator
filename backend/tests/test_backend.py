@@ -109,6 +109,7 @@ def test_sanitization_atomic_storage_and_restart(tmp_path: Path) -> None:
     assert saved.projectName == 'Saved name'
     assert ProjectStore(tmp_path).load(project.projectId).projectName == 'Saved name'
     assert not list(store.project_dir(project.projectId).glob('*.tmp'))
+    project = saved  # Exercise metadata validation against the current revision.
     project.source.asset = 'source/other.mp4'
     with pytest.raises(StorageError, match='cannot be changed'):
         store.save(project)

@@ -8,11 +8,16 @@ import type {
   ProjectSummary,
   ProjectStorage,
   RuntimeCapabilities,
+  MediaJob,
 } from './api';
 import type { Draft } from './project/saveSession';
 
 /** JSON crosses this bridge; video and microphone bytes stay in the iOS sandbox. */
 export interface BJJNativePlugin {
+  createImportJob(): Promise<{ job: MediaJob }>;
+  getMediaJob(options: { jobId: string }): Promise<{ job: MediaJob }>;
+  cancelMediaJob(options: { jobId: string }): Promise<{ job: MediaJob }>;
+  repairProxy(options: { projectId: string; expectedRevision: number }): Promise<{ job: MediaJob }>;
   getCapabilities(): Promise<RuntimeCapabilities>;
   recoverProjectCopy(options: { project: Project }): Promise<{ project: unknown }>;
   writeRecoveryDraft(options: { draft: Draft }): Promise<void>;
@@ -27,6 +32,7 @@ export interface BJJNativePlugin {
   getProject(options: { projectId: string }): Promise<{ project: unknown }>;
   importVideo(options: {
     source: 'photos' | 'files';
+    jobId?: string;
   }): Promise<{ project?: unknown; cancelled?: boolean }>;
   saveProject(options: {
     project: Project;
@@ -105,10 +111,12 @@ async function nativeAsset(
   return pending;
 }
 
-export const mediaURL = (projectId: string) =>
-  isNativeIOS()
-    ? nativeAsset(projectId, 'video')
-    : Promise.resolve(`/api/projects/${projectId}/video`);
+export const mediaURL = async (projectId: string, proxyReference?: string) => {
+  const url = isNativeIOS()
+    ? await nativeAsset(projectId, 'video')
+    : `/api/projects/${projectId}/video`;
+  return proxyReference ? `${url}?preview=${encodeURIComponent(proxyReference)}` : url;
+};
 
 export const voiceoverURL = (projectId: string, clipId: string) =>
   isNativeIOS()
@@ -116,14 +124,19 @@ export const voiceoverURL = (projectId: string, clipId: string) =>
     : Promise.resolve(`/api/projects/${projectId}/voiceovers/${clipId}/audio`);
 
 export const nativeAPI = {
+  createImportJob: async () => (await nativeBridge.createImportJob()).job,
+  mediaJob: async (jobId: string) => (await nativeBridge.getMediaJob({ jobId })).job,
+  cancelMediaJob: async (jobId: string) => (await nativeBridge.cancelMediaJob({ jobId })).job,
+  repairProxy: async (projectId: string, expectedRevision: number) =>
+    (await nativeBridge.repairProxy({ projectId, expectedRevision })).job,
   capabilities: () => nativeBridge.getCapabilities(),
   recoverCopy: async (project: Project) =>
     readProject((await nativeBridge.recoverProjectCopy({ project })).project),
   projects: async () => (await nativeBridge.listProjects()).projects,
   project: async (projectId: string) =>
     readProject((await nativeBridge.getProject({ projectId })).project),
-  importVideo: async (source: 'photos' | 'files'): Promise<Project | null> => {
-    const result = await nativeBridge.importVideo({ source });
+  importVideo: async (source: 'photos' | 'files', jobId?: string): Promise<Project | null> => {
+    const result = await nativeBridge.importVideo({ source, ...(jobId ? { jobId } : {}) });
     return result.cancelled ? null : projectSchema.parse(result.project);
   },
   save: async (project: Project) =>

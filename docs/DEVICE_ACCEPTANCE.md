@@ -1,9 +1,9 @@
 # Candidate-specific Windows and iPhone acceptance — P1.01
 
 Status: device/staging verification pending. No signed installation or physical
-phone has been accessed during this work. The P1.06 recovery candidate
-`33be6315eb4fdee79ac7fe5d973292bfc09b182f` passed all 22 native XCTest cases and
-an unsigned archive in [CI](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34727786132). That result does not prove installability. Use the exact subsequent signed candidate for every result below.
+phone has been accessed during this work. The P1.04 import/repair candidate
+`34fa4f206615d3d1da2449d3db93c552b5beae17` passed all 25 native XCTest cases and
+an unsigned archive in [CI](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34753579589). That result does not prove installability. Use the exact subsequent signed candidate for every result below.
 
 ## Signed pilot from Windows
 
@@ -53,10 +53,44 @@ an unsigned archive in [CI](https://github.com/BakedChicken77/bjj-telestrator/ac
 | Draft recovery / checkpoints / independent copy / deleted-project restore | Pending |
 | Interruption / low-space / retained export retry results | Pending |
 | Files / Photos / ordinary receiving app | Pending |
+| Import stages / cancel / same-project preview repair / source hash | Pending |
 | Keyboard / VoiceOver / large text / orientation | Pending |
 | Windows 11 / Docker versions and fresh result | Pending |
 | Failures, limitations, tester, date, evidence location | Pending |
 | Decision: accepted / device verification pending | Pending |
+
+## Import and repair acceptance — P1.04
+
+Run on disposable generated or consented SDR media first. Record the exact
+candidate SHA/build and the input file selected from each picker.
+
+1. Import from Files, then Photos. Record copy/inspection/preview/validation
+   stages and elapsed time. System Photos retrieval may be indeterminate.
+2. Cancel a large copy and then a preview encode; confirm a cancelled outcome,
+   preserved existing projects and successful retry. Reopen after interruption
+   during each stage; incomplete work must not appear as a completed project.
+3. Add the timed cues from the 20-second scenario and a narration take. Save and
+   checkpoint the review. Use Projects → Repair preview, confirm the same project
+   reopens with the same cues/narration and a new saved revision, then edit/export.
+   Verify an ordinary MP4 around all cue/audio boundaries and source SHA-256 using
+   the authorized device test harness. Record preview and final dimensions/rate.
+4. Repeat repair after a derived-preview failure on a generated test project;
+   preserve the source. Pending edits must save before repair. Cancel a repair and
+   verify the previous durable project; no source or narration may be removed.
+5. Test a second-session save conflict where available, insufficient space,
+   background/lock/expiration, relaunch and retry. Do not fill storage containing
+   irreplaceable unbacked-up media. Record actual failure codes and remaining space.
+6. Compare an original high-speed file with a Photos-rendered slow-motion asset.
+   Record which representation was selected, source duration/rate and observed
+   timing. A 30 fps preview is not every source frame; do not label time stepping
+   exact. Run real VFR and HDR cases only as explicit pending format acceptance;
+   the current candidate does not provide HDR conversion.
+7. With VoiceOver and large text, reach stage/status/cancel/repair, cancel without
+   a drag gesture, and verify that progress does not cause per-frame announcements.
+   Repeat in portrait/landscape and at 1280×720 on Windows/Docker.
+
+All results above are **device/staging verification pending**. Automated browser
+and simulator evidence does not mark these hardware checks passed.
 
 ## Release evidence binding
 
@@ -74,5 +108,5 @@ changed by this implementation.
 
 Keep the last working source/build and untouched pre-migration JSON. Preserve the
 entire newer project and media first; recover the older document in a separate
-copy. An older binary cannot read schema 2. Do not replace newer JSON to simulate
+copy. A schema-1 binary cannot read schema 2. Do not replace newer JSON to simulate
 lossless downgrade, delete source files, or uninstall the phone app as rollback.

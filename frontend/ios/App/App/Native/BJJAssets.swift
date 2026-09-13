@@ -57,7 +57,7 @@ enum BJJAssets {
         }
         return result
     }
-    static func manifest(_ store: BJJStore, _ project: BJJProject, proxy: Bool = false) throws -> [BJJJSON] {
+    static func manifest(_ store: BJJStore, _ project: BJJProject, proxy: Bool = false, cancellation: BJJJobCancellation? = nil) throws -> [BJJJSON] {
         store.assetLock.lock(); defer { store.assetLock.unlock() }
         let path = try store.safeURL(project.id, "assets.json"), cachePath = try store.safeURL(project.id, "assets.cache.json")
         var existing: [String: BJJJSON] = [:]
@@ -78,7 +78,7 @@ enum BJJAssets {
             if let old, (cache[reference] as? [String]) == stamp {
                 result.append(old); continue
             }
-            let digest = try digest(url), size = Int64(stamp[0]) ?? 0
+            let digest = try digest(url, cancellation: cancellation), size = Int64(stamp[0]) ?? 0
             guard try stamp == fingerprint(url) else { throw BJJError.domain("ASSET_CHANGED", "A media file changed while it was checked. Restore its original and retry.") }
             if let old, old["sha256"] as? String != digest || (old["byteSize"] as? NSNumber)?.int64Value != size {
                 throw BJJError.domain("ASSET_CHANGED", "A retained media asset has changed. Restore its original file before exporting.")

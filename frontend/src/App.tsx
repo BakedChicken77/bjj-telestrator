@@ -1,4 +1,6 @@
 import { ProjectVersions } from './components/ProjectVersions';
+import { MediaPreparation } from './components/MediaPreparation';
+import { useMediaPreparation } from './useMediaPreparation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, type ExportJob, type ProjectSummary } from './api';
 import { ProjectStorage } from './components/ProjectStorage';
@@ -142,6 +144,8 @@ export default function App() {
   const [exporting, setExporting] = useState(false);
   const [storageTools, setStorageTools] = useState(false);
   const [recoveryTools, setRecoveryTools] = useState(false);
+  const [mediaTools, setMediaTools] = useState(false);
+  const [workspaceReady, setWorkspaceReady] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [mobilePanel, setMobilePanel] = useState<'timeline' | 'properties'>('timeline');
   const {
@@ -163,12 +167,21 @@ export default function App() {
     setError(null);
     setJobs([]);
   }, []);
+  const media = useMediaPreparation({
+    enabled: mediaTools && workspaceReady,
+    flush,
+    onLoad: loadProject,
+    onBusy: setBusy,
+    onError: setError,
+    onNotice: setNotice,
+  });
 
   useEffect(() => {
     let cancelled = false;
     async function start() {
       try {
         const capabilities = await api.capabilities();
+        setMediaTools(!!(capabilities.mediaJobs && capabilities.proxyRepair));
         setRecoveryTools(
           !!(
             capabilities.projectCheckpoints &&
@@ -205,7 +218,10 @@ export default function App() {
           setBrowserOpen(true);
         }
       } finally {
-        if (!cancelled) setBusy(null);
+        if (!cancelled) {
+          setBusy(null);
+          setWorkspaceReady(true);
+        }
       }
     }
     void start();
@@ -308,6 +324,10 @@ export default function App() {
 
   async function importFile(file: File | undefined) {
     if (!file) return;
+    if (mediaTools) {
+      await media.start(file);
+      return;
+    }
     setBusy('Importing video and preparing the editing proxy…');
     setError(null);
     try {
@@ -321,6 +341,10 @@ export default function App() {
   }
 
   async function importOnPhone(source: 'photos' | 'files') {
+    if (mediaTools) {
+      await media.start(undefined, source);
+      return;
+    }
     setBusy('Choosing and preparing your video…');
     setError(null);
     try {
@@ -631,6 +655,20 @@ export default function App() {
                 onNotice={setNotice}
               />
             )}
+            {mediaTools && project && (
+              <div className="preview-repair">
+                <button
+                  disabled={!!busy || recording}
+                  onClick={() => void media.start(undefined, undefined, true)}
+                >
+                  Repair preview
+                </button>
+                <small>
+                  Regenerate this review’s preview from its original, preserving drawings and
+                  narration.
+                </small>
+              </div>
+            )}
             <div className="project-list">
               {projects.length === 0 ? (
                 <div className="empty-projects">
@@ -709,7 +747,15 @@ export default function App() {
                 ))
               )}
             </div>
-            {busy && (
+            {media.job && (
+              <MediaPreparation
+                job={media.job}
+                error={media.statusError}
+                onCancel={() => void media.cancel()}
+                onDismiss={media.dismiss}
+              />
+            )}
+            {busy && !media.job && (
               <div className="import-status" role="status">
                 <span className="spinner" />
                 {busy}
@@ -920,7 +966,17 @@ export default function App() {
           </section>
         </div>
       )}
-      {busy && !browserOpen && (
+      {media.job && !browserOpen && (
+        <div className="media-preparation-toast">
+          <MediaPreparation
+            job={media.job}
+            error={media.statusError}
+            onCancel={() => void media.cancel()}
+            onDismiss={media.dismiss}
+          />
+        </div>
+      )}
+      {busy && !browserOpen && !media.job && (
         <div className="loading-toast" role="status">
           <span className="spinner" />
           {busy}

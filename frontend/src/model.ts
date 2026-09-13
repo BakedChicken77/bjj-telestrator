@@ -46,6 +46,14 @@ export const mediaSchema = z
     displayAspectRatio: z.string(),
     rotation: number,
     avgFrameRate: number.positive().max(1000),
+    transferFunction: z.string().min(1).max(100).nullable().optional(),
+    colorPrimaries: z.string().min(1).max(100).nullable().optional(),
+    colorMatrix: z.string().min(1).max(100).nullable().optional(),
+    colorRange: z.string().min(1).max(100).nullable().optional(),
+    dolbyVision: z.boolean().nullable().optional(),
+    averageFrameRateRational: z.string().min(1).max(100).nullable().optional(),
+    nominalFrameRateRational: z.string().min(1).max(100).nullable().optional(),
+    timeBase: z.string().min(1).max(100).nullable().optional(),
   })
   .passthrough();
 

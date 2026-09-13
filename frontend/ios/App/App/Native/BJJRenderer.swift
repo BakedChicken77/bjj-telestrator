@@ -58,7 +58,7 @@ struct BJJMedia {
             let descriptions = try await first.load(.formatDescriptions)
             if let description = descriptions.first { audioCodec = audioCodecName(CMFormatDescriptionGetMediaSubType(description)) }
         }
-        let metadata: BJJJSON = [
+        var metadata: BJJJSON = [
             "asset": reference, "originalFilename": String(originalName.prefix(240)),
             "durationSec": seconds, "codec": fourCC(CMFormatDescriptionGetMediaSubType(format)),
             "audioCodec": audioCodec, "hasAudio": !audio.isEmpty,
@@ -69,6 +69,13 @@ struct BJJMedia {
             "rotation": angle, "avgFrameRate": fps,
             "videoStartSec": range.start.seconds, "nativeEngine": "AVFoundation"
         ]
+        metadata["transferFunction"] = extensions[kCMFormatDescriptionExtension_TransferFunction] as? String ?? "unknown"
+        metadata["colorPrimaries"] = extensions[kCMFormatDescriptionExtension_ColorPrimaries] as? String ?? "unknown"
+        metadata["colorMatrix"] = extensions[kCMFormatDescriptionExtension_YCbCrMatrix] as? String ?? "unknown"
+        // Absence of range/timestamp-index evidence is explicit. Nominal frame
+        // rate is not a per-frame PTS index and cannot prove constant frame rate.
+        metadata["colorRange"] = "unknown"
+        metadata["timeBase"] = "1/\(range.duration.timescale)"
         return BJJMedia(asset: asset, video: video, videoRange: range, naturalSize: size,
                         orientedSize: oriented, transform: normalized, fps: fps, json: metadata)
     }

@@ -13,7 +13,7 @@
 | `projectName` | Editable display/export name. |
 | `createdAt`, `updatedAt` | ISO-8601 timestamps. |
 | `source` | Immutable original-media metadata and project-relative asset reference. |
-| `proxy` | Immutable browser editing-media metadata and relative asset reference. |
+| `proxy` | Service-owned editing-media metadata and relative asset reference; only validated repair may replace it. |
 | `settings` | Default annotation duration, keyboard seek steps and audio controls. |
 | `exportSettings` | Output frame rate, H.264 CRF and CPU encoding preset. |
 | `annotations` | Discriminated union of timed visual objects. |
@@ -238,3 +238,42 @@ clients cannot submit paths. Recovery errors retain files and use typed conflict
 asset/storage or `RECOVERY_INVALID`/`RECOVERY_LIMIT` codes. Old binaries do not know
 these sidecars: preserve the complete new directory before any rollback and use a
 separate prior copy; never remove new versions to simulate a downgrade.
+
+
+### Media inspection and preparation records (P1.04)
+
+Schema stays at 2. Optional media strings are `transferFunction`, `colorPrimaries`,
+`colorMatrix`, `colorRange`, `averageFrameRateRational`, `nominalFrameRateRational`
+and `timeBase`; each is absent/null or 1–100 characters. `dolbyVision` is an
+optional strict Boolean. The 26-case TypeScript/Python/Swift corpus covers these
+fields in addition to prior migration/capability rules. No new required rendering
+capability is introduced. Unknown optional fields continue to round-trip.
+
+These are reported immutable inspection facts, not editable delivery intent.
+FFprobe strings use its metadata names; AVFoundation retains its reported color
+identifiers and uses `unknown` when range is unavailable. Missing color metadata
+is not proof of SDR. Native does not fabricate an exact rational frame rate from
+its floating nominal rate. `timeBase` describes the inspected track; these fields
+are not a presentation-timestamp index and cannot establish exact VFR stepping.
+
+Runtime `mediaJobs` / `proxyRepair` report support; `hdrToSdr` remains false.
+Desktop reserves with `POST /api/import-jobs`, attaches `X-BJJ-Import-ID` to the
+existing import request, polls `GET /api/media-jobs/{id}` and cancels with DELETE.
+`POST /api/projects/{id}/proxy-jobs` requires `If-Match` and returns 202. Native
+uses `createImportJob`, `getMediaJob`, `cancelMediaJob` and `repairProxy`, with
+`jobId` on `importVideo` and `expectedRevision` on repair. Asset resolution remains
+service-owned. Duplicate or cancelled reservations cannot start a second import.
+
+Operation sidecar: `{version: 1, job: ...}` with UUID `jobId`/`projectId`, operation
+`import|repair`, status `queued|running|completed|failed|cancelled`, stage
+`copying|inspecting|preparing_preview|validating|ready`, optional bounded progress,
+byte counts, cancel request, domain error and completed `projectRevision`.
+Terminal records are bounded by retention, not embedded in undo snapshots.
+Repair changes only proxy metadata plus the storage revision/update timestamp;
+source, annotation intervals and narration placement are not redefined. Source
+and recordings are required for saves; an unchanged absent derived preview may be
+saved so pending edits survive repair. Creation/replacement requires its preview.
+Rollback to the preceding schema-2 build retains originals and project JSON;
+keep a whole-project copy before switching binaries. Do not uninstall the phone
+app. The previous binary lacks preparation controls and does not understand these
+operation records, but the additive media fields do not alter rendering semantics.

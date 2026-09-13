@@ -1124,6 +1124,37 @@ progress::-webkit-progress-value {
   margin: 0.25rem 0.5rem 0.25rem 0;
 }
 
+.media-preparation,
+.preview-repair {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: center;
+  padding: 0.8rem;
+  border: 1px solid currentColor;
+  border-radius: 0.5rem;
+  margin-block: 0.8rem;
+}
+.media-preparation p {
+  flex-basis: 100%;
+  margin: 0;
+}
+.media-preparation progress {
+  min-width: 8rem;
+  flex: 1;
+}
+.media-preparation button,
+.preview-repair button {
+  min-height: 44px;
+}
+.media-preparation-toast {
+  position: fixed;
+  z-index: 60;
+  bottom: 1rem;
+  right: 1rem;
+  width: min(34rem, calc(100vw - 2rem));
+  background: #18212f;
+}
 .project-versions {
   margin: 1rem 0;
 }

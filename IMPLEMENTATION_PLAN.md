@@ -21,7 +21,8 @@ is authorized by mentioning those modules.
 | P1.03 | automatically verified | Local and native CI recovery/revision tests pass. Physical interruption, storage failure and VoiceOver acceptance remain pending. |
 | P1.06 — storage/export slice | automatically verified | All CI gates passed at 04b03a8 in run 34725049253, including 18 native tests and unsigned archive. Physical gates remain pending. |
 | P1.06 — project recovery | automatically verified | All six CI gates passed at 33be631 in run 34727786132, including 22 native tests, actual MP4 recovery/retry and the unsigned archive. Device gates remain pending; broad media GC remains conservative retention. |
-| P1.04–P1.05, P1.07–P1.08 | not started | Continue after the P1.06 storage/reference foundations. |
+| P1.04 — import/repair slice | automatically verified | All six CI gates passed at 34fa4f2, including 25 native tests and the unsigned archive. HDR conversion and physical phone-media acceptance remain open. |
+| P1.05, P1.07–P1.08 | not started | Continue after the P1.04 media contract and remaining package prerequisites. |
 | P2.01–P2.08 | not started | Follow Phase 1 save/media/asset contracts and the brief's batch order. |
 | P3.01–P3.07 | not started | Requires Phase 2 transport/timeline/export contracts. |
 | P4.01–P4.06 | not started | Requires explicit review composition; no source-time reinterpretation. |
@@ -138,6 +139,35 @@ subprocess is currently blocking, so observable import/repair needs a real track
 operation with cancellation, using the storage estimates and immutable source ID
 already established. No HDR support or proxy repair is claimed by this package.
 
+
+### Current work package — P1.04 observable import and proxy repair
+
+Starting commit: `57af80a4d78242e1f691a5cf6b05ae696e907d78`; isolated branch
+`codex/p1-media-jobs`, stacked on draft PR #10. Every gate passed for the starting
+commit in CI run 34728175000. The fresh local non-browser baseline also passed
+139 backend, 92 frontend and 12 repository tests plus lint/type/build/format.
+
+Selected scope: real tracked import stages/cancellation, bounded SDR preview
+preparation, and revision-checked proxy repair on desktop and native iOS. Keep
+the legacy import response compatible. Prepare a new preview at a generated path,
+validate timing/orientation/audio and source identity, then atomically switch the
+project metadata. Preserve annotations, narration, originals and previous proxies.
+Do not allow autosave clients to replace immutable media metadata. Repair changes
+the authoritative revision; a stale concurrent edit remains a recoverable conflict.
+
+HDR conversion is a separate fixture-based spike and remains an explicit open
+P1.04 gate; native rejection stays until preview and both export conversions pass.
+Physical Photos/Files, cancellation/background and real phone-media acceptance
+remain pending. Status: automatically verified for this slice. Local gates pass
+153 backend, 97 frontend, 12 repository and 16 browser tests. All six CI gates
+passed at `34fa4f2` in [34753579589](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34753579589), including 25 native tests and the unsigned archive.
+The final wrong-operation upload guard passed all ten focused media cases; full
+current-head CI is recorded on [draft PR #11](https://github.com/BakedChicken77/bjj-telestrator/pull/11).
+The completion record, interfaces, retention/rollback and numerical MP4 evidence
+are in [media preparation verification](docs/p1-media-preparation-verification.json). A missing derived preview
+cannot block saving pending edits; creation and replacement still require media.
+Repair opens a fresh undo session. The original source and all old proxies remain
+retained. The complete phase is not yet accepted.
 
 ## Historical delivery records
 

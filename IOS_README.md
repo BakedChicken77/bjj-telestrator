@@ -34,13 +34,26 @@ If you only have Windows, follow [GitHub setup](docs/GITHUB_SETUP.md). The inclu
 ## On-phone workflow
 
 1. In Projects, select **Photos** or **Files**. Choose an SDR MP4/MOV recording. The system Photos picker grants access only to the selected item; the app does not scan the photo library. If an original exists only in iCloud, the system may need to download it first.
-2. Leave the app open while it copies the original and generates an editing proxy. The imported original is preserved byte-for-byte. A proxy may take time for long footage.
+2. Follow Copying, Inspecting, Preparing preview and Validating. **Cancel preparation** stops copying or encoding and removes incomplete staging. Leave the app open while preparing long footage. The selected original is preserved byte-for-byte; Photos may first need to retrieve its file.
 3. Scrub to a moment, choose a tool, then drag one finger on the video picture. The toolbar scrolls sideways to expose all tools, undo, redo, and delete. A second touch does not take over a drawing gesture.
 4. Use **Timeline** for selection, time shifting, edge trimming, and zoom. Use **Properties & settings** for precise time values, text, colors, width, opacity, layer order, and project defaults. Portrait and landscape layouts share the same normalized geometry.
 5. Wait for **Saved** before closing the app. Projects reopen from the Projects button. Undo/redo history is local to the current editing session.
 6. Press **Record voiceover**, allow microphone permission, and speak as the video advances. Press Stop to save. A pause, seek attempt, buffering, backgrounding, or audio interruption ends the take to preserve its linear timeline. Reposition and record again for another take. Headphones reduce speaker feedback into the recording.
 7. Open **Audio & voiceovers** to adjust original audio, clip/master gain, mute, clip position, or timing nudge. Delete/rerecord as needed. Deleted clips remain available for undo until the project is deleted.
 8. **Export MP4 → Render MP4** renders on the phone. Keep BJJ Telestrator in the foreground and allow storage/CPU time. Progress, cancellation, and errors are shown. After completion, **Save or share MP4** opens the iOS share sheet; choose Save to Files, Save Video if offered, AirDrop, or another installed recipient app. Sharing occurs only when you choose it. Play the resulting MP4 outside BJJ Telestrator to confirm the burned-in annotations and audio.
+
+For a missing or damaged editing video, use **Projects → Repair preview**. This
+saves pending edits, prepares and validates a replacement from the same original,
+then reopens the review at a new revision. Drawings and narration are preserved;
+undo starts a new session. Old previews remain retained. If the app was closed
+mid-preparation, check its recorded outcome after reopening and start again when
+requested. Preparation retries start from the beginning.
+
+The Photos selection determines the imported asset. An original high-speed file
+can have different timing from a Photos-rendered slow-motion edit. The app keeps
+the selected asset's timeline and does not recreate Photos speed ramps. A preview
+at up to 30 fps cannot expose every original high-speed frame; exact source-frame
+navigation, VFR/high-speed hardware acceptance and HDR conversion remain open.
 
 The exported recipient needs only the MP4. No project file or special player is required.
 
@@ -100,7 +113,7 @@ Before treating this as a verified iPhone release:
 ## Local data and limits
 
 - Native projects are stored in the app's Application Support container under `BJJTelestrator/projects/<uuid>/`. The directory contains project JSON, original/proxy media, recordings, export metadata/MP4s, and temporary files. It survives normal restarts and same-identity app updates. Removing the app removes its container. There is no portable editable-project backup/restore interface yet; share completed MP4s to Files and retain original camera recordings. Windows projects and iPhone projects are separate; there is no automatic sync or project migration UI.
-- Native import is capped at **4 GiB**, **4096 pixels on the long edge**, and 24 hours by validation; those are input bounds, not a performance promise. Typical 1080p coaching clips are the target. Proxy long edge is at most 1920; final dimensions default to source display dimensions, rounded to even pixels. Exports support up to 60 fps.
+- Native import is capped at **4 GiB**, **4096 pixels on the long edge**, and 24 hours by validation; those are input bounds, not a performance promise. Typical 1080p coaching clips are the target. Proxy long edge is at most 1920 and preview rate is at most 30 fps; final dimensions default to source display dimensions, rounded to even pixels. Exports support up to 60 fps.
 - Native HDR PQ/HLG footage is rejected with instructions to provide an SDR copy. Common iPhones record HDR by default; turn off **HDR Video** in Camera recording settings for new test clips or first export a genuine SDR copy using an editor. SDR HEVC is supported by the implementation. Non-right-angle rotation is rejected. Dolby Vision/HDR color correctness is not claimed.
 - Native encoding uses Apple's H.264 encoder, not FFmpeg/libx264. The shared quality field maps to a bounded bitrate; encoding-speed presets are hidden on iPhone. Audio is mixed at 48 kHz stereo and encoded as AAC. Native mixing clamps peaks to 0.98 after gain, which can distort heavily overloaded mixes; reduce gains. Desktop export retains its look-ahead limiter. Output is ordinary H.264/AAC MP4, but native encoder profiles/chroma/audio priming must be checked on the target device.
 - Rendering is foreground work. iOS can suspend apps and stop extended background encoding. The app keeps the display awake during import/export; background expiry cancels safely, and interrupted jobs are marked failed after relaunch. There is no background-render guarantee.

@@ -1,0 +1,202 @@
+{
+  "reportVersion": 1,
+  "date": "2026-09-13",
+  "taskId": "P1.04",
+  "scope": "Observable SDR import, real cancellation and revision-checked preview repair; metadata inspection and bounded preview policy",
+  "startingCommit": "57af80a4d78242e1f691a5cf6b05ae696e907d78",
+  "branch": "codex/p1-media-jobs",
+  "finalCommitOrPR": "https://github.com/BakedChicken77/bjj-telestrator/pull/11",
+  "filesChanged": [
+    "ARCHITECTURE.md",
+    "CHANGELOG.md",
+    "IMPLEMENTATION_PLAN.md",
+    "IOS_README.md",
+    "PROJECT_FORMAT.md",
+    "README.md",
+    "backend/app/assets.py",
+    "backend/app/main.py",
+    "backend/app/media.py",
+    "backend/app/media_jobs.py",
+    "backend/app/migrations.py",
+    "backend/app/models.py",
+    "backend/app/renderer.py",
+    "backend/app/storage.py",
+    "backend/tests/test_backend.py",
+    "backend/tests/test_media_jobs.py",
+    "docs/DEVICE_ACCEPTANCE.md",
+    "docs/VERIFICATION.md",
+    "docs/p1-media-preparation-verification.json",
+    "docs/project.schema.json",
+    "frontend/ios/App/App.xcodeproj/project.pbxproj",
+    "frontend/ios/App/App/Native/BJJAssets.swift",
+    "frontend/ios/App/App/Native/BJJMediaJobs.swift",
+    "frontend/ios/App/App/Native/BJJNativePlugin.swift",
+    "frontend/ios/App/App/Native/BJJProject.swift",
+    "frontend/ios/App/App/Native/BJJProjectMigrations.swift",
+    "frontend/ios/App/App/Native/BJJRenderer.swift",
+    "frontend/ios/App/App/Native/BJJService.swift",
+    "frontend/ios/App/AppTests/BJJNativeTests.swift",
+    "frontend/src/App.tsx",
+    "frontend/src/api.ts",
+    "frontend/src/components/MediaPreparation.tsx",
+    "frontend/src/components/VideoStage.tsx",
+    "frontend/src/model.ts",
+    "frontend/src/native.test.ts",
+    "frontend/src/native.ts",
+    "frontend/src/project/diagnostics.ts",
+    "frontend/src/styles.css",
+    "frontend/src/useMediaPreparation.ts",
+    "tests/browser/media-preparation.spec.ts",
+    "tests/fixtures/project-conformance.json"
+  ],
+  "publicInterfaces": [
+    "POST /api/import-jobs",
+    "X-BJJ-Import-ID on existing POST /api/projects/import",
+    "GET/DELETE /api/media-jobs/{jobId}",
+    "POST /api/projects/{projectId}/proxy-jobs with If-Match",
+    "Native createImportJob/getMediaJob/cancelMediaJob/repairProxy; expectedRevision and generated UUIDs",
+    "Runtime mediaJobs/proxyRepair true; hdrToSdr false",
+    "Optional source/proxy color and rational timing metadata"
+  ],
+  "migrationAndRetention": {
+    "projectSchema": 2,
+    "operationRecordVersion": 1,
+    "projectEdits": "unchanged six annotation types and linear voiceovers; timing remains source-relative",
+    "repair": "same project/source identity; validated new proxy reference, monotonic revision; source, annotation and narration JSON preserved",
+    "missingPreview": "unchanged missing derived preview does not block a pending edit save; new/replacement media, sources and recordings remain required",
+    "assets": "original bytes/checksums preserved; previous previews retained; active repair leases prevent project removal",
+    "restart": "interrupted preparation is restart-from-zero; committed import recovered as complete; an interrupted repair may have committed a valid proxy before status recording",
+    "undo": "repair reopens the saved review in a fresh undo session"
+  },
+  "automatedCommands": [
+    {
+      "command": "backend/.venv/bin/python scripts/verify.py",
+      "scope": "starting baseline",
+      "result": "139 backend, 92 frontend, 12 repository plus lint/type/build/format passed"
+    },
+    {
+      "command": "backend/.venv/bin/python -m pytest backend/tests/test_media_jobs.py -q -s",
+      "scope": "initial focused media failure/repair cases",
+      "result": "10 passed in 19.44 s"
+    },
+    {
+      "command": "BJJ_E2E_DATA_DIR=/tmp/bjj-p1-media-tests2 BJJ_E2E_CHROMIUM_PATH=<Chromium 149> BJJ_E2E_PYTHON=backend/.venv/bin/python npm run test:e2e -- media-preparation.spec.ts",
+      "scope": "desktop 1280x720 and phone 390x844; actual APIs/encode/download; held upload only for isolated cancellation",
+      "result": "2 passed in 39.5 s; scenarios 18.1 and 14.9 s"
+    },
+    {
+      "command": "npm run ios:sync",
+      "result": "passed; no local Apple SDK execution"
+    },
+    {
+      "command": "BJJ_E2E_DATA_DIR=/tmp/bjj-p1-media-full2 BJJ_E2E_CHROMIUM_PATH=<Chromium 149> backend/.venv/bin/python scripts/verify.py --browser",
+      "result": "passed: 153 backend in 98.06 s, 97 frontend, 12 repository, 16 browser in 4.9 min, Ruff/ESLint/TypeScript/build/Prettier"
+    },
+    {
+      "command": "GitHub Actions CI run 34753579589",
+      "url": "https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34753579589",
+      "commit": "34fa4f206615d3d1da2449d3db93c552b5beae17",
+      "result": "all six gates passed: 153 backend (30.63 s), 97 frontend, 12 repository, 16 browser (2.1 min), 25 native (38.606 s), Docker and unsigned archive"
+    },
+    {
+      "command": "backend/.venv/bin/python -m pytest backend/tests/test_media_jobs.py -q -s; backend/.venv/bin/python -m ruff check backend/app/main.py backend/tests/test_media_jobs.py",
+      "result": "10 passed in 16.32 s and Ruff passed after final wrong-operation upload ownership guard",
+      "scope": "An upload naming a queued repair job cannot mark that repair failed. Existing duplicate/cancel/lease/source/revision assertions remain."
+    }
+  ],
+  "realExportEvidence": {
+    "desktopRepairedPreview": {
+      "codec": "H.264/AAC",
+      "dimensions": [
+        160,
+        120
+      ],
+      "frameRate": 30,
+      "durationSec": 2.2,
+      "bytes": 38788,
+      "sourceSha256": "53fc11451a16d79fc812d81aec780ff796d11453055f4d8dd786d02f8449c8e3",
+      "sourceRate": 60,
+      "checks": "source hash, missing preview recovery, same project/annotation/audio metadata and logical duration"
+    },
+    "browser": [
+      {
+        "viewportWidth": 1280,
+        "projectRevision": 3,
+        "annotationCount": 1,
+        "sourceSha256": "62237e560bf30c1b2e0dba4eee2316eab4e73f872ae3057e421df37f10a9907e",
+        "sourceVideoStartSec": 0.0,
+        "codec": "h264",
+        "audioCodec": "aac",
+        "width": 360,
+        "height": 640,
+        "frameRate": "30/1",
+        "durationSec": 4.0,
+        "bytes": 89794
+      },
+      {
+        "viewportWidth": 390,
+        "projectRevision": 3,
+        "annotationCount": 1,
+        "sourceSha256": "62237e560bf30c1b2e0dba4eee2316eab4e73f872ae3057e421df37f10a9907e",
+        "sourceVideoStartSec": 0.0,
+        "codec": "h264",
+        "audioCodec": "aac",
+        "width": 360,
+        "height": 640,
+        "frameRate": "30/1",
+        "durationSec": 4.0,
+        "bytes": 89780
+      }
+    ],
+    "native": {
+      "commit": "34fa4f206615d3d1da2449d3db93c552b5beae17",
+      "run": "https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34753579589",
+      "codec": "H.264 (avc1)/AAC",
+      "dimensions": [
+        320,
+        180
+      ],
+      "durationSec": 4,
+      "previewBytes": 26039,
+      "repairedReviewBytes": 26906,
+      "sourceSha256": "d92c6d4ca94778763da45ea9670e1ca1b30e63a33e8d9b6e8cecf30effebf9f4",
+      "assertions": "same project, saved annotations and narration; unchanged source hash; red cue absent at 0.5 s, present at 1 s, absent at 2 s; audible energy at 1.3\u20131.8 s; valid AAC, orientation, duration and reopened proxy",
+      "environment": {
+        "xcode": "26.6",
+        "simulator": "iPhone 17 Pro",
+        "runtime": "iOS 26.4.1",
+        "physicalDevice": false
+      }
+    }
+  },
+  "accessibilityAndPlatformChecks": {
+    "sharedUI": "semantic status and cancel/dismiss/repair buttons; progress updates outside live announcement; 44px minimum controls; no horizontal overflow in new desktop/phone scenarios",
+    "physical": "VoiceOver, large text and Photos/Files hardware interaction pending"
+  },
+  "knownLimitations": [
+    "HDR-to-SDR conversion is not implemented; native PQ/HLG rejection retained and desktop known PQ/HLG/Dolby Vision rejection explicit",
+    "Missing metadata is not proof of SDR; no broad color or Dolby Vision support claimed",
+    "Up-to-30 fps previews may omit frames from faster sources; no exact source-frame navigation or VFR classification claimed",
+    "No native completion guarantee while backgrounded or force-quit; interrupted work restarts from zero",
+    "Old proxies retained; no automatic general asset GC or portable package UI",
+    "No local Swift/Xcode; native SDK/XCTest/archive passed in GitHub macOS CI. Physical iPhone, signed install/update, fresh Windows host/Docker acceptance and 20-minute workload remain unavailable"
+  ],
+  "rollbackRecovery": "Retain a whole-project copy and source assets before switching binaries. Earlier schema-2 build can read additive fields; it lacks media preparation controls. Do not uninstall the phone app. Older schema-1 recovery uses retained pre-migration copies, not a lossy overwrite.",
+  "documentationUpdated": [
+    "IMPLEMENTATION_PLAN.md",
+    "PROJECT_FORMAT.md",
+    "ARCHITECTURE.md",
+    "README.md",
+    "IOS_README.md",
+    "docs/VERIFICATION.md",
+    "docs/project.schema.json",
+    "CHANGELOG.md",
+    "docs/DEVICE_ACCEPTANCE.md"
+  ],
+  "status": "automatically verified",
+  "remainingGate": "Physical media/signing/Windows acceptance and separate HDR conversion gate; this is the import/repair slice, not all of P1.04",
+  "nextEligibleTask": "P1.04 bounded HDR conversion spike with cross-renderer fixtures; then P1.05 portable editable backup/restore prerequisites",
+  "firstImplementationCommit": "3af35d4a308e500d318a7afe5baf462332705607",
+  "measuredCommit": "34fa4f206615d3d1da2449d3db93c552b5beae17",
+  "currentHeadEvidence": "The draft PR checks and engineering description record the fresh full CI for the final guard and documentation commit; numerical native outputs above belong to the named measured commit."
+}

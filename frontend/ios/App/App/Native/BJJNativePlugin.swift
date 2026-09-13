@@ -16,11 +16,14 @@ public class BJJNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDeleg
         "writeRecoveryDraft", "getRecoveryDrafts", "clearRecoveryDraft", "recoverProjectCopy", "shareDiagnostics",
         "getProjectStorage", "retryExport", "removeExportFile",
         "duplicateProject", "listCheckpoints", "createCheckpoint", "restoreCheckpoint",
-        "listDeletedProjects", "restoreDeletedProject", "permanentlyDeleteProject"
+        "listDeletedProjects", "restoreDeletedProject", "permanentlyDeleteProject",
+        "createImportJob", "getMediaJob", "cancelMediaJob", "repairProxy"
     ].map { CAPPluginMethod(name: $0, returnType: CAPPluginReturnPromise) }
     private var service: BJJService?
     private var startupError: String?
     private var pickerCall: CAPPluginCall?
+    private var pickerJob: String?
+    private var photoLoads: [String: Progress] = [:]
     private var recorder: AVAudioRecorder?
     private var recordingProject: String?
     private var recordingID: String?
@@ -32,7 +35,7 @@ public class BJJNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDeleg
     override public func load() {
         Task { @MainActor in
             do {
-                service = try BJJService(store: BJJStore())
+                if service == nil { service = try BJJService(store: BJJStore()) }
                 try AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
                 try AVAudioSession.sharedInstance().setActive(true)
             } catch { startupError = error.localizedDescription }
@@ -219,67 +222,115 @@ public class BJJNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDeleg
             } catch { call.reject(error.localizedDescription) }
         }
     }
+    @objc func createImportJob(_ call: CAPPluginCall) {
+        perform(call) { service in ["job": try service.mediaJobs.create().json()] }
+    }
+    @objc func getMediaJob(_ call: CAPPluginCall) {
+        perform(call) { [self] service in ["job": try service.mediaJobs.get(id(call, "jobId")).json()] }
+    }
+    @objc func cancelMediaJob(_ call: CAPPluginCall) {
+        perform(call) { [self] service in
+            let jobId = try id(call, "jobId")
+            photoLoads[jobId]?.cancel()
+            let job = try service.mediaJobs.cancel(jobId)
+            if pickerJob == jobId {
+                bridge?.viewController?.presentedViewController?.dismiss(animated: true)
+                pickerCall?.resolve(["cancelled": true]); pickerCall = nil; pickerJob = nil
+            }
+            return ["job": try job.json()]
+        }
+    }
+    @objc func repairProxy(_ call: CAPPluginCall) {
+        perform(call) { [self] service in
+            let projectId = try id(call)
+            guard recordingProject != projectId else { throw BJJError.invalid("Stop recording before repairing the preview.") }
+            return ["job": try service.mediaJobs.repair(projectId, revision: revision(call)).json()]
+        }
+    }
     @objc func importVideo(_ call: CAPPluginCall) {
-        DispatchQueue.main.async { [self] in
+        Task { @MainActor in
             guard pickerCall == nil, recorder == nil, let host = bridge?.viewController else {
-                call.reject("Finish the current import or recording first."); return
+                call.reject("Finish the current import or recording first.", "JOB_ACTIVE"); return
             }
-            pickerCall = call
-            if call.getString("source") == "photos" {
-                var config = PHPickerConfiguration(photoLibrary: .shared())
-                config.filter = .videos; config.selectionLimit = 1
-                config.preferredAssetRepresentationMode = .current
-                let picker = PHPickerViewController(configuration: config); picker.delegate = self
-                picker.isModalInPresentation = true
-                host.present(picker, animated: true)
-            } else {
-                let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.movie, .video], asCopy: false)
-                picker.allowsMultipleSelection = false; picker.delegate = self
-                picker.isModalInPresentation = true
-                host.present(picker, animated: true)
-            }
+            do {
+                if service == nil { service = try BJJService(store: BJJStore()) }
+                guard let service else { throw BJJError.invalid("Project storage is unavailable.") }
+                let job = try call.getString("jobId").map { try service.mediaJobs.get($0) } ?? service.mediaJobs.create()
+                guard job.operation == "import", job.status == "queued" else { throw BJJError.domain("JOB_ACTIVE", "This import was already started. Check its status before retrying.") }
+                pickerCall = call; pickerJob = job.jobId
+                if call.getString("source") == "photos" {
+                    var config = PHPickerConfiguration(photoLibrary: .shared())
+                    config.filter = .videos; config.selectionLimit = 1
+                    config.preferredAssetRepresentationMode = .current
+                    let picker = PHPickerViewController(configuration: config); picker.delegate = self
+                    picker.isModalInPresentation = true
+                    host.present(picker, animated: true)
+                } else {
+                    let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.movie, .video], asCopy: false)
+                    picker.allowsMultipleSelection = false; picker.delegate = self
+                    picker.isModalInPresentation = true
+                    host.present(picker, animated: true)
+                }
+            } catch { call.reject((error as? BJJError)?.localizedDescription ?? "Unable to start video selection.", (error as? BJJError)?.code ?? "MEDIA_FAILED") }
         }
     }
     public func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
-        pickerCall?.resolve(["cancelled": true]); pickerCall = nil
+        Task { @MainActor in
+            if let id = pickerJob { _ = try? service?.mediaJobs.cancel(id) }
+            pickerCall?.resolve(["cancelled": true]); pickerCall = nil; pickerJob = nil
+        }
+    }
+    @MainActor private func importFailure(_ call: CAPPluginCall, jobId: String, error: Error) {
+        service?.mediaJobs.failure(jobId, error)
+        let job = try? service?.mediaJobs.get(jobId)
+        if job?.status == "cancelled" { call.resolve(["cancelled": true]) }
+        else { call.reject(job?.error ?? "Unable to prepare the selected video.", job?.errorCode ?? "MEDIA_FAILED") }
     }
     public func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
         guard let url = urls.first else { documentPickerWasCancelled(controller); return }
-        guard let call = pickerCall else { return }
-        pickerCall = nil
         Task { @MainActor in
+            guard let call = pickerCall, let jobId = pickerJob, let service else { return }
+            pickerCall = nil; pickerJob = nil
             let scoped = url.startAccessingSecurityScopedResource()
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             do {
-                guard let service else { throw BJJError.invalid("Project storage is unavailable.") }
-                let project = try await service.importFile(url, originalName: url.lastPathComponent)
-                call.resolve(["project": project.json])
-            } catch { call.reject(error.localizedDescription) }
+                let (target, worker) = try service.mediaJobs.beginImport(jobId)
+                try await BJJAssets.offMain { [store = service.store] in try BJJMediaWork.copy(url, target, store: store, work: worker) }
+                call.resolve(["project": try await service.mediaJobs.finishImport(jobId, originalName: url.lastPathComponent).json])
+            } catch { importFailure(call, jobId: jobId, error: error) }
         }
     }
     public func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
         picker.dismiss(animated: true)
-        guard let call = pickerCall else { return }
-        pickerCall = nil
-        guard let item = results.first?.itemProvider else { call.resolve(["cancelled": true]); return }
-        let name = item.suggestedName ?? "Rolling video.mov"
-        item.loadFileRepresentation(forTypeIdentifier: UTType.movie.identifier) { [weak self] url, error in
-            guard let self else { call.reject("Import was interrupted."); return }
-            guard let url else { call.reject(error?.localizedDescription ?? "The selected video is unavailable. Download the original from iCloud Photos and try again."); return }
-            // NSItemProvider removes its URL after this callback returns; copy it here.
-            let stage = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension(url.pathExtension)
+        Task { @MainActor in
+            guard let call = pickerCall, let jobId = pickerJob, let service else { return }
+            pickerCall = nil; pickerJob = nil
+            guard let item = results.first?.itemProvider else { _ = try? service.mediaJobs.cancel(jobId); call.resolve(["cancelled": true]); return }
+            let name = item.suggestedName ?? "Rolling video.mov"
             do {
-                let count = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
-                guard count > 0, count <= 4 * 1024 * 1024 * 1024 else { throw BJJError.invalid("Choose a video smaller than 4 GiB.") }
-                try FileManager.default.copyItem(at: url, to: stage)
-            } catch { call.reject(error.localizedDescription); return }
-            Task { @MainActor in
-                defer { try? FileManager.default.removeItem(at: stage) }
-                do {
-                    guard let service = self.service else { throw BJJError.invalid("Project storage is unavailable.") }
-                    call.resolve(["project": try await service.importFile(stage, originalName: name).json])
-                } catch { call.reject(error.localizedDescription) }
-            }
+                let (target, worker) = try service.mediaJobs.beginImport(jobId)
+                let store = service.store
+                // The provider URL expires when its callback returns. Stream it
+                // directly into the owned staging source, without a second copy or JS bytes.
+                photoLoads[jobId] = item.loadFileRepresentation(forTypeIdentifier: UTType.movie.identifier) { [weak self] url, _ in
+                    do {
+                        try worker.cancellation.check()
+                        guard let url else { throw BJJError.domain("MEDIA_UNSUPPORTED", "The selected video is unavailable. Download it in Photos and select it again.") }
+                        try BJJMediaWork.copy(url, target, store: store, work: worker)
+                        Task { @MainActor in
+                            guard let self else { call.reject("Import was interrupted.", "MEDIA_INTERRUPTED"); return }
+                            self.photoLoads.removeValue(forKey: jobId)
+                            do { call.resolve(["project": try await service.mediaJobs.finishImport(jobId, originalName: name).json]) }
+                            catch { self.importFailure(call, jobId: jobId, error: error) }
+                        }
+                    } catch {
+                        Task { @MainActor in
+                            self?.photoLoads.removeValue(forKey: jobId)
+                            self?.importFailure(call, jobId: jobId, error: error)
+                        }
+                    }
+                }
+            } catch { importFailure(call, jobId: jobId, error: error) }
         }
     }
     @objc func prepareRecording(_ call: CAPPluginCall) {
