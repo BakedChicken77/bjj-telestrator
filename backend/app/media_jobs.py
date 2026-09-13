@@ -14,6 +14,7 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .assets import digest_file, manifest_assets, proxy_estimate, require_space
+from .color import HDR_CAPABILITY, is_hdr, require_supported_color
 from .errors import DomainError, conflict
 from .media import check_cancelled, create_proxy, probe_media, proxy_dimensions, require_sdr
 from .models import Media, Project
@@ -49,6 +50,8 @@ class MediaJob(BaseModel):
 
 def validate_proxy(source: Media, preview: Media) -> Media:
     require_sdr(preview)
+    if is_hdr(source.model_dump(mode='json')) and (preview.transferFunction, preview.colorPrimaries, preview.colorMatrix, preview.colorRange) != ('bt709', 'bt709', 'bt709', 'tv'):
+        raise DomainError('MEDIA_VALIDATION_FAILED', 'The HDR preview did not validate as Rec.709 SDR.', 422)
     if (preview.codec != 'h264' or (preview.displayWidth, preview.displayHeight) != proxy_dimensions(source)
             or preview.rotation != 0 or preview.avgFrameRate > 30.01
             or abs(preview.durationSec - source.durationSec) > max(.1, 1 / min(30, source.avgFrameRate))
@@ -212,7 +215,7 @@ class MediaJobs:
             else:
                 source_hash = digest_file(source_path, cancel)
             source = probe_media(source_path, source_asset, original_name, cancel)
-            require_sdr(source)
+            require_supported_color(source.model_dump(mode='json'))
             if snapshot and (abs(source.durationSec - snapshot.source.durationSec) > .001
                              or abs(source.videoStartSec - snapshot.source.videoStartSec) > .001
                              or (source.displayWidth, source.displayHeight) != (snapshot.source.displayWidth, snapshot.source.displayHeight)):
@@ -238,6 +241,7 @@ class MediaJobs:
                     title = (name or Path(original_name).stem).strip()[:160] or 'Rolling review'
                     project = Project(projectId=job.projectId, projectName=title, createdAt=now, updatedAt=now,
                                       source=source, proxy=preview,
+                                      requiredCapabilities=['project.revisions.v1'] + ([HDR_CAPABILITY] if is_hdr(source.model_dump(mode='json')) else []),
                                       exportSettings={'fps': min(120, source.avgFrameRate), 'crf': 18, 'preset': 'medium'})
                 os.rename(temporary, candidate)
                 saved = self.store.save(project, existing=snapshot is not None, replacing_proxy=snapshot is not None)

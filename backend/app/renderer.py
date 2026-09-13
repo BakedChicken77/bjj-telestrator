@@ -280,18 +280,24 @@ def build_audio_mix_graph(project: Any, clips: Sequence[dict[str, Any]]) -> str:
 
 
 def build_ffmpeg_args(
-    project: Any, source: Path, manifest: Path, output: Path, project_dir: Path | None = None
+    project: Any, source: Path, manifest: Path, output: Path, project_dir: Path | None = None,
+    inspected_source: dict | None = None,
 ) -> list[str]:
+    from .color import REC709_TAGS, hdr_to_srgb, is_hdr, srgb_to_rec709
     document = _document(project)
     settings = document["exportSettings"]
     width, height = output_dimensions(document["source"])
     fps = settings["fps"]
     origin = document["source"].get("videoStartSec", 0)
     video_stream = document["source"].get("videoStreamIndex", 0)
+    color = inspected_source or document['source']
+    conversion = hdr_to_srgb(color)
+    hdr = is_hdr(color)
+    delivery = srgb_to_rec709() if hdr else 'format=yuv420p'
     graph = (
-        f"[0:{video_stream}]setpts=PTS-({origin:.12g})/TB,scale={width}:{height}:flags=lanczos,setsar=1,fps={fps:.12g}[base];"
+        f"[0:{video_stream}]{conversion}setpts=PTS-({origin:.12g})/TB,scale={width}:{height}:flags=lanczos,setsar=1,fps={fps:.12g}[base];"
         "[1:v:0]setpts=PTS-STARTPTS[annotations];"
-        "[base][annotations]overlay=0:0:format=auto:eof_action=repeat:repeatlast=1,format=yuv420p[v]"
+        f"[base][annotations]overlay=0:0:format={'gbrp' if hdr else 'auto'}:eof_action=repeat:repeatlast=1,{delivery}[v]"
     )
     threads = str(max(1, int(os.environ.get("BJJ_FFMPEG_THREADS", "2"))))
     command = [os.environ.get("BJJ_FFMPEG_PATH", "ffmpeg"), "-hide_banner", "-y", "-nostdin", "-loglevel", "error", "-copyts", "-filter_complex_threads", "1", "-threads", threads, "-protocol_whitelist", INPUT_PROTOCOLS, "-format_whitelist", INPUT_FORMATS, "-i", str(source), "-f", "concat", "-safe", "0", "-i", str(manifest)]
@@ -307,7 +313,7 @@ def build_ffmpeg_args(
     command += ["-filter_complex", graph, "-map", "[v]"]
     if audio_graph:
         command += ["-map", "[a]", "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2"]
-    command += ["-c:v", "libx264", "-threads", threads, "-preset", settings["preset"], "-crf", str(settings["crf"]), "-pix_fmt", "yuv420p", "-r", f"{fps:.12g}", "-t", f"{document['source']['durationSec']:.12f}", "-metadata:s:v:0", "rotate=0", "-movflags", "+faststart", "-progress", "pipe:1", "-nostats", str(output)]
+    command += ["-c:v", "libx264", "-threads", threads, "-preset", settings["preset"], "-crf", str(settings["crf"]), "-pix_fmt", "yuv420p", "-r", f"{fps:.12g}", "-t", f"{document['source']['durationSec']:.12f}", "-metadata:s:v:0", "rotate=0", "-map_metadata", "-1", "-movflags", "+faststart", "-progress", "pipe:1", "-nostats", *(REC709_TAGS if hdr else []), str(output)]
     return command
 
 
@@ -333,7 +339,8 @@ def render_export(
     source = safe_asset(project_dir, project.source.asset)
     # Older projects may predate color inspection; check the immutable original
     # before rendering instead of silently treating every HEVC source as SDR.
-    from .media import probe_media, require_sdr
+    from .color import require_supported_color
+    from .media import probe_media
     temp_dir.mkdir(parents=True, exist_ok=True)
     output.parent.mkdir(parents=True, exist_ok=True)
     process: subprocess.Popen[str] | None = None
@@ -342,13 +349,14 @@ def render_export(
         if cancel_event.is_set():
             raise ExportCancelled()
         try:
-            require_sdr(probe_media(source, project.source.asset, project.source.originalFilename, cancel_event))
+            inspected = probe_media(source, project.source.asset, project.source.originalFilename, cancel_event).model_dump(mode='json')
+            require_supported_color(inspected)
         except Exception:
             if cancel_event.is_set():
                 raise ExportCancelled() from None
             raise
         manifest = write_overlay_timeline(project, temp_dir, cancel_event)
-        args = build_ffmpeg_args(project, source, manifest, output, project_dir)
+        args = build_ffmpeg_args(project, source, manifest, output, project_dir, inspected)
         logger.info(json.dumps({"event": "export_encoder_start", "projectId": project.projectId, "states": len(list(temp_dir.glob("overlay-*.png")))}))
         progress_lines: queue.Queue[str | None] = queue.Queue()
         with (temp_dir / "ffmpeg.log").open("w+", encoding="utf-8") as log:

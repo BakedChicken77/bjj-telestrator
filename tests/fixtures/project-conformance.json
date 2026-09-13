@@ -2858,6 +2858,225 @@
           "objectRef": "33333333-3333-4333-8333-333333333333"
         }
       }
+    },
+    {
+      "name": "hdr-capability-present",
+      "valid": true,
+      "document": {
+        "schemaVersion": 2,
+        "revision": 1,
+        "requiredCapabilities": [
+          "project.revisions.v1",
+          "media.hdr-to-sdr.v1"
+        ],
+        "projectId": "11111111-1111-4111-8111-111111111111",
+        "projectName": "Synthetic conformance",
+        "createdAt": "2026-09-05T00:00:00Z",
+        "updatedAt": "2026-09-05T00:00:00Z",
+        "source": {
+          "asset": "source/original.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0,
+          "optionalFuture": {
+            "primaries": "retained"
+          },
+          "transferFunction": "smpte2084",
+          "colorPrimaries": "bt2020",
+          "colorMatrix": "bt2020nc",
+          "colorRange": "tv"
+        },
+        "proxy": {
+          "asset": "proxy/editing.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0
+        },
+        "settings": {
+          "defaultAnnotationDuration": 5.0,
+          "seekStepSec": 0.1,
+          "largeSeekStepSec": 1.0,
+          "originalAudioGain": 1.0,
+          "originalAudioMuted": false,
+          "voiceoverMasterGain": 1.0,
+          "optionalFuture": "preserved"
+        },
+        "exportSettings": {
+          "fps": 30.0,
+          "crf": 18,
+          "preset": "medium"
+        },
+        "annotations": [
+          {
+            "id": "33333333-3333-4333-8333-333333333333",
+            "startSec": 5.0,
+            "endSec": 10.0,
+            "zIndex": 0,
+            "strokeColor": "#ff0000",
+            "strokeWidth": 0.006,
+            "strokeOpacity": 1.0,
+            "fillColor": "#ff0000",
+            "fillOpacity": 0.0,
+            "createdAt": "2026-09-05T00:00:00Z",
+            "updatedAt": "2026-09-05T00:00:00Z",
+            "type": "arrow",
+            "geometry": {
+              "x1": 0.2,
+              "y1": 0.3,
+              "x2": 0.6,
+              "y2": 0.5,
+              "arrowheadSize": 0.025,
+              "optionalFuture": {
+                "keep": true
+              }
+            }
+          }
+        ],
+        "voiceovers": [],
+        "optionalFuture": {
+          "keep": [
+            1,
+            true,
+            "a\u00e7\u00e3o"
+          ],
+          "objectRef": "33333333-3333-4333-8333-333333333333"
+        }
+      }
+    },
+    {
+      "name": "hdr-capability-missing",
+      "valid": false,
+      "document": {
+        "schemaVersion": 2,
+        "revision": 1,
+        "requiredCapabilities": [
+          "project.revisions.v1"
+        ],
+        "projectId": "11111111-1111-4111-8111-111111111111",
+        "projectName": "Synthetic conformance",
+        "createdAt": "2026-09-05T00:00:00Z",
+        "updatedAt": "2026-09-05T00:00:00Z",
+        "source": {
+          "asset": "source/original.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0,
+          "optionalFuture": {
+            "primaries": "retained"
+          },
+          "transferFunction": "smpte2084",
+          "colorPrimaries": "bt2020",
+          "colorMatrix": "bt2020nc",
+          "colorRange": "tv"
+        },
+        "proxy": {
+          "asset": "proxy/editing.mp4",
+          "videoStartSec": 0.0,
+          "videoStreamIndex": 0,
+          "audioStreamIndex": null,
+          "originalFilename": "original.mp4",
+          "durationSec": 20.0,
+          "codec": "h264",
+          "audioCodec": "aac",
+          "hasAudio": true,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "sampleAspectRatio": "1:1",
+          "displayAspectRatio": "16:9",
+          "rotation": 0.0,
+          "avgFrameRate": 30.0
+        },
+        "settings": {
+          "defaultAnnotationDuration": 5.0,
+          "seekStepSec": 0.1,
+          "largeSeekStepSec": 1.0,
+          "originalAudioGain": 1.0,
+          "originalAudioMuted": false,
+          "voiceoverMasterGain": 1.0,
+          "optionalFuture": "preserved"
+        },
+        "exportSettings": {
+          "fps": 30.0,
+          "crf": 18,
+          "preset": "medium"
+        },
+        "annotations": [
+          {
+            "id": "33333333-3333-4333-8333-333333333333",
+            "startSec": 5.0,
+            "endSec": 10.0,
+            "zIndex": 0,
+            "strokeColor": "#ff0000",
+            "strokeWidth": 0.006,
+            "strokeOpacity": 1.0,
+            "fillColor": "#ff0000",
+            "fillOpacity": 0.0,
+            "createdAt": "2026-09-05T00:00:00Z",
+            "updatedAt": "2026-09-05T00:00:00Z",
+            "type": "arrow",
+            "geometry": {
+              "x1": 0.2,
+              "y1": 0.3,
+              "x2": 0.6,
+              "y2": 0.5,
+              "arrowheadSize": 0.025,
+              "optionalFuture": {
+                "keep": true
+              }
+            }
+          }
+        ],
+        "voiceovers": [],
+        "optionalFuture": {
+          "keep": [
+            1,
+            true,
+            "a\u00e7\u00e3o"
+          ],
+          "objectRef": "33333333-3333-4333-8333-333333333333"
+        }
+      }
     }
   ]
 }

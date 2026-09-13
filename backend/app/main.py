@@ -26,6 +26,9 @@ from .media import MediaError, check_cancelled
 from .media_jobs import MediaJobs
 from .migrations import runtime_capabilities
 from .models import Job, Project, Voiceover
+from .package_archive import PackageLimits
+from .package_jobs import PackageJobs
+from .packages import package_estimate
 from .recovery import ProjectRecovery
 from .storage import ProjectStore, StorageError, asset_path, safe_filename, utc_now
 from .voiceover import normalize_voiceover
@@ -75,6 +78,8 @@ class LocalRequestGuard:
             await JSONResponse({'detail': 'This request origin is not allowed'}, status_code=403)(scope, receive, send)
             return
         limit = self.config.max_upload_bytes + 1024 * 1024
+        if scope['method'] == 'PUT' and scope['path'].startswith('/api/package-jobs/') and scope['path'].endswith('/content'):
+            limit = self.config.max_package_bytes
         if scope['method'] == 'POST' and scope['path'].endswith('/voiceovers'):
             limit = min(self.config.max_voiceover_bytes, self.config.max_upload_bytes) + 1024 * 1024
         try:
@@ -118,9 +123,12 @@ def create_app(config: Config | None = None) -> FastAPI:
     async def lifespan(application: FastAPI):
         application.state.jobs = JobManager(store, settings.export_workers)
         application.state.media = MediaJobs(store)
+        application.state.packages = PackageJobs(store, PackageLimits(compressed=settings.max_package_bytes,
+                                                                    expanded=settings.max_package_expanded_bytes))
         try:
             yield
         finally:
+            await run_in_threadpool(application.state.packages.close)
             await run_in_threadpool(application.state.media.close)
             await run_in_threadpool(application.state.jobs.close)
 
@@ -128,6 +136,84 @@ def create_app(config: Config | None = None) -> FastAPI:
     application.state.store = store
     application.state.config = settings
     application.add_middleware(LocalRequestGuard, config=settings)
+
+    @application.post('/api/package-jobs', status_code=202)
+    def create_package(body: dict, request: Request) -> dict:
+        return application.state.packages.create(body.get('operation'), body.get('requestId'),
+                project_id=body.get('projectId'), revision=expected_revision(request) if body.get('operation') == 'backup' else None,
+                include_proxy=body.get('includeProxy', False)).model_dump(mode='json')
+
+    @application.get('/api/package-jobs/{job_id}')
+    def get_package(job_id: str, response: Response) -> dict:
+        response.headers['Cache-Control'] = 'no-store'
+        return application.state.packages.get(job_id).model_dump(mode='json')
+
+    @application.get('/api/package-jobs')
+    def list_packages(response: Response) -> list[dict]:
+        response.headers['Cache-Control'] = 'no-store'
+        manager: PackageJobs = application.state.packages
+        with manager.lock:
+            return [manager.get(identifier).model_dump(mode='json') for identifier in manager.jobs]
+
+    @application.post('/api/package-jobs/{job_id}/cancel')
+    def cancel_package(job_id: str) -> dict:
+        return application.state.packages.cancel(job_id).model_dump(mode='json')
+
+    @application.delete('/api/package-jobs/{job_id}', status_code=204)
+    def remove_package(job_id: str) -> Response:
+        application.state.packages.remove(job_id)
+        return Response(status_code=204)
+
+    @application.put('/api/package-jobs/{job_id}/content', status_code=202)
+    async def upload_package(job_id: str, request: Request) -> dict:
+        manager: PackageJobs = application.state.packages
+        # Claim the operation before opening a path. A duplicate HTTP request must
+        # never fail/cancel the first request's upload.
+        path = manager.begin_upload(job_id)
+        complete = False
+        try:
+            total = int(request.headers.get('content-length', '0')) or None
+            require_space(path.parent, space_estimate('package upload', incoming=total or 0, output=0))
+            done = 0
+            with path.open('xb') as destination:
+                async for chunk in request.stream():
+                    check_cancelled(manager.events[job_id])
+                    done += len(chunk)
+                    if done > settings.max_package_bytes:
+                        raise DomainError('PACKAGE_LIMIT', 'The package exceeds the configured transfer size.', 413)
+                    if done % (16 * 1024**2) < len(chunk):
+                        require_space(path.parent, space_estimate('package upload', output=0))
+                    await run_in_threadpool(destination.write, chunk)
+                    manager.progress(job_id, 'copying', done, total)
+                await run_in_threadpool(destination.flush)
+                await run_in_threadpool(os.fsync, destination.fileno())
+            if not done or (total and done != total):
+                raise DomainError('PACKAGE_INVALID', 'The package upload is empty or incomplete.', 422)
+            result = manager.finish_upload(job_id)
+            complete = True
+            return result.model_dump(mode='json')
+        except BaseException as error:
+            manager.fail(job_id, error)
+            raise
+        finally:
+            if not complete:
+                path.unlink(missing_ok=True)
+
+    @application.get('/api/package-jobs/{job_id}/file')
+    def download_package(job_id: str) -> FileResponse:
+        manager: PackageJobs = application.state.packages
+        path = manager.acquire_output(job_id)
+        class PackageResponse(FileResponse):
+            async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+                try:
+                    await super().__call__(scope, receive, send)
+                finally:
+                    await run_in_threadpool(manager.release_output, job_id)
+        return PackageResponse(path, media_type='application/zip', filename=f'bjj-review-{job_id}.bjjproj')
+
+    @application.get('/api/projects/{project_id}/package-estimate')
+    def estimate_package(project_id: str, include_proxy: bool = False) -> dict:
+        return package_estimate(store, store.load(project_id), include_proxy)
 
     @application.exception_handler(DomainError)
     async def domain_error(_request: Request, exc: DomainError) -> JSONResponse:
@@ -338,7 +424,18 @@ def create_app(config: Config | None = None) -> FastAPI:
 
     @application.get('/api/projects/{project_id}/storage')
     def project_storage(project_id: str) -> dict:
-        return storage_summary(store, store.load(project_id))
+        from .cleanup import preview_cleanup
+        result = storage_summary(store, store.load(project_id))
+        try:
+            result['derivedCleanup'] = preview_cleanup(store, project_id)
+        except DomainError as error:
+            result['cleanupBlocked'] = str(error)
+        return result
+
+    @application.post('/api/projects/{project_id}/derived-cleanup')
+    def clean_previews(project_id: str, request: Request) -> dict:
+        from .cleanup import preview_cleanup
+        return preview_cleanup(store, project_id, expected_revision(request), remove=True)
 
     @application.post('/api/exports/{job_id}/retry')
     def retry_export(job_id: str) -> Job:

@@ -3,75 +3,9 @@ import type { Annotation } from '../model';
 import { useEditor } from '../store';
 import { clamp, formatTime, parseTime, trimInterval } from '../timelineMath';
 import './editor-panels.css';
-
-interface NumberFieldProps {
-  label: string;
-  value: number;
-  onCommit: (value: number) => void;
-  min: number;
-  max: number;
-  step?: number;
-  help?: string;
-}
-
-function NumberField({ label, value, onCommit, min, max, step = 0.1, help }: NumberFieldProps) {
-  const [input, setInput] = useState(String(Number(value.toFixed(4))));
-  const [error, setError] = useState('');
-  const id = useId();
-  useEffect(() => {
-    setInput(String(Number(value.toFixed(4))));
-    setError('');
-  }, [value]);
-  const commit = () => {
-    if (input === String(Number(value.toFixed(4)))) {
-      setError('');
-      return;
-    }
-    const parsed = Number(input);
-    if (!input.trim() || !Number.isFinite(parsed) || parsed < min || parsed > max) {
-      setError(`Enter a value from ${Number(min.toFixed(3))} to ${Number(max.toFixed(3))}.`);
-      return;
-    }
-    setError('');
-    if (parsed !== value) onCommit(parsed);
-  };
-  return (
-    <label className="inspector-field" htmlFor={id}>
-      <span>{label}</span>
-      <input
-        id={id}
-        aria-label={label}
-        type="number"
-        inputMode="decimal"
-        min={min}
-        max={max}
-        step={step}
-        value={input}
-        aria-invalid={!!error}
-        onChange={(event) => setInput(event.target.value)}
-        onBlur={commit}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter') {
-            event.preventDefault();
-            event.currentTarget.blur();
-          }
-          if (event.key === 'Escape') {
-            setInput(String(value));
-            setError('');
-            event.stopPropagation();
-          }
-        }}
-      />
-      {error ? (
-        <span role="alert" className="field-error">
-          {error}
-        </span>
-      ) : (
-        help && <small>{help}</small>
-      )}
-    </label>
-  );
-}
+import { AnnotationAccess } from './AnnotationAccess';
+import { GeometryFields } from './GeometryFields';
+import { NumberField } from './NumberField';
 
 function TimeField({
   label,
@@ -202,7 +136,7 @@ function TextField({ value, onCommit }: { value: string; onCommit: (text: string
   );
 }
 
-export function Inspector() {
+export function Inspector({ onSeek }: { onSeek: (time: number) => void }) {
   const project = useEditor((state) => state.project);
   const selectedId = useEditor((state) => state.selectedId);
   const edit = useEditor((state) => state.edit);
@@ -258,6 +192,7 @@ export function Inspector() {
         <span className="panel-eyebrow">{annotation ? 'SELECTION' : 'PROJECT'}</span>
       </div>
       <div className="inspector-scroll">
+        <AnnotationAccess onSeek={onSeek} />
         {annotation ? (
           <div key={annotation.id}>
             <section className="inspector-section">
@@ -291,6 +226,12 @@ export function Inspector() {
                 onCommit={(value) => changeTime('end', annotation.startSec + value)}
               />
             </section>
+            <GeometryFields
+              annotation={annotation}
+              width={project.source.displayWidth}
+              height={project.source.displayHeight}
+              onUpdate={update}
+            />
             <section className="inspector-section">
               <h3>Appearance</h3>
               <ColorField

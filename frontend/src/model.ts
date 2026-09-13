@@ -185,7 +185,7 @@ export const voiceoverSchema = z
     'Voiceover end must match start + duration',
   );
 
-const currentProjectSchema = z
+const projectFields = z
   .object({
     schemaVersion: z.literal(2),
     revision: number.int().min(1).max(Number.MAX_SAFE_INTEGER),
@@ -226,43 +226,56 @@ const currentProjectSchema = z
     annotations: z.array(annotationSchema).max(2000),
     voiceovers: z.array(voiceoverSchema).max(200),
   })
-  .passthrough()
-  .superRefine((project, context) => {
-    const ids = new Set<string>();
-    for (const [index, item] of project.annotations.entries()) {
-      if (item.endSec > project.source.durationSec + 0.000001)
-        context.addIssue({
-          code: 'custom',
-          path: ['annotations', index, 'endSec'],
-          message: 'Annotation ends after the video',
-        });
-      if (ids.has(item.id))
-        context.addIssue({
-          code: 'custom',
-          path: ['annotations', index, 'id'],
-          message: 'Duplicate identifier',
-        });
-      ids.add(item.id);
-    }
-    for (const [index, item] of project.voiceovers.entries()) {
-      if (
-        item.startSec + item.timingOffsetMs / 1000 < 0 ||
-        item.endSec + item.timingOffsetMs / 1000 > project.source.durationSec + 0.001
-      )
-        context.addIssue({
-          code: 'custom',
-          path: ['voiceovers', index],
-          message: 'Voiceover must fit the video timeline',
-        });
-      if (ids.has(item.id))
-        context.addIssue({
-          code: 'custom',
-          path: ['voiceovers', index, 'id'],
-          message: 'Duplicate identifier',
-        });
-      ids.add(item.id);
-    }
-  });
+  .passthrough();
+
+function checkProjectTimeline(project: z.infer<typeof projectFields>, context: z.RefinementCtx) {
+  if (
+    ['smpte2084', 'arib-std-b67', 'SMPTE_ST_2084_PQ', 'ITU_R_2100_HLG'].includes(
+      project.source.transferFunction ?? '',
+    ) &&
+    !project.requiredCapabilities.includes('media.hdr-to-sdr.v1')
+  )
+    context.addIssue({
+      code: 'custom',
+      path: ['requiredCapabilities'],
+      message: 'The HDR delivery capability is missing',
+    });
+  const ids = new Set<string>();
+  for (const [index, item] of project.annotations.entries()) {
+    if (item.endSec > project.source.durationSec + 0.000001)
+      context.addIssue({
+        code: 'custom',
+        path: ['annotations', index, 'endSec'],
+        message: 'Annotation ends after the video',
+      });
+    if (ids.has(item.id))
+      context.addIssue({
+        code: 'custom',
+        path: ['annotations', index, 'id'],
+        message: 'Duplicate identifier',
+      });
+    ids.add(item.id);
+  }
+  for (const [index, item] of project.voiceovers.entries()) {
+    if (
+      item.startSec + item.timingOffsetMs / 1000 < 0 ||
+      item.endSec + item.timingOffsetMs / 1000 > project.source.durationSec + 0.001
+    )
+      context.addIssue({
+        code: 'custom',
+        path: ['voiceovers', index],
+        message: 'Voiceover must fit the video timeline',
+      });
+    if (ids.has(item.id))
+      context.addIssue({
+        code: 'custom',
+        path: ['voiceovers', index, 'id'],
+        message: 'Duplicate identifier',
+      });
+    ids.add(item.id);
+  }
+}
+const currentProjectSchema = projectFields.superRefine(checkProjectTimeline);
 
 export const projectSchema = z.preprocess((value, context) => {
   try {
@@ -275,6 +288,55 @@ export const projectSchema = z.preprocess((value, context) => {
     return z.NEVER;
   }
 }, currentProjectSchema);
+
+/** Only validated, deeply frozen owned entities qualify for editor-only reuse.
+ * Imported documents and service responses always use the complete validator. */
+const ownedAnnotations = new WeakSet<object>();
+const ownedMedia = new WeakSet<object>();
+function freezeJSON(value: unknown): void {
+  if (!value || typeof value !== 'object' || Object.isFrozen(value)) return;
+  for (const child of Object.values(value)) freezeJSON(child);
+  Object.freeze(value);
+}
+export function retainValidatedProject(project: Project): Project {
+  freezeJSON(project);
+  for (const item of project.annotations) ownedAnnotations.add(item);
+  ownedMedia.add(project.source);
+  ownedMedia.add(project.proxy);
+  return project;
+}
+const cachedAnnotation = z.union([
+  z.custom<z.infer<typeof annotationSchema>>(
+    (value) =>
+      !!value && typeof value === 'object' && Object.isFrozen(value) && ownedAnnotations.has(value),
+  ),
+  annotationSchema,
+]);
+const cachedMedia = z.union([
+  z.custom<z.infer<typeof mediaSchema>>(
+    (value) =>
+      !!value && typeof value === 'object' && Object.isFrozen(value) && ownedMedia.has(value),
+  ),
+  mediaSchema,
+]);
+const editFields = projectFields
+  .extend({
+    source: cachedMedia,
+    proxy: cachedMedia,
+    annotations: z.array(cachedAnnotation).max(2000),
+  })
+  .superRefine(checkProjectTimeline);
+export const editedProjectSchema = z.preprocess((value, context) => {
+  try {
+    return migrateDocument(value, false);
+  } catch (error) {
+    context.addIssue({
+      code: 'custom',
+      message: error instanceof Error ? error.message : 'Invalid project',
+    });
+    return z.NEVER;
+  }
+}, editFields);
 
 /** Boundary parsing retains typed upgrade errors for the project browser. */
 export const readProject = (value: unknown) => currentProjectSchema.parse(migrateDocument(value));

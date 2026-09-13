@@ -14,15 +14,18 @@ public class BJJNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDeleg
         "createExport", "getExport", "cancelExport", "getAssetURL", "shareExport",
         "prepareRecording", "startRecording", "stopRecording", "getCapabilities",
         "writeRecoveryDraft", "getRecoveryDrafts", "clearRecoveryDraft", "recoverProjectCopy", "shareDiagnostics",
-        "getProjectStorage", "retryExport", "removeExportFile",
+        "getProjectStorage", "cleanupPreviews", "retryExport", "removeExportFile",
         "duplicateProject", "listCheckpoints", "createCheckpoint", "restoreCheckpoint",
         "listDeletedProjects", "restoreDeletedProject", "permanentlyDeleteProject",
-        "createImportJob", "getMediaJob", "cancelMediaJob", "repairProxy"
+        "createImportJob", "getMediaJob", "cancelMediaJob", "repairProxy",
+        "createPackageJob", "getPackageJob", "listPackageJobs", "cancelPackageJob", "removePackageJob", "getPackageEstimate",
+        "importPackage", "sharePackage", "getPendingPackage", "discardPendingPackage"
     ].map { CAPPluginMethod(name: $0, returnType: CAPPluginReturnPromise) }
     private var service: BJJService?
     private var startupError: String?
     private var pickerCall: CAPPluginCall?
     private var pickerJob: String?
+    private var pickerPackage: String?
     private var photoLoads: [String: Progress] = [:]
     private var recorder: AVAudioRecorder?
     private var recordingProject: String?
@@ -45,6 +48,9 @@ public class BJJNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDeleg
         })
         observations.append(NotificationCenter.default.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
             self?.notifyListeners("appSuspending", data: [:])
+        })
+        observations.append(NotificationCenter.default.addObserver(forName: BJJPackageInbox.changed, object: nil, queue: .main) { [weak self] _ in
+            self?.notifyListeners("packageOpened", data: [:])
         })
         observations.append(NotificationCenter.default.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] note in
             if (note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt) == AVAudioSession.InterruptionType.began.rawValue {
@@ -165,7 +171,19 @@ public class BJJNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDeleg
         }
     }
     @objc func getProjectStorage(_ call: CAPPluginCall) {
-        perform(call) { [self] service in try await service.storageSummary(id(call)) }
+        perform(call) { [self] service in
+            let projectId = try id(call)
+            var result = try await service.storageSummary(projectId)
+            do { result["derivedCleanup"] = try await BJJAssets.offMain { [store = service.store] in try BJJAssets.previewCleanup(store, id: projectId) } }
+            catch { result["cleanupBlocked"] = (error as? BJJError)?.errorDescription ?? "Recovery metadata must be repaired before cleanup." }
+            return result
+        }
+    }
+    @objc func cleanupPreviews(_ call: CAPPluginCall) {
+        perform(call) { [self] service in
+            let projectId = try id(call), revision = try BJJValidate.number(call.getDouble("expectedRevision"), "expected revision", 1...9007199254740991, integer: true)
+            return try await BJJAssets.offMain { [store = service.store] in try BJJAssets.previewCleanup(store, id: projectId, revision: Int(revision), remove: true) }
+        }
     }
     @objc func retryExport(_ call: CAPPluginCall) {
         perform(call) { [self] service in ["job": try service.retryExport(id(call, "jobId")).json()] }
@@ -225,6 +243,79 @@ public class BJJNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDeleg
     @objc func createImportJob(_ call: CAPPluginCall) {
         perform(call) { service in ["job": try service.mediaJobs.create().json()] }
     }
+    @objc func createPackageJob(_ call: CAPPluginCall) {
+        perform(call) { [self] service in
+            let operation = call.getString("operation") ?? ""
+            let revision = operation == "backup" ? Int(try BJJValidate.number(call.getDouble("expectedRevision"), "expected revision", 1...9007199254740991, integer: true)) : nil
+            return ["job": try service.packageJobs.create(operation: operation, requestId: id(call, "requestId"), projectId: call.getString("projectId"), revision: revision, includeProxy: call.getBool("includeProxy") ?? false)]
+        }
+    }
+    @objc func getPackageJob(_ call: CAPPluginCall) {
+        perform(call) { [self] service in ["job": try service.packageJobs.get(id(call, "jobId"))] }
+    }
+    @objc func listPackageJobs(_ call: CAPPluginCall) { perform(call) { service in ["jobs": try service.packageJobs.list()] } }
+    @objc func removePackageJob(_ call: CAPPluginCall) {
+        perform(call) { [self] service in try service.packageJobs.remove(id(call, "jobId")); return [:] }
+    }
+    @objc func cancelPackageJob(_ call: CAPPluginCall) {
+        perform(call) { [self] service in
+            let jobId = try id(call, "jobId"), job = try service.packageJobs.cancel(jobId)
+            if pickerPackage == jobId {
+                bridge?.viewController?.presentedViewController?.dismiss(animated: true)
+                pickerCall?.resolve(["cancelled": true]); pickerCall = nil; pickerPackage = nil
+            }
+            return ["job": job]
+        }
+    }
+    @objc func getPackageEstimate(_ call: CAPPluginCall) {
+        perform(call) { [self] service in
+            let project = try service.store.load(id(call)), includeProxy = call.getBool("includeProxy") ?? false
+            return try await BJJAssets.offMain { [store = service.store] in try BJJProjectPackage.estimate(store, project, includeProxy: includeProxy) }
+        }
+    }
+    @objc func getPendingPackage(_ call: CAPPluginCall) { perform(call) { _ in ["available": BJJPackageInbox.available] } }
+    @objc func discardPendingPackage(_ call: CAPPluginCall) { perform(call) { _ in BJJPackageInbox.discard(); return [:] } }
+    @objc func importPackage(_ call: CAPPluginCall) {
+        Task { @MainActor in
+            do {
+                guard pickerCall == nil, recorder == nil, let service, let host = bridge?.viewController else { throw BJJError.invalid("Finish the current import or recording first.") }
+                let jobId = try id(call, "jobId")
+                let job = try service.packageJobs.get(jobId)
+                guard job["operation"] as? String == "restore", job["status"] as? String == "queued" else { throw BJJError.domain("PROJECT_CONFLICT", "This restore is already active or finished.") }
+                if call.getBool("fromInbox") == true {
+                    guard let (url, scoped) = BJJPackageInbox.take() else { throw BJJError.invalid("Open the package from Files again.") }
+                    defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                    call.resolve(["job": try await service.packageJobs.importFile(jobId, source: url)])
+                } else {
+                    pickerCall = call; pickerPackage = jobId
+                    let kind = UTType(exportedAs: "com.bjjtelestrator.project", conformingTo: .zip)
+                    let picker = UIDocumentPickerViewController(forOpeningContentTypes: [kind, .zip], asCopy: false)
+                    picker.allowsMultipleSelection = false; picker.delegate = self; picker.isModalInPresentation = true
+                    host.present(picker, animated: true)
+                }
+            } catch { call.reject(error.localizedDescription, (error as? BJJError)?.code ?? "PACKAGE_FAILED") }
+        }
+    }
+    @objc func sharePackage(_ call: CAPPluginCall) {
+        Task { @MainActor in
+            do {
+                guard let service, let host = bridge?.viewController else { throw BJJError.invalid("The Files/share sheet is unavailable.") }
+                guard host.presentedViewController == nil else { throw BJJError.domain("PACKAGE_BUSY", "Close the current sheet before sharing the backup.") }
+                let jobId = try id(call, "jobId"), url = try service.packageJobs.acquireOutput(jobId)
+                let sheet = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+                sheet.popoverPresentationController?.sourceView = host.view
+                sheet.popoverPresentationController?.sourceRect = CGRect(x: host.view.bounds.midX, y: host.view.bounds.midY, width: 1, height: 1)
+                sheet.completionWithItemsHandler = { _, completed, _, error in
+                    Task { @MainActor in
+                        service.packageJobs.releaseOutput(jobId)
+                        if error != nil { call.reject("The backup could not be shared. Try saving it to Files again.", "PACKAGE_SHARE_FAILED") }
+                        else { call.resolve(["completed": completed]) }
+                    }
+                }
+                host.present(sheet, animated: true)
+            } catch { call.reject(error.localizedDescription, (error as? BJJError)?.code ?? "PACKAGE_FAILED") }
+        }
+    }
     @objc func getMediaJob(_ call: CAPPluginCall) {
         perform(call) { [self] service in ["job": try service.mediaJobs.get(id(call, "jobId")).json()] }
     }
@@ -276,8 +367,9 @@ public class BJJNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDeleg
     }
     public func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
         Task { @MainActor in
+            if let id = pickerPackage { _ = try? service?.packageJobs.cancel(id) }
             if let id = pickerJob { _ = try? service?.mediaJobs.cancel(id) }
-            pickerCall?.resolve(["cancelled": true]); pickerCall = nil; pickerJob = nil
+            pickerCall?.resolve(["cancelled": true]); pickerCall = nil; pickerJob = nil; pickerPackage = nil
         }
     }
     @MainActor private func importFailure(_ call: CAPPluginCall, jobId: String, error: Error) {
@@ -289,6 +381,14 @@ public class BJJNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDeleg
     public func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
         guard let url = urls.first else { documentPickerWasCancelled(controller); return }
         Task { @MainActor in
+            if let jobId = pickerPackage, let call = pickerCall, let service {
+                pickerCall = nil; pickerPackage = nil
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                do { call.resolve(["job": try await service.packageJobs.importFile(jobId, source: url)]) }
+                catch { call.reject(error.localizedDescription, (error as? BJJError)?.code ?? "PACKAGE_FAILED") }
+                return
+            }
             guard let call = pickerCall, let jobId = pickerJob, let service else { return }
             pickerCall = nil; pickerJob = nil
             let scoped = url.startAccessingSecurityScopedResource()

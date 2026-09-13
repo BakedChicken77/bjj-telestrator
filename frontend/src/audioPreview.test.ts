@@ -67,6 +67,21 @@ const buffersFor = (...clips: Voiceover[]): Map<string, AudioBuffer> =>
   new Map(clips.map((item) => [item.id, { duration: item.durationSec } as AudioBuffer]));
 
 describe('voiceover media-time scheduling', () => {
+  it('schedules later-decoded adjacent windows from the original anchor without a seam', () => {
+    const first = clip({ id: 'first', startSec: 5, durationSec: 5, endSec: 10 });
+    const second = clip({ id: 'second', startSec: 10, durationSec: 5, endSec: 15 });
+    const { context, sources, transport } = audioContext();
+    transport.sync(5, 1, [first, second], buffersFor(first), true);
+    context.currentTime = 103;
+    transport.sync(8.02, 1, [first, second], buffersFor(first, second), true);
+    expect(sources[1].start).toHaveBeenCalledWith(105, 0, 5);
+    context.currentTime = 104.98;
+    transport.sync(10.01, 1, [first, second], buffersFor(first, second), true);
+    expect(sources[0].stop).not.toHaveBeenCalled();
+    context.currentTime = 105.02;
+    transport.sync(10.02, 1, [first, second], buffersFor(first, second), true);
+    expect(sources[0].stop).toHaveBeenCalledOnce();
+  });
   it('keeps only clips in the lookbehind/lookahead window and replaces them after a long seek', () => {
     const clips = Array.from({ length: 200 }, (_, index) =>
       clip({ id: String(index), startSec: index * 10, endSec: index * 10 + 4 }),

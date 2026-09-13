@@ -34,6 +34,11 @@ class Context {
     return source;
   });
   decodeAudioData = vi.fn(async () => ({ duration: 4 }));
+  createBuffer = vi.fn((channels: number, length: number, rate: number) => ({
+    duration: length / rate,
+    getChannelData: () => new Float32Array(length),
+    numberOfChannels: channels,
+  }));
   resume = vi.fn(async () => {
     this.state = 'running';
   });
@@ -54,6 +59,32 @@ class Video extends EventTarget {
   ended = false;
   seeking = false;
   readyState = 4;
+  pause() {
+    this.paused = true;
+    this.dispatchEvent(new Event('pause'));
+  }
+}
+
+function wave() {
+  const raw = new Uint8Array(44 + 4 * 48000 * 2),
+    view = new DataView(raw.buffer);
+  const text = (at: number, value: string) =>
+    [...value].forEach((character, index) => {
+      raw[at + index] = character.charCodeAt(0);
+    });
+  text(0, 'RIFF');
+  view.setUint32(4, raw.length - 8, true);
+  text(8, 'WAVE');
+  text(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, 48000, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  text(36, 'data');
+  view.setUint32(40, raw.length - 44, true);
+  return raw;
 }
 
 function configuration() {
@@ -88,7 +119,16 @@ describe('audio preview lifecycle', () => {
     vi.stubGlobal('AudioContext', Context);
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) })),
+      vi.fn(async (_url, options) => {
+        const raw = wave();
+        const range = /bytes=(\d+)-(\d+)/.exec(options.headers.Range)!;
+        const first = Number(range[1]),
+          last = Math.min(Number(range[2]), raw.length - 1);
+        return new Response(raw.slice(first, last + 1), {
+          status: 206,
+          headers: { 'Content-Range': `bytes ${first}-${last}/${raw.length}` },
+        });
+      }),
     );
     useEditor.getState().setError(null);
   });
@@ -119,7 +159,8 @@ describe('audio preview lifecycle', () => {
   it('preloads narration, unlocks on a gesture, and stops during buffering and at video end', async () => {
     const { video, context, loading } = open();
     await vi.advanceTimersByTimeAsync(1);
-    expect(context.decodeAudioData).toHaveBeenCalledOnce();
+    expect(context.createBuffer).toHaveBeenCalledOnce();
+    expect(context.decodeAudioData).not.toHaveBeenCalled();
     expect(loading).toHaveBeenLastCalledWith(false);
     expect(context.sources).toHaveLength(0);
     await play(video);
@@ -149,7 +190,8 @@ describe('audio preview lifecycle', () => {
     engine.configure(settings);
     expect(context.gains[0].gain.setTargetAtTime).toHaveBeenLastCalledWith(0, 100, 0.01);
     expect(context.sources[0].stop).toHaveBeenCalledOnce();
-    expect(context.decodeAudioData).toHaveBeenCalledOnce();
+    expect(context.createBuffer).toHaveBeenCalledOnce();
+    expect(context.decodeAudioData).not.toHaveBeenCalled();
   });
 
   it('reuses an audio source on immediate effect reattachment, then releases an old project element', async () => {
@@ -169,9 +211,9 @@ describe('audio preview lifecycle', () => {
     expect(next.context.close).not.toHaveBeenCalled();
   });
 
-  it('reports asynchronous decode errors while retaining the original-audio route', async () => {
+  it('reports asynchronous window failures while retaining the original-audio route', async () => {
     const { context, video, loading } = open();
-    context.decodeAudioData.mockRejectedValue(new Error('Damaged clip'));
+    vi.mocked(fetch).mockRejectedValue(new Error('Damaged clip'));
     await vi.advanceTimersByTimeAsync(1);
     expect(useEditor.getState().error).toContain('voiceover could not be prepared');
     expect(loading).toHaveBeenLastCalledWith(false);

@@ -1,6 +1,6 @@
 /** Pure migration registry. Services preserve the original before installation. */
 export const SCHEMA_VERSION = 2;
-export const CAPABILITIES = ['project.revisions.v1'] as const;
+export const CAPABILITIES = ['project.revisions.v1', 'media.hdr-to-sdr.v1'] as const;
 
 export class ProjectError extends Error {
   constructor(
@@ -27,7 +27,7 @@ export const migrations: Record<number, (document: Document) => Document> = {
   }),
 };
 
-export function migrateDocument(value: unknown): Document {
+export function migrateDocument(value: unknown, clone = true): Document {
   if (!value || typeof value !== 'object' || Array.isArray(value))
     throw new ProjectError('PROJECT_CORRUPT', 'The project document is damaged.');
   const document = value as Document;
@@ -53,7 +53,7 @@ export function migrateDocument(value: unknown): Document {
       'CAPABILITY_UNSUPPORTED',
       'Upgrade required: this project needs unsupported capabilities.',
     );
-  let result = structuredClone(document);
+  let result = clone ? structuredClone(document) : { ...document };
   while ((result.schemaVersion as number) < SCHEMA_VERSION)
     result = migrations[result.schemaVersion as number](result);
   if (!(result.requiredCapabilities as string[] | undefined)?.includes('project.revisions.v1'))

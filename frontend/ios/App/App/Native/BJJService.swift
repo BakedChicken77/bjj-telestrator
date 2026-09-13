@@ -28,6 +28,7 @@ struct BJJExportJob: Codable {
 @MainActor final class BJJService {
     let store: BJJStore
     let mediaJobs: BJJMediaJobs
+    let packageJobs: BJJPackageJobs
     private var jobs: [String: BJJExportJob] = [:]
     private var queue: [String] = []
     private var snapshots: [String: BJJProject] = [:]
@@ -42,10 +43,12 @@ struct BJJExportJob: Codable {
     init(store: BJJStore) throws {
         self.store = store
         self.mediaJobs = try BJJMediaJobs(store: store)
+        self.packageJobs = try BJJPackageJobs(store: store)
         mediaJobs.activityChanged = { [weak self] in
             guard let self else { return }
-            UIApplication.shared.isIdleTimerDisabled = activeJob != nil || mediaJobs.active
+            UIApplication.shared.isIdleTimerDisabled = activeJob != nil || mediaJobs.active || packageJobs.active
         }
+        packageJobs.activityChanged = mediaJobs.activityChanged
         let folders = try FileManager.default.contentsOfDirectory(at: store.root, includingPropertiesForKeys: nil)
         for folder in folders where UUID(uuidString: folder.lastPathComponent) != nil {
             if (try? folder.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == true { continue }
@@ -224,7 +227,7 @@ struct BJJExportJob: Codable {
                 if let temporary { try? FileManager.default.removeItem(at: temporary) }
                 renderer = nil; activeJob = nil; snapshots.removeValue(forKey: id)
                 reservations.removeValue(forKey: id); cancellations.removeValue(forKey: id); store.releaseLease(project.id)
-                UIApplication.shared.isIdleTimerDisabled = mediaJobs.active
+                UIApplication.shared.isIdleTimerDisabled = mediaJobs.active || packageJobs.active
                 endBackgroundTask(); startNext()
             }
             do {
@@ -250,7 +253,8 @@ struct BJJExportJob: Codable {
                 let expectedAudio = (media.json["hasAudio"] as! Bool) || project.voiceovers.contains {
                     !($0["muted"] as! Bool) && $0.n("gain") * project.settings.n("voiceoverMasterGain") > 0
                 }
-                guard probe.json.s("codec") == "avc1", abs(probe.videoRange.duration.seconds - project.duration) <= tolerance,
+                guard !BJJColor.isHDR(probe.json), probe.json.s("transferFunction") == "bt709", probe.json.s("colorPrimaries") == "bt709",
+                      probe.json.s("colorMatrix") == "bt709", probe.json.s("codec") == "avc1", abs(probe.videoRange.duration.seconds - project.duration) <= tolerance,
                       probe.orientedSize == BJJRenderer.outputSize(CGSize(width: project.source.n("displayWidth"), height: project.source.n("displayHeight"))),
                       (probe.json["hasAudio"] as? Bool) == expectedAudio,
                       !expectedAudio || probe.json["audioCodec"] as? String == "aac" else {

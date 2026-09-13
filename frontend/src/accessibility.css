@@ -1,0 +1,302 @@
+/* Device preferences only: these variables never enter media rendering. */
+:root {
+  font-size: 13px;
+  --text: #e7edf1;
+  --muted: #b4bec8;
+  --bg: #0b1015;
+  --surface: #121a22;
+  --surface-raised: #19232e;
+  --border: #71818e;
+  --accent: #bded7a;
+  --on-accent: #182709;
+  --danger: #ffaaaa;
+  --accent-bg: #273d19;
+  --danger-bg: #452128;
+  --panel: var(--surface);
+  color: var(--text);
+  background: var(--bg);
+  color-scheme: dark;
+}
+:root[data-theme='light'] {
+  --text: #17212b;
+  --muted: #465667;
+  --bg: #e9eef3;
+  --surface: #ffffff;
+  --surface-raised: #f1f4f7;
+  --border: #788693;
+  --accent: #315e0c;
+  --on-accent: #ffffff;
+  --danger: #ad162b;
+  --accent-bg: #e4f0d8;
+  --danger-bg: #fbe5e8;
+  color-scheme: light;
+}
+:root[data-large-text='true'] {
+  font-size: 18px;
+}
+body {
+  color: var(--text);
+  background: var(--bg);
+}
+button.primary,
+button.primary:hover:not(:disabled),
+.download-button,
+.download-button:hover {
+  color: var(--on-accent);
+  background: var(--accent);
+}
+dialog.modal {
+  color: var(--text);
+  margin: auto;
+  max-width: calc(100vw - 24px);
+}
+dialog.modal::backdrop {
+  background: #03080bcc;
+}
+dialog.modal:focus {
+  outline: none;
+}
+:is(button, a, input, textarea, select, summary):focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+summary {
+  cursor: pointer;
+  padding-block: 10px;
+}
+button,
+.button,
+.download-button,
+input:not([type='checkbox']):not([type='radio']),
+select,
+summary {
+  min-height: 44px;
+}
+button,
+.button,
+.download-button {
+  min-width: 44px;
+}
+.button {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--accent);
+}
+input[type='checkbox'],
+input[type='radio'] {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+.check-label,
+label:has(> input[type='checkbox']) {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.annotation-access label,
+.appearance-preferences label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-block: 10px;
+}
+.appearance-preferences .check-label {
+  flex-direction: row;
+}
+.annotation-access select {
+  max-width: 100%;
+  width: 100%;
+}
+.annotation-access button {
+  width: 100%;
+  margin-block: 4px;
+}
+.geometry-nudges {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.geometry-nudges button {
+  white-space: normal;
+  padding: 8px 4px;
+}
+.project-packages,
+.appearance-preferences {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  margin-block: 14px;
+}
+.project-packages p,
+.appearance-preferences p {
+  line-height: 1.6;
+}
+.project-packages fieldset {
+  min-width: 0;
+  margin-bottom: 12px;
+}
+.project-packages input[type='file'],
+.project-packages select {
+  max-width: 100%;
+  width: 100%;
+}
+.project-packages button {
+  margin: 4px;
+}
+.package-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.package-status > strong,
+.package-status > p,
+.package-status > small {
+  flex-basis: 100%;
+}
+.package-status > progress {
+  flex: 1;
+}
+.app-shell > .package-status {
+  flex-shrink: 0;
+  max-height: 32dvh;
+  overflow: auto;
+}
+.timeline-row {
+  min-height: 48px;
+}
+.annotation-bar {
+  height: 40px;
+  top: 3px;
+}
+.annotation-bar-body,
+.annotation-trim {
+  min-height: 38px;
+}
+.timeline-tools button {
+  min-width: 44px;
+  min-height: 44px;
+}
+.timeline-heading {
+  min-height: 58px;
+  flex-wrap: wrap;
+}
+.inspector-button-pair button {
+  white-space: normal;
+}
+.audio-drawer {
+  max-height: min(70dvh, 520px);
+}
+@media (min-width: 1000px) {
+  .audio-drawer {
+    position: static;
+    margin: 0 12px 10px;
+    max-height: min(35dvh, 280px);
+    box-shadow: none;
+  }
+}
+.audio-drawer input[type='number'],
+.color-control input[type='color'] {
+  min-height: 44px;
+}
+.audio-settings,
+.voiceover-clip-fields {
+  gap: 12px;
+}
+.voiceover-bar button,
+.video-stage__controls button,
+.error-banner button {
+  min-height: 44px;
+  min-width: 44px;
+}
+.video-stage__viewport {
+  min-height: 0;
+}
+.video-stage__controls {
+  height: auto;
+  min-height: 56px;
+  flex-wrap: wrap;
+}
+.editing-column {
+  overflow-y: auto;
+}
+.toolbar-hint {
+  display: none;
+}
+:root[data-large-text='true'] .app-topbar {
+  height: auto;
+  min-height: 68px;
+  flex-wrap: wrap;
+  padding-block: 8px;
+}
+:root[data-large-text='true'] .app-shell {
+  height: auto;
+  min-height: 100dvh;
+}
+:root[data-large-text='true'] .workspace {
+  min-height: 520px;
+  overflow: visible;
+}
+:root[data-large-text='true'] .inspector-panel {
+  max-height: 70dvh;
+}
+@media (max-width: 999px) {
+  .topbar-actions {
+    flex-wrap: wrap;
+  }
+  .topbar-actions button {
+    flex: 1 0 auto;
+    white-space: normal;
+    min-height: 44px;
+  }
+  .annotation-toolbar {
+    height: auto;
+    min-height: 60px;
+    flex-wrap: wrap;
+    overflow: visible;
+  }
+  .tool-set {
+    flex: 1 1 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+  }
+  .tool-button {
+    flex: 1 0 44px;
+    min-width: 44px;
+  }
+  .annotation-toolbar > button {
+    min-width: 44px;
+  }
+  .workspace {
+    overflow: auto;
+  }
+  .timeline-time {
+    margin-right: 0;
+  }
+  :root[data-large-text='true'] .workspace {
+    flex-direction: column;
+  }
+  :root[data-large-text='true'] .inspector-lock-region > .inspector-panel {
+    width: auto;
+    max-width: calc(100% - 16px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

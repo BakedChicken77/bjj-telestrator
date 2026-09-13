@@ -6,7 +6,7 @@ from copy import deepcopy
 from .errors import DomainError
 
 SCHEMA_VERSION = 2
-CAPABILITIES = ('project.revisions.v1',)
+CAPABILITIES = ('project.revisions.v1', 'media.hdr-to-sdr.v1')
 MAX_REVISION = 9007199254740991  # JSON/JavaScript safe integer, shared with Swift.
 
 
@@ -51,4 +51,4 @@ def runtime_capabilities() -> dict:
     return {'schemaVersion': SCHEMA_VERSION, 'requiredCapabilities': list(CAPABILITIES),
             'conditionalSave': True, 'conditionalExport': True, 'recoveryCopy': True,
             'exportRetry': True, 'storageBreakdown': True, 'exportFileCleanup': True,
-            'projectCheckpoints': True, 'projectDuplicate': True, 'projectTrash': True, 'mediaJobs': True, 'proxyRepair': True, 'hdrToSdr': False}
+            'projectCheckpoints': True, 'projectDuplicate': True, 'projectTrash': True, 'mediaJobs': True, 'proxyRepair': True, 'hdrToSdr': False, 'projectPackages': True}

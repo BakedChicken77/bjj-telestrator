@@ -1,7 +1,15 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import type { Project } from './model';
 import { useEditor } from './store';
-import { previewGains, previewWorkingSet, VoiceoverTransport } from './audioPreview';
+import { previewGains, VoiceoverTransport } from './audioPreview';
+import {
+  loadPCMWindow,
+  loadWAVHeader,
+  PCM_PREVIEW_BUDGET,
+  previewWindows,
+  type PCMWindow,
+  type WAVHeader,
+} from './pcmPreview';
 import { voiceoverURL } from './native';
 
 interface MediaGraph {
@@ -54,6 +62,9 @@ export class AudioPreview {
   private graph: MediaGraph;
   private transport: VoiceoverTransport;
   private buffers = new Map<string, AudioBuffer>();
+  private headers = new Map<string, WAVHeader>();
+  private windows: PCMWindow[] = [];
+  private capacityWarning = false;
   private loading = new Map<string, AbortController>();
   private failed = new Set<string>();
   private disposed = false;
@@ -107,8 +118,7 @@ export class AudioPreview {
     if (signature !== this.clipSignature) {
       this.clipSignature = signature;
       const ids = new Set(project.voiceovers.map((clip) => clip.id));
-      for (const id of this.buffers.keys()) if (!ids.has(id)) this.buffers.delete(id);
-      for (const [id, controller] of this.loading) if (!ids.has(id)) controller.abort();
+      for (const id of this.headers.keys()) if (!ids.has(id)) this.headers.delete(id);
       this.transport.stop();
       this.preload();
       this.onLoading(this.loading.size > 0);
@@ -162,7 +172,7 @@ export class AudioPreview {
       this.cacheTime = this.video.currentTime;
       this.preload();
     }
-    const { project, recording } = this.configuration;
+    const { recording } = this.configuration;
     const enabled =
       !recording &&
       !this.video.paused &&
@@ -173,7 +183,7 @@ export class AudioPreview {
     this.transport.sync(
       this.video.currentTime,
       this.video.playbackRate,
-      project.voiceovers,
+      this.windows.map((window) => window.placed),
       this.buffers,
       enabled,
     );
@@ -181,53 +191,74 @@ export class AudioPreview {
 
   private preload(): void {
     if (this.disposed) return;
-    const wanted = previewWorkingSet(this.configuration.project.voiceovers, this.video.currentTime);
-    const ids = new Set(wanted.map((clip) => clip.id));
+    const wanted = previewWindows(this.configuration.project.voiceovers, this.video.currentTime);
+    const required = wanted.reduce(
+      (total, window) => total + window.samples * window.original.channels * 4,
+      0,
+    );
+    if (required > PCM_PREVIEW_BUDGET) {
+      this.video.pause();
+      this.transport.stop();
+      if (!this.capacityWarning)
+        useEditor
+          .getState()
+          .setError(
+            'Playback paused: overlapping narration exceeds the 64 MiB preview budget. Mute or reduce overlapping takes to preview all audible clips reliably.',
+          );
+      this.capacityWarning = true;
+      return;
+    }
+    this.capacityWarning = false;
+    this.windows = wanted;
+    const ids = new Set(wanted.map((window) => window.key));
+    for (const id of this.failed) if (!ids.has(id)) this.failed.delete(id);
     for (const id of this.buffers.keys()) if (!ids.has(id)) this.buffers.delete(id);
     for (const [id, controller] of this.loading) if (!ids.has(id)) controller.abort();
     // Only a bounded neighborhood is decoded. The source video is always streamed.
     const pending = wanted.filter(
-      (clip) =>
-        !this.buffers.has(clip.id) && !this.loading.has(clip.id) && !this.failed.has(clip.id),
+      (window) =>
+        !this.buffers.has(window.key) &&
+        !this.loading.has(window.key) &&
+        !this.failed.has(window.key),
     );
-    for (const clip of pending.slice(0, Math.max(0, 2 - this.loading.size))) {
+    for (const window of pending.slice(0, Math.max(0, 2 - this.loading.size))) {
       const controller = new AbortController();
-      this.loading.set(clip.id, controller);
+      this.loading.set(window.key, controller);
       this.onLoading(true);
       const projectId = this.configuration.project.projectId;
-      void voiceoverURL(projectId, clip.id)
-        .then((url) =>
-          fetch(url, {
-            signal: controller.signal,
-          }),
-        )
-        .then(async (response) => {
-          if (!response.ok) throw new Error('Voiceover audio is unavailable');
-          const encoded = await response.arrayBuffer();
-          return this.graph.context.decodeAudioData(encoded);
+      void voiceoverURL(projectId, window.original.id)
+        .then(async (url) => {
+          const header =
+            this.headers.get(window.original.id) ?? (await loadWAVHeader(url, controller.signal));
+          if (!this.disposed && !controller.signal.aborted)
+            this.headers.set(window.original.id, header);
+          return loadPCMWindow(this.graph.context, url, window, header, controller.signal);
         })
         .then((buffer) => {
           if (
             !this.disposed &&
             !controller.signal.aborted &&
-            this.configuration.project.voiceovers.some((item) => item.id === clip.id)
+            this.windows.some((item) => item.key === window.key)
           ) {
-            this.buffers.set(clip.id, buffer);
+            this.buffers.set(window.key, buffer);
             this.tick();
           }
         })
-        .catch(() => {
+        .catch((cause: unknown) => {
           if (!this.disposed && !controller.signal.aborted) {
-            this.failed.add(clip.id);
+            this.failed.add(window.key);
             useEditor
               .getState()
               .setError(
-                'A voiceover could not be prepared for preview. Check the backend connection, then click Play to retry.',
+                'A voiceover could not be prepared for preview. ' +
+                  (cause instanceof Error
+                    ? cause.message
+                    : 'Reopen the project, then press Play to retry.'),
               );
           }
         })
         .finally(() => {
-          this.loading.delete(clip.id);
+          this.loading.delete(window.key);
           if (!this.disposed) {
             this.preload();
             this.onLoading(this.loading.size > 0);
@@ -244,6 +275,7 @@ export class AudioPreview {
     for (const controller of this.loading.values()) controller.abort();
     this.loading.clear();
     this.buffers.clear();
+    this.headers.clear();
     this.video.removeEventListener('play', this.resume);
     this.video.removeEventListener('playing', this.playing);
     this.video.removeEventListener('pause', this.stop);
@@ -282,7 +314,7 @@ export function useAudioPreview(
       useEditor
         .getState()
         .setError(
-          'Web Audio could not initialize. Reopen the project in a current desktop Chrome or Edge browser.',
+          'Audio preview could not initialize on this device. Reopen the project and try again.',
         );
     }
     return () => {

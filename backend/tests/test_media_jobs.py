@@ -169,10 +169,13 @@ def test_unsafe_repair_staging_fails_without_leaking_project_lease(media, tmp_pa
 def test_hdr_metadata_is_not_confused_with_sdr_hevc(transfer):
     stream = {'codec_type': 'video', 'codec_name': 'hevc', 'width': 160, 'height': 120, 'duration': '2',
               'avg_frame_rate': '30000/1001', 'r_frame_rate': '60000/1001', 'time_base': '1/90000',
-              'color_transfer': transfer, 'color_primaries': 'bt2020', 'color_space': 'bt2020nc', 'color_range': 'tv'}
+              'color_transfer': transfer, 'color_primaries': 'bt2020', 'color_space': 'bt2020nc', 'color_range': 'tv',
+              'side_data_list': [{'side_data_type': 'Mastering display metadata', 'max_luminance': '10000000/10000'},
+                                 {'side_data_type': 'Content light level metadata', 'max_content': 1000, 'max_average': 400}]}
     hdr = parse_probe({'streams': [stream]}, 'source/test.mov', 'test.mov')
     assert hdr.transferFunction == transfer and hdr.averageFrameRateRational == '30000/1001'
     assert hdr.timeBase == '1/90000' and hdr.colorPrimaries == 'bt2020'
+    assert hdr.model_dump()['hdrMetadata']['entries'] == stream['side_data_list']
     with pytest.raises(DomainError) as failure:
         require_sdr(hdr)
     assert failure.value.code == 'MEDIA_UNSUPPORTED'

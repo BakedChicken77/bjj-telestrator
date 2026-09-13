@@ -10,7 +10,7 @@ struct BJJRenderPlan {
         return ["startSec": 0, "endSec": project.duration, "width": Int(size.width), "height": Int(size.height),
                 "fps": project.exportSettings.n("fps"), "quality": project.exportSettings,
                 "container": "mp4", "videoCodec": "h264", "audioCodec": "aac", "pixelFormat": "yuv420p",
-                "colorPolicy": "supported-sdr-v1", "audioPolicy": "linear-mix-v1"]
+                "colorPolicy": (project.json["requiredCapabilities"] as! [String]).contains(BJJColor.capability) ? "hdr-rec709-v1" : "supported-sdr-v1", "audioPolicy": "linear-mix-v1"]
     }
     init(store: BJJStore, project: BJJProject) throws {
         let json: BJJJSON = ["version": 1, "projectId": project.id, "revision": project.revision,

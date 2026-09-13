@@ -1,0 +1,181 @@
+{
+  "browser": "149.0.7827.0",
+  "viewport": [
+    1280,
+    720
+  ],
+  "sourceSHA256": "aea26b1ca9ae655402b40303ee07eb6af10d541d4002c62b245c12aff4682aca",
+  "annotations": 100,
+  "narrationTracks": 3,
+  "sourceSeconds": 1200,
+  "editSamples": [
+    {
+      "elapsedToPaintMs": 876,
+      "reactCommits": 4
+    },
+    {
+      "elapsedToPaintMs": 2118.800000000745,
+      "reactCommits": 6
+    },
+    {
+      "elapsedToPaintMs": 2414.199999999255,
+      "reactCommits": 5
+    },
+    {
+      "elapsedToPaintMs": 807.8999999985099,
+      "reactCommits": 3
+    },
+    {
+      "elapsedToPaintMs": 2260.199999999255,
+      "reactCommits": 5
+    },
+    {
+      "elapsedToPaintMs": 960.3000000007451,
+      "reactCommits": 3
+    },
+    {
+      "elapsedToPaintMs": 2579.5,
+      "reactCommits": 5
+    },
+    {
+      "elapsedToPaintMs": 1013.3999999985099,
+      "reactCommits": 3
+    },
+    {
+      "elapsedToPaintMs": 2438.5,
+      "reactCommits": 5
+    },
+    {
+      "elapsedToPaintMs": 869.6999999992549,
+      "reactCommits": 3
+    }
+  ],
+  "edits": {
+    "commits": 53,
+    "longTaskCount": 29,
+    "longestTaskMs": 1290,
+    "maxAnimationFrameIntervalMs": 1499.8999999999996
+  },
+  "playback": {
+    "commits": 371,
+    "longTaskCount": 0,
+    "longestTaskMs": 0,
+    "maxAnimationFrameIntervalMs": 133.39999999999782,
+    "resolvedTime": 12.141333
+  },
+  "metrics": [
+    {
+      "name": "Nodes",
+      "value": 3476
+    },
+    {
+      "name": "LayoutCount",
+      "value": 425
+    },
+    {
+      "name": "RecalcStyleCount",
+      "value": 512
+    },
+    {
+      "name": "JSHeapUsedSize",
+      "value": 24007444
+    },
+    {
+      "name": "JSHeapTotalSize",
+      "value": 25640960
+    }
+  ],
+  "audioRanges": [
+    {
+      "status": 206,
+      "range": "bytes=0-65535",
+      "bytes": 65536
+    },
+    {
+      "status": 206,
+      "range": "bytes=0-65535",
+      "bytes": 65536
+    },
+    {
+      "status": 206,
+      "range": "bytes=44-480043",
+      "bytes": 480000
+    },
+    {
+      "status": 206,
+      "range": "bytes=44-480043",
+      "bytes": 480000
+    },
+    {
+      "status": 206,
+      "range": "bytes=0-65535",
+      "bytes": 65536
+    },
+    {
+      "status": 206,
+      "range": "bytes=480044-960043",
+      "bytes": 480000
+    },
+    {
+      "status": 206,
+      "range": "bytes=44-480043",
+      "bytes": 480000
+    },
+    {
+      "status": 206,
+      "range": "bytes=480044-960043",
+      "bytes": 480000
+    },
+    {
+      "status": 206,
+      "range": "bytes=480044-960043",
+      "bytes": 480000
+    },
+    {
+      "status": 206,
+      "range": "bytes=960044-1440043",
+      "bytes": 480000
+    },
+    {
+      "status": 206,
+      "range": "bytes=960044-1440043",
+      "bytes": 480000
+    },
+    {
+      "status": 206,
+      "range": "bytes=960044-1440043",
+      "bytes": 480000
+    },
+    {
+      "status": 206,
+      "range": "bytes=1440044-1920043",
+      "bytes": 480000
+    },
+    {
+      "status": 206,
+      "range": "bytes=1440044-1920043",
+      "bytes": 480000
+    },
+    {
+      "status": 206,
+      "range": "bytes=1440044-1920043",
+      "bytes": 480000
+    },
+    {
+      "status": 206,
+      "range": "bytes=1920044-2400043",
+      "bytes": 480000
+    },
+    {
+      "status": 206,
+      "range": "bytes=1920044-2400043",
+      "bytes": 480000
+    },
+    {
+      "status": 206,
+      "range": "bytes=1920044-2400043",
+      "bytes": 480000
+    }
+  ],
+  "limitations": "Headless Linux development build including StrictMode and automation overhead. Twelve seconds of preview; no hardware synchronization, listening or thermal acceptance. React counts are commits, not render duration."
+}

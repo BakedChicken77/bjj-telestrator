@@ -14,6 +14,7 @@ from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
+from .color import REC709_TAGS, hdr_to_srgb, is_hdr, require_supported_color, srgb_to_rec709
 from .errors import DomainError
 from .models import Media
 
@@ -36,7 +37,7 @@ def check_cancelled(cancel: threading.Event | None) -> None:
 def require_sdr(metadata: Media) -> None:
     # Codec alone cannot distinguish SDR HEVC from PQ/HLG/Dolby Vision.
     if metadata.transferFunction in ('smpte2084', 'arib-std-b67') or metadata.dolbyVision:
-        raise DomainError('MEDIA_UNSUPPORTED', 'HDR video needs an SDR copy until verified HDR conversion is available. The original was preserved.', 422)
+        raise DomainError('MEDIA_UNSUPPORTED', 'The prepared preview is still HDR. It cannot be used for SDR review.', 422)
 
 
 def ratio(value: object, default: float = 1) -> float:
@@ -45,6 +46,24 @@ def ratio(value: object, default: float = 1) -> float:
         return number if math.isfinite(number) and number > 0 else default
     except (ValueError, ZeroDivisionError):
         return default
+
+
+def hdr_side_data(video: dict[str, Any]) -> list[dict[str, Any]]:
+    """Preserve bounded native probe facts; the delivery policy uses a fixed peak.
+
+    Absence means the probe did not expose static metadata, not that the source
+    lacks HDR. The untouched source remains the authoritative bitstream.
+    """
+    result = []
+    for side in video.get('side_data_list', [])[:32]:
+        if not any(token in side.get('side_data_type', '').lower() for token in ('mastering', 'content light', 'dovi')):
+            continue
+        item = {str(key)[:100]: value for key, value in list(side.items())[:64]
+                if isinstance(value, (str, int, float, bool))
+                and (not isinstance(value, str) or len(value) <= 512)
+                and (not isinstance(value, float) or math.isfinite(value))}
+        result.append(item)
+    return result
 
 
 def parse_probe(data: dict[str, Any], asset: str, original_filename: str) -> Media:
@@ -86,7 +105,8 @@ def parse_probe(data: dict[str, Any], asset: str, original_filename: str) -> Med
                      colorMatrix=video.get('color_space', 'unknown'), colorRange=video.get('color_range', 'unknown'),
                      dolbyVision=any('DOVI' in side.get('side_data_type', '') for side in video.get('side_data_list', [])),
                      averageFrameRateRational=video.get('avg_frame_rate', '0/0'),
-                     nominalFrameRateRational=video.get('r_frame_rate', '0/0'), timeBase=video.get('time_base', 'unknown'))
+                     nominalFrameRateRational=video.get('r_frame_rate', '0/0'), timeBase=video.get('time_base', 'unknown'),
+                     frameTimingInspection='stream-metadata', hdrMetadata={'provider': 'ffprobe', 'entries': hdr_side_data(video)})
     except (KeyError, TypeError, ValueError) as exc:
         raise MediaError('The video metadata is incomplete or invalid') from exc
 
@@ -135,7 +155,8 @@ def proxy_dimensions(metadata: Media) -> tuple[int, int]:
 
 
 def proxy_args(source: Path, dest: Path, metadata: Media) -> list[str]:
-    require_sdr(metadata)
+    color = metadata.model_dump(mode='json')
+    require_supported_color(color)
     width, height = proxy_dimensions(metadata)
     origin = format(metadata.videoStartSec, '.9f')
     args = [os.getenv('BJJ_FFMPEG_PATH', 'ffmpeg'), '-hide_banner', '-loglevel', 'error', '-nostdin',
@@ -143,13 +164,15 @@ def proxy_args(source: Path, dest: Path, metadata: Media) -> list[str]:
             '-format_whitelist', INPUT_FORMATS, '-i', str(source), '-map', f'0:{metadata.videoStreamIndex}']
     if metadata.hasAudio and metadata.audioStreamIndex is not None:
         args += ['-map', f'0:{metadata.audioStreamIndex}']
-    args += ['-vf', f'scale={width}:{height}:flags=lanczos,setsar=1,setpts=PTS-({origin})/TB,fps={min(30, metadata.avgFrameRate):.12g}',
+    conversion = hdr_to_srgb(color)
+    delivery = ',' + srgb_to_rec709() if is_hdr(color) else ''
+    args += ['-vf', f'{conversion}scale={width}:{height}:flags=lanczos,setsar=1,setpts=PTS-({origin})/TB,fps={min(30, metadata.avgFrameRate):.12g}{delivery}',
              '-af', f'asetpts=PTS-({origin})/TB,aresample=async=1:first_pts=0',
              '-c:v', 'libx264', '-preset', 'veryfast',
              '-threads', os.getenv('BJJ_FFMPEG_THREADS', '2'), '-crf', '22',
              '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '160k',
              '-metadata:s:v:0', 'rotate=0', '-map_metadata', '-1', '-t', str(metadata.durationSec),
-             '-movflags', '+faststart', str(dest)]
+             '-movflags', '+faststart', *(REC709_TAGS if is_hdr(color) else []), str(dest)]
     return args
 
 

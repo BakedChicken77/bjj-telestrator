@@ -244,7 +244,7 @@ final class BJJMediaWork {
             try update(id) { $0.stage = "validating"; $0.progress = nil }
             let preview = try await BJJMedia.inspect(temporary, reference: proxyRef, originalName: originalName)
             let expected = BJJRenderer.outputSize(media.orientedSize, maximum: 1920)
-            guard ["avc1", "h264"].contains(preview.json.s("codec")), preview.orientedSize == expected, abs(preview.json.n("rotation")) < 0.001,
+            guard !BJJColor.isHDR(preview.json), ["avc1", "h264"].contains(preview.json.s("codec")), preview.orientedSize == expected, abs(preview.json.n("rotation")) < 0.001,
                   preview.fps <= 30.01, abs(preview.videoRange.duration.seconds - media.videoRange.duration.seconds) <= max(0.1, 1 / min(30, media.fps)),
                   preview.json["hasAudio"] as? Bool == media.json["hasAudio"] as? Bool,
                   preview.json["hasAudio"] as? Bool != true || preview.json.s("audioCodec") == "aac" else {
@@ -266,6 +266,7 @@ final class BJJMediaWork {
                     let now = BJJProject.now()
                     let title = String(URL(fileURLWithPath: originalName).deletingPathExtension().lastPathComponent.prefix(160)).trimmingCharacters(in: .whitespacesAndNewlines)
                     json = ["schemaVersion": 1, "projectId": job.projectId, "projectName": title.isEmpty ? "Rolling review" : title,
+                            "requiredCapabilities": BJJColor.isHDR(media.json) ? [BJJColor.capability] : [String](),
                             "createdAt": now, "updatedAt": now, "source": media.json, "proxy": proxy,
                             "settings": ["defaultAnnotationDuration": 5.0, "seekStepSec": 0.1, "largeSeekStepSec": 1.0, "originalAudioGain": 1.0, "originalAudioMuted": false, "voiceoverMasterGain": 1.0],
                             "exportSettings": ["fps": min(60, media.fps), "crf": 23, "preset": "medium"], "annotations": [BJJJSON](), "voiceovers": [BJJJSON]()]

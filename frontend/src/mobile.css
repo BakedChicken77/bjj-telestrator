@@ -3,7 +3,7 @@
 }
 .native-import {
   padding: 24px 12px;
-  border: 1px dashed #668353;
+  border: 1px dashed var(--border);
   border-radius: 10px;
   text-align: center;
 }
@@ -34,7 +34,7 @@
   .inspector-field input:not([type='color']),
   .inspector-field select,
   .inspector-field textarea {
-    font-size: 16px;
+    font-size: 1.23077rem;
   }
   input[type='range'] {
     min-height: 34px;
@@ -62,12 +62,12 @@
     min-height: 40px;
   }
   .audio-drawer input[type='number'] {
-    font-size: 16px;
+    font-size: 1.23077rem;
     min-height: 40px;
   }
   .inspector-button-pair button {
     white-space: normal;
-    font-size: 12px;
+    font-size: 0.92308rem;
   }
   .audio-toggle,
   .record-button,
@@ -114,11 +114,11 @@
     flex: 1;
     width: 100px;
     min-width: 0;
-    font-size: 16px;
+    font-size: 1.23077rem;
   }
   .save-indicator {
     margin-left: auto;
-    font-size: 10px;
+    font-size: 0.76923rem;
   }
   .topbar-actions {
     width: 100%;
@@ -129,7 +129,7 @@
     flex: 1;
     padding: 8px 10px;
     min-height: 44px;
-    font-size: 12px;
+    font-size: 0.92308rem;
     white-space: nowrap;
   }
   .annotation-toolbar {
@@ -184,7 +184,7 @@
     min-height: 40px;
   }
   .video-stage__time {
-    font-size: 10px;
+    font-size: 0.76923rem;
   }
   .video-stage__seek {
     order: 2;
@@ -210,7 +210,7 @@
     min-height: 44px;
   }
   .mobile-panel-tabs button[aria-pressed='true'] {
-    border-color: #748d54;
+    border-color: var(--accent);
     color: var(--accent);
     background: #bded7a12;
   }
@@ -233,12 +233,12 @@
     overflow: visible;
   }
   .inspector-field {
-    font-size: 12px;
+    font-size: 0.92308rem;
   }
   .inspector-field input:not([type='color']),
   .inspector-field select,
   .inspector-field textarea {
-    font-size: 16px;
+    font-size: 1.23077rem;
   }
   .timeline-panel {
     margin: 0 8px 12px;
@@ -252,7 +252,7 @@
   }
   .timeline-time {
     margin-right: 2px;
-    font-size: 10px;
+    font-size: 0.76923rem;
   }
   .timeline-hint {
     line-height: 1.5;
@@ -269,11 +269,11 @@
     flex: 1 0 100%;
     order: 3;
     padding-bottom: 4px;
-    font-size: 10px;
+    font-size: 0.76923rem;
   }
   .audio-toggle,
   .record-button {
-    font-size: 11px;
+    font-size: 0.84615rem;
   }
   .audio-drawer {
     position: fixed;
@@ -288,7 +288,7 @@
     position: sticky;
     top: -14px;
     padding: 12px 0;
-    background: #16222c;
+    background: var(--surface);
     z-index: 1;
   }
   .audio-drawer-heading span {
@@ -304,7 +304,7 @@
     grid-template-columns: 1fr 1fr;
   }
   .audio-help {
-    font-size: 12px;
+    font-size: 0.92308rem;
   }
   .modal-backdrop {
     padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right))
@@ -321,7 +321,7 @@
     margin-bottom: 18px;
   }
   h1 {
-    font-size: 25px;
+    font-size: 1.92308rem;
   }
   .project-list {
     max-height: 34dvh;
@@ -333,7 +333,7 @@
   .export-options input,
   .export-options select {
     width: 100%;
-    font-size: 16px;
+    font-size: 1.23077rem;
   }
   .export-spec {
     flex-wrap: wrap;
@@ -352,7 +352,7 @@
   .error-banner {
     padding: 8px 12px;
     flex-shrink: 0;
-    font-size: 11px;
+    font-size: 0.84615rem;
     max-height: 20dvh;
     overflow-y: auto;
   }
@@ -360,14 +360,14 @@
     max-width: calc(100vw - 30px);
     width: max-content;
     bottom: max(20px, env(safe-area-inset-bottom));
-    font-size: 12px;
+    font-size: 0.92308rem;
   }
   .welcome-background {
     text-align: center;
     padding: 20px;
   }
   .welcome-background p {
-    font-size: 20px;
+    font-size: 1.53846rem;
   }
 }
 

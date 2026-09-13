@@ -31,13 +31,15 @@ extension BJJStore {
     func recoverCopy(_ draft: BJJProject, suffix: String = " (recovered copy)", sourceStore: BJJStore? = nil) throws -> BJJProject {
         try locked { try copyReview(draft, suffix: suffix, sourceStore: sourceStore ?? self) }
     }
-    private func copyReview(_ draft: BJJProject, suffix: String, sourceStore: BJJStore) throws -> BJJProject {
-        let original = try sourceStore.load(draft.id)
-        for field in ["source", "proxy", "createdAt"] {
-            guard NSDictionary(dictionary: ["value": draft.json[field]!]).isEqual(to: ["value": original.json[field]!]) else {
+    private func copyReview(_ pending: BJJProject, suffix: String, sourceStore: BJJStore) throws -> BJJProject {
+        let original = try sourceStore.load(pending.id)
+        for field in ["source", "createdAt"] {
+            guard NSDictionary(dictionary: ["value": pending.json[field]!]).isEqual(to: ["value": original.json[field]!]) else {
                 throw BJJError.invalid("Recovery cannot change imported media metadata.")
             }
         }
+        var document = pending.json; document["proxy"] = original.proxy
+        let draft = try BJJProject(document)
         let registry = try sourceStore.recordings(draft.id)
         for clip in draft.voiceovers {
             guard let registered = registry[clip["id"] as! String] as? BJJJSON else { throw BJJError.invalid("Unknown recovery recording.") }

@@ -13,13 +13,15 @@ from .storage import ProjectStore, StorageError, require_uuid
 
 
 def output_contract(project: Project) -> dict:
+    from .color import HDR_CAPABILITY
     from .renderer import output_dimensions
     width, height = output_dimensions(project.source)
     return {'startSec': 0, 'endSec': project.source.durationSec,
             'width': width, 'height': height,
             'fps': project.exportSettings.fps, 'quality': project.exportSettings.model_dump(mode='json'),
             'container': 'mp4', 'videoCodec': 'h264', 'audioCodec': 'aac', 'pixelFormat': 'yuv420p',
-            'colorPolicy': 'supported-sdr-v1', 'audioPolicy': 'linear-mix-v1'}
+            'colorPolicy': 'hdr-rec709-v1' if HDR_CAPABILITY in project.requiredCapabilities else 'supported-sdr-v1',
+            'audioPolicy': 'linear-mix-v1'}
 
 
 def build_plan(store: ProjectStore, project: Project) -> dict:

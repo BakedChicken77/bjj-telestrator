@@ -2,7 +2,12 @@
 
 This repository now includes a standalone iOS application alongside the working Windows/Docker application. The iPhone app bundles the React annotation editor in Capacitor 8.5.1 and uses Swift, AVFoundation, Core Image, and Core Graphics for local files, microphone capture, and H.264/AAC MP4 rendering. It does not connect to the Windows computer or require Docker at runtime.
 
-**Release status:** the P1.06 recovery candidate at `33be6315eb4fdee79ac7fe5d973292bfc09b182f` passed all 22 native XCTest cases, the unsigned archive and every other gate in [CI](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34727786132). Signing, installed updates, physical-iPhone export/share, and a realistic 20-minute workload remain unverified. An unsigned archive is not an installable IPA. GitHub-hosted macOS runners support the Windows-only development route.
+**Release status:** the Phase 1 code has compiled on Xcode 26.6, and native
+package/HDR/cleanup/index tests have run, including real H.264/AAC output after
+portable restore. The [completion record](docs/P1_COMPLETION.md) identifies the
+current candidate, CI results and unsigned archive status. Signing, installed
+updates, physical-iPhone export/share and realistic 20-minute workloads remain
+unverified. GitHub-hosted macOS runners support the Windows-only route.
 
 ## Windows-only build and distribution route
 
@@ -22,7 +27,7 @@ You need a Mac capable of running Xcode 26 or newer, its iOS SDK/simulator compo
    npm run ios:open
    ```
 
-3. In Xcode, select the **App** project, then the **App** target → **Signing & Capabilities**. Enable automatic signing and choose your Apple Account's team. Replace `com.bjjtelestrator.app` with a unique identifier if Xcode says it is unavailable. Use the same identifier in `frontend/capacitor.config.ts`. For device tests, also set the AppTests target's team and a matching unique test bundle identifier.
+3. In Xcode, select the **App** project, then the **App** target → **Signing & Capabilities**. Enable automatic signing and choose your Apple Account's team. When updating an installed app, retain its existing bundle identifier and team so the populated app container remains available. For a first installation only, if `com.bjjtelestrator.app` is unavailable, choose your own unique identifier and use the same identifier in `frontend/capacitor.config.ts`. For device tests, also set the AppTests target's team and a matching test bundle identifier.
 4. Connect the unlocked iPhone to the Mac, accept its Trust prompt, and select the phone as Xcode's run destination. If requested, enable **Settings → Privacy & Security → Developer Mode**, restart, and confirm. Follow Xcode's device pairing/provisioning prompts. Apple's [device preparation guide](https://developer.apple.com/documentation/xcode/running-your-app-in-simulator-or-on-a-device) describes this flow.
 5. Run **Product → Test** first on an iPhone simulator and resolve any build/test failures before using real coaching projects. Then select the physical iPhone and press **Run**. Keep the original installation when updating so its project container is retained.
 6. Open **BJJ Telestrator** on the phone. It runs from its own app icon. Disconnecting the Windows computer has no effect on editing/export.
@@ -35,8 +40,8 @@ If you only have Windows, follow [GitHub setup](docs/GITHUB_SETUP.md). The inclu
 
 1. In Projects, select **Photos** or **Files**. Choose an SDR MP4/MOV recording. The system Photos picker grants access only to the selected item; the app does not scan the photo library. If an original exists only in iCloud, the system may need to download it first.
 2. Follow Copying, Inspecting, Preparing preview and Validating. **Cancel preparation** stops copying or encoding and removes incomplete staging. Leave the app open while preparing long footage. The selected original is preserved byte-for-byte; Photos may first need to retrieve its file.
-3. Scrub to a moment, choose a tool, then drag one finger on the video picture. The toolbar scrolls sideways to expose all tools, undo, redo, and delete. A second touch does not take over a drawing gesture.
-4. Use **Timeline** for selection, time shifting, edge trimming, and zoom. Use **Properties & settings** for precise time values, text, colors, width, opacity, layer order, and project defaults. Portrait and landscape layouts share the same normalized geometry.
+3. Scrub to a moment, choose a tool, then drag one finger on the video picture. The toolbar wraps to keep tools, undo, redo and delete reachable. A second touch does not take over a drawing gesture.
+4. Use **Timeline** for selection, time shifting, edge trimming, and zoom. Use **Properties & settings** for the semantic annotation list, creation without dragging, percentage coordinates/endpoints/freehand points, precise times, style, layer order and project defaults. Portrait and landscape layouts share the same normalized geometry.
 5. Wait for **Saved** before closing the app. Projects reopen from the Projects button. Undo/redo history is local to the current editing session.
 6. Press **Record voiceover**, allow microphone permission, and speak as the video advances. Press Stop to save. A pause, seek attempt, buffering, backgrounding, or audio interruption ends the take to preserve its linear timeline. Reposition and record again for another take. Headphones reduce speaker feedback into the recording.
 7. Open **Audio & voiceovers** to adjust original audio, clip/master gain, mute, clip position, or timing nudge. Delete/rerecord as needed. Deleted clips remain available for undo until the project is deleted.
@@ -53,7 +58,10 @@ The Photos selection determines the imported asset. An original high-speed file
 can have different timing from a Photos-rendered slow-motion edit. The app keeps
 the selected asset's timeline and does not recreate Photos speed ramps. A preview
 at up to 30 fps cannot expose every original high-speed frame; exact source-frame
-navigation, VFR/high-speed hardware acceptance and HDR conversion remain open.
+navigation remains a later transport feature. Shared 120 fps/VFR fixtures test
+time mapping; actual phone media still needs acceptance. Native HDR conversion
+passes the shared synthetic fixtures; actual phone footage/display checks remain
+pending, and no broad HDR support is advertised.
 
 The exported recipient needs only the MP4. No project file or special player is required.
 
@@ -95,7 +103,7 @@ python3 scripts/test_ios.py
 python3 scripts/test_ios.py --device <simulator-UDID>
 ```
 
-The runner invokes `xcodebuild test`, saves an `.xcresult` under `tests/generated/`, and fails clearly outside macOS. Alternatively use Product → Test in Xcode with the shared **App** scheme. The tests in `BJJNativeTests.swift` include native generated video/tone fixtures and actual MP4 rendering, half-open boundaries, dimensions/orientation, audio mixing/nudge, source preservation, atomic persistence/recovery, path safety, and job cancellation. **All 22 native tests passed for the recovery candidate on GitHub macOS runners ([evidence](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34727786132)); test every later application candidate again.**
+The runner invokes `xcodebuild test`, saves an `.xcresult` under `tests/generated/`, and fails clearly outside macOS. Alternatively use Product → Test in Xcode with the shared **App** scheme. The tests in `BJJNativeTests.swift` include native generated video/tone fixtures and actual MP4 rendering, half-open boundaries, dimensions/orientation, audio mixing/nudge, source preservation, atomic persistence/recovery, path safety, and job cancellation. **The starting commit passed 25 XCTest methods on GitHub macOS runners ([evidence](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34753976427)); the new Phase 1 methods and archive must run on the current candidate.**
 
 When adding Swift source files, run `python3 scripts/configure_ios.py` to wire them into the Xcode app target. The app uses Swift Package Manager; CocoaPods is not required. Do not run `cap add ios` over the customized checked-in project.
 
@@ -112,19 +120,19 @@ Before treating this as a verified iPhone release:
 
 ## Local data and limits
 
-- Native projects are stored in the app's Application Support container under `BJJTelestrator/projects/<uuid>/`. The directory contains project JSON, original/proxy media, recordings, export metadata/MP4s, and temporary files. It survives normal restarts and same-identity app updates. Removing the app removes its container. There is no portable editable-project backup/restore interface yet; share completed MP4s to Files and retain original camera recordings. Windows projects and iPhone projects are separate; there is no automatic sync or project migration UI.
+- Native projects are stored in the app's Application Support container under `BJJTelestrator/projects/<uuid>/`. The directory contains project JSON, original/proxy media, recordings, export metadata/MP4s, and temporary files. It survives normal restarts and same-identity app updates. Removing the app removes its container. Portable `.bjjproj` backup/restore passes native shared-fixture and real export tests; physical Files interchange is pending. It creates independent editable copies across devices. There is no automatic sync.
 - Native import is capped at **4 GiB**, **4096 pixels on the long edge**, and 24 hours by validation; those are input bounds, not a performance promise. Typical 1080p coaching clips are the target. Proxy long edge is at most 1920 and preview rate is at most 30 fps; final dimensions default to source display dimensions, rounded to even pixels. Exports support up to 60 fps.
-- Native HDR PQ/HLG footage is rejected with instructions to provide an SDR copy. Common iPhones record HDR by default; turn off **HDR Video** in Camera recording settings for new test clips or first export a genuine SDR copy using an editor. SDR HEVC is supported by the implementation. Non-right-angle rotation is rejected. Dolby Vision/HDR color correctness is not claimed.
+- The candidate implements SDR conversion before compositing for PQ/HLG with valid Rec.2020 metadata. Shared native/FFmpeg fixtures pass; actual phone color checks remain pending and no broad HDR support is advertised. All Dolby Vision variants and non-right-angle rotation are rejected. Use a genuine SDR copy for the supported fallback. See the documented [SDR delivery policy](docs/decisions/002-sdr-delivery.md).
 - Native encoding uses Apple's H.264 encoder, not FFmpeg/libx264. The shared quality field maps to a bounded bitrate; encoding-speed presets are hidden on iPhone. Audio is mixed at 48 kHz stereo and encoded as AAC. Native mixing clamps peaks to 0.98 after gain, which can distort heavily overloaded mixes; reduce gains. Desktop export retains its look-ahead limiter. Output is ordinary H.264/AAC MP4, but native encoder profiles/chroma/audio priming must be checked on the target device.
 - Rendering is foreground work. iOS can suspend apps and stop extended background encoding. The app keeps the display awake during import/export; background expiry cancels safely, and interrupted jobs are marked failed after relaunch. There is no background-render guarantee.
-- Media files are streamed in bounded chunks; native rendering holds one overlay state and encoder buffers. Web Audio still decodes each active narration take completely. Prefer short takes on memory-constrained phones. Text uses bundled DejaVu Sans; Core Text and Canvas antialiasing/metrics can differ slightly.
+- Media files are streamed in bounded chunks; native rendering holds one overlay state and encoder buffers. Shared Web Audio preview now reads 5-second PCM windows through the existing bounded native byte-range route. It retains every active overlap, and pauses with an error if the audible window set exceeds 64 MiB. Actual WKWebView playback, seams, seeks and memory must be checked on hardware. Text uses bundled DejaVu Sans; Core Text and Canvas antialiasing/metrics can differ slightly.
 - No app analytics, tracking, cloud backend, account system, watermark, or remote media-upload service is added. The system Photos/Files picker may access locations you explicitly choose. An iOS privacy manifest and microphone/Photos-save purpose strings are included; review the final archive's privacy report before distribution.
 
 ## Troubleshooting
 
 - **Xcode command-line tools missing:** open Xcode Settings → Locations and select Xcode's command-line tools; install the iOS components. `xcodebuild -version` should report Xcode 26 or newer.
-- **Swift packages will not resolve:** the first build needs Internet access to fetch Capacitor's pinned Swift package. In Xcode, use File → Packages → Resolve Package Versions. The completed app does not need that connection.
-- **Signing/bundle identifier error:** select your own team and a unique identifier. Keep it stable across updates. Free Personal Team signing expires; re-run from Xcode when needed.
+- **Swift packages will not resolve:** the first build needs Internet access to fetch Capacitor and ZIPFoundation's pinned Swift packages. In Xcode, use File → Packages → Resolve Package Versions. The completed app does not need that connection.
+- **Signing/bundle identifier error:** select the team and identifier associated with the installed app. For a first installation, select your own team and a unique identifier, then keep them stable across updates. Free Personal Team signing expires; re-run from Xcode when needed.
 - **Blank editor or missing DejaVu font:** run `npm ci` and `npm run ios:sync` from `frontend`, then rebuild App. The required bundled `public/` folder is generated by that command.
 - **Microphone denied:** enable BJJ Telestrator under Settings → Privacy & Security → Microphone. Close other recording apps and retry. A failed take must restore editor controls.
 - **Video not available:** download the original from iCloud first, check free storage, and use a complete SDR H.264/HEVC MP4 or MOV. iOS supports fewer source codecs than the desktop FFmpeg build.
@@ -162,8 +170,8 @@ large media through JavaScript.
 **Remove MP4** reclaims a completed output and retains its retry input and all source
 and recording assets. An active share sheet protects that file until dismissed.
 Old jobs without saved inputs cannot retry their old edits. Whole-project deletion
-now retains the project in **Recently deleted**. Files `.bjjproj` transfer remains
-later work. Simulator/CI verification does not establish physical
+now retains the project in **Recently deleted**. Files `.bjjproj` transfer is
+automatically tested in this candidate and awaits physical-device acceptance. Simulator/CI verification does not establish physical
 low-space, share-sheet, thermal or 20-minute performance acceptance.
 
 
@@ -181,3 +189,27 @@ deleted project intact. These local copies do not protect against uninstall or
 phone loss. Keep the same bundle identity for updates and never uninstall as a
 routine rollback. Physical suspension, large copies, VoiceOver and low-space
 behavior still require the candidate-specific device checklist.
+
+
+### Files backup, restore and appearance — candidate workflow
+
+Open **Projects → Editable project backups**. Back up the confirmed revision, with
+optional preview inclusion, then **Save backup to Files or share**. The package includes
+its original and referenced narration. Completed MP4s, deleted takes, checkpoints
+and undo history are excluded. Keep a complete container backup if those versions
+must also be retained. Restore from Files, or open a `.bjjproj` document in Files
+and explicitly choose restore. Progress/cancellation stays in the editor; copying
+uses native file handles and never passes a large archive through JavaScript.
+
+Restore checks structure, actual expanded byte limits, SHA-256, schema and media,
+then installs a new independent review. **Open restored project** saves the current
+review before switching. Closing a share sheet without choosing a destination is
+cancellation. Package preparation needs foreground time and staging space; an
+interruption records a recoverable failure rather than a finished project. Remove
+temporary package files after keeping an external copy. See README for size limits.
+
+**Export → Project storage** can reclaim obsolete previews after 24 hours, while
+retained references and active operations pin assets. Sources and recording files
+remain untouched. **Projects → Appearance and keyboard help** offers system/light/
+dark and larger text; iPhone VoiceOver, rotation and all real Files transfers need
+the candidate-specific [device checklist](docs/DEVICE_ACCEPTANCE.md).

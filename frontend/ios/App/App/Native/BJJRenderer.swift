@@ -9,6 +9,23 @@ extension Dictionary where Key == String, Value == Any {
     func s(_ key: String) -> String { self[key] as! String }
 }
 
+enum BJJColor {
+    static let capability = "media.hdr-to-sdr.v1"
+    static func isHDR(_ media: BJJJSON) -> Bool {
+        ["smpte2084", "arib-std-b67", "SMPTE_ST_2084_PQ", "ITU_R_2100_HLG"].contains(media["transferFunction"] as? String ?? "")
+    }
+    static func canonical(_ value: Any?) -> String {
+        let name = value as? String ?? "unknown"
+        return ["SMPTE_ST_2084_PQ": "smpte2084", "ITU_R_2100_HLG": "arib-std-b67",
+                "ITU_R_2020": "bt2020", "ITU_R_709_2": "bt709"][name] ?? name
+    }
+    static let properties: [String: Any] = [
+        AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_709_2,
+        AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_709_2,
+        AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_709_2
+    ]
+}
+
 struct BJJMedia {
     let asset: AVURLAsset
     let video: AVAssetTrack
@@ -41,9 +58,10 @@ struct BJJMedia {
             throw BJJError.invalid("This video has a non-right-angle rotation. Rotate it to 0, 90, 180 or 270 degrees before importing.")
         }
         let extensions = (CMFormatDescriptionGetExtensions(format) as NSDictionary?) ?? NSDictionary()
-        if let transfer = extensions[kCMFormatDescriptionExtension_TransferFunction] as? String,
-           transfer.contains("2084") || transfer.contains("HLG") || transfer.contains("2100") {
-            throw BJJError.invalid("HDR footage needs an SDR copy before importing. In iPhone Camera settings, turn off HDR Video for new recordings.")
+        let atoms = extensions[kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms] as? [String: Any] ?? [:]
+        let subtype = fourCC(CMFormatDescriptionGetMediaSubType(format))
+        if atoms["dvcC"] != nil || atoms["dvvC"] != nil || ["dvh1", "dvhe"].contains(subtype) {
+            throw BJJError.domain("MEDIA_UNSUPPORTED", "This Dolby Vision variant needs a Photos-rendered SDR copy. Its original was preserved.")
         }
         let seconds = range.duration.seconds
         guard seconds.isFinite, seconds >= 0.05, seconds <= 86400,
@@ -69,13 +87,31 @@ struct BJJMedia {
             "rotation": angle, "avgFrameRate": fps,
             "videoStartSec": range.start.seconds, "nativeEngine": "AVFoundation"
         ]
-        metadata["transferFunction"] = extensions[kCMFormatDescriptionExtension_TransferFunction] as? String ?? "unknown"
-        metadata["colorPrimaries"] = extensions[kCMFormatDescriptionExtension_ColorPrimaries] as? String ?? "unknown"
-        metadata["colorMatrix"] = extensions[kCMFormatDescriptionExtension_YCbCrMatrix] as? String ?? "unknown"
+        metadata["transferFunction"] = BJJColor.canonical(extensions[kCMFormatDescriptionExtension_TransferFunction])
+        metadata["colorPrimaries"] = BJJColor.canonical(extensions[kCMFormatDescriptionExtension_ColorPrimaries])
+        let matrix = BJJColor.canonical(extensions[kCMFormatDescriptionExtension_YCbCrMatrix])
+        metadata["colorMatrix"] = matrix == "bt2020" ? "bt2020nc" : matrix
         // Absence of range/timestamp-index evidence is explicit. Nominal frame
         // rate is not a per-frame PTS index and cannot prove constant frame rate.
-        metadata["colorRange"] = "unknown"
+        metadata["colorRange"] = (extensions[kCMFormatDescriptionExtension_FullRangeVideo] as? Bool) == true ? "pc" : "tv"
+        metadata["dolbyVision"] = false
+        if BJJColor.isHDR(metadata) && (metadata["colorPrimaries"] as? String != "bt2020" || metadata["colorMatrix"] as? String != "bt2020nc") {
+            throw BJJError.domain("MEDIA_UNSUPPORTED", "HDR needs valid Rec.2020 primaries and matrix metadata. Choose a complete original or an SDR copy.")
+        }
         metadata["timeBase"] = "1/\(range.duration.timescale)"
+        metadata["frameTimingInspection"] = "nominal-track-metadata"
+        let minimumFrameDuration = try await video.load(.minFrameDuration)
+        if minimumFrameDuration.isNumeric && minimumFrameDuration.value > 0 {
+            metadata["nominalFrameRateRational"] = "\(minimumFrameDuration.timescale)/\(minimumFrameDuration.value)"
+        }
+        var staticHDR = [BJJJSON]()
+        for (key, value) in extensions {
+            guard let name = key as? String, name.contains("MasteringDisplay") || name.contains("ContentLight") else { continue }
+            if let data = value as? Data, data.count <= 4096 {
+                staticHDR.append(["kind": name, "encoding": "base64", "data": data.base64EncodedString()])
+            }
+        }
+        metadata["hdrMetadata"] = ["provider": "CoreMedia", "entries": staticHDR]
         return BJJMedia(asset: asset, video: video, videoRange: range, naturalSize: size,
                         orientedSize: oriented, transform: normalized, fps: fps, json: metadata)
     }
@@ -302,6 +338,11 @@ final class BJJRenderer {
             }
         }
         let videoComposition = AVMutableVideoComposition()
+        // AVFoundation converts HDR inputs to these SDR properties BEFORE its
+        // compositor. Do not apply a second Core Image tone-map to these pixels.
+        videoComposition.colorPrimaries = AVVideoColorPrimaries_ITU_R_709_2
+        videoComposition.colorTransferFunction = AVVideoTransferFunction_ITU_R_709_2
+        videoComposition.colorYCbCrMatrix = AVVideoYCbCrMatrix_ITU_R_709_2
         videoComposition.renderSize = size
         videoComposition.frameDuration = CMTime(seconds: 1 / fps, preferredTimescale: 60000)
         let instruction = AVMutableVideoCompositionInstruction()
@@ -336,6 +377,7 @@ final class BJJRenderer {
         let bitrate = Int(min(60_000_000, max(1_000_000, Double(size.width * size.height) * fps * 0.12 * pow(2, (23 - quality) / 6))))
         let videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: [
             AVVideoCodecKey: AVVideoCodecType.h264, AVVideoWidthKey: Int(size.width), AVVideoHeightKey: Int(size.height),
+            AVVideoColorPropertiesKey: BJJColor.properties,
             AVVideoCompressionPropertiesKey: [AVVideoAverageBitRateKey: bitrate,
                 AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
                 AVVideoExpectedSourceFrameRateKey: fps, AVVideoMaxKeyFrameIntervalKey: Int(fps * 2)]
@@ -358,6 +400,7 @@ final class BJJRenderer {
         }
         let overlay = try BJJOverlay(annotations: project?.annotations ?? [], size: size, fps: fps)
         let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
+        let deliverySpace = CGColorSpace(name: CGColorSpace.itur_709)!
         let context = CIContext(options: [.cacheIntermediates: false, .workingColorSpace: colorSpace])
         self.reader = reader; self.writer = writer
         self.inputs = [videoInput] + (audioInput.map { [$0] } ?? [])
@@ -402,7 +445,7 @@ final class BJJRenderer {
                         }
                         var image = CIImage(cvPixelBuffer: source)
                         if let overlayImage = overlay.image(at: pts.seconds) { image = overlayImage.composited(over: image) }
-                        context.render(image, to: destination, bounds: CGRect(origin: .zero, size: size), colorSpace: colorSpace)
+                        context.render(image, to: destination, bounds: CGRect(origin: .zero, size: size), colorSpace: deliverySpace)
                         guard adaptor.append(destination, withPresentationTime: pts) else {
                             complete(.failure(writer.error ?? BJJError.invalid("Unable to encode a video frame."))); return
                         }
