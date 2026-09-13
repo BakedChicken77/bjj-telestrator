@@ -2,11 +2,10 @@
 
 This repository now includes a standalone iOS application alongside the working Windows/Docker application. The iPhone app bundles the React annotation editor in Capacitor 8.5.1 and uses Swift, AVFoundation, Core Image, and Core Graphics for local files, microphone capture, and H.264/AAC MP4 rendering. It does not connect to the Windows computer or require Docker at runtime.
 
-**Release status:** the starting commit `dadeee523f8a933c53333c2b298a8058b9f8e604`
-passed all 25 XCTest methods, an unsigned archive and all other gates in
-[CI](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34753976427).
-The new Phase 1 package, HDR, cleanup and timing fixtures have not yet compiled or
-run against an Apple SDK. Local checks do not replace that gate. Signing, installed
+**Release status:** the Phase 1 code has compiled on Xcode 26.6, and native
+package/HDR/cleanup/index tests have run, including real H.264/AAC output after
+portable restore. The [completion record](docs/P1_COMPLETION.md) identifies the
+current candidate, CI results and unsigned archive status. Signing, installed
 updates, physical-iPhone export/share and realistic 20-minute workloads remain
 unverified. GitHub-hosted macOS runners support the Windows-only route.
 
@@ -28,7 +27,7 @@ You need a Mac capable of running Xcode 26 or newer, its iOS SDK/simulator compo
    npm run ios:open
    ```
 
-3. In Xcode, select the **App** project, then the **App** target → **Signing & Capabilities**. Enable automatic signing and choose your Apple Account's team. Replace `com.bjjtelestrator.app` with a unique identifier if Xcode says it is unavailable. Use the same identifier in `frontend/capacitor.config.ts`. For device tests, also set the AppTests target's team and a matching unique test bundle identifier.
+3. In Xcode, select the **App** project, then the **App** target → **Signing & Capabilities**. Enable automatic signing and choose your Apple Account's team. When updating an installed app, retain its existing bundle identifier and team so the populated app container remains available. For a first installation only, if `com.bjjtelestrator.app` is unavailable, choose your own unique identifier and use the same identifier in `frontend/capacitor.config.ts`. For device tests, also set the AppTests target's team and a matching test bundle identifier.
 4. Connect the unlocked iPhone to the Mac, accept its Trust prompt, and select the phone as Xcode's run destination. If requested, enable **Settings → Privacy & Security → Developer Mode**, restart, and confirm. Follow Xcode's device pairing/provisioning prompts. Apple's [device preparation guide](https://developer.apple.com/documentation/xcode/running-your-app-in-simulator-or-on-a-device) describes this flow.
 5. Run **Product → Test** first on an iPhone simulator and resolve any build/test failures before using real coaching projects. Then select the physical iPhone and press **Run**. Keep the original installation when updating so its project container is retained.
 6. Open **BJJ Telestrator** on the phone. It runs from its own app icon. Disconnecting the Windows computer has no effect on editing/export.
@@ -60,8 +59,9 @@ can have different timing from a Photos-rendered slow-motion edit. The app keeps
 the selected asset's timeline and does not recreate Photos speed ramps. A preview
 at up to 30 fps cannot expose every original high-speed frame; exact source-frame
 navigation remains a later transport feature. Shared 120 fps/VFR fixtures test
-time mapping; actual phone media still needs acceptance. The HDR conversion
-implementation awaits native/device verification.
+time mapping; actual phone media still needs acceptance. Native HDR conversion
+passes the shared synthetic fixtures; actual phone footage/display checks remain
+pending, and no broad HDR support is advertised.
 
 The exported recipient needs only the MP4. No project file or special player is required.
 
@@ -120,9 +120,9 @@ Before treating this as a verified iPhone release:
 
 ## Local data and limits
 
-- Native projects are stored in the app's Application Support container under `BJJTelestrator/projects/<uuid>/`. The directory contains project JSON, original/proxy media, recordings, export metadata/MP4s, and temporary files. It survives normal restarts and same-identity app updates. Removing the app removes its container. Portable `.bjjproj` backup/restore is implemented in the candidate; fresh native compilation and physical Files interchange are pending. It creates independent editable copies across devices. There is no automatic sync.
+- Native projects are stored in the app's Application Support container under `BJJTelestrator/projects/<uuid>/`. The directory contains project JSON, original/proxy media, recordings, export metadata/MP4s, and temporary files. It survives normal restarts and same-identity app updates. Removing the app removes its container. Portable `.bjjproj` backup/restore passes native shared-fixture and real export tests; physical Files interchange is pending. It creates independent editable copies across devices. There is no automatic sync.
 - Native import is capped at **4 GiB**, **4096 pixels on the long edge**, and 24 hours by validation; those are input bounds, not a performance promise. Typical 1080p coaching clips are the target. Proxy long edge is at most 1920 and preview rate is at most 30 fps; final dimensions default to source display dimensions, rounded to even pixels. Exports support up to 60 fps.
-- The candidate implements SDR conversion before compositing for PQ/HLG with valid Rec.2020 metadata. Native fixtures and actual phone color checks remain pending; no broad HDR support is advertised. All Dolby Vision variants and non-right-angle rotation are rejected. Use a genuine SDR copy for the supported fallback. See the documented [SDR delivery policy](docs/decisions/002-sdr-delivery.md).
+- The candidate implements SDR conversion before compositing for PQ/HLG with valid Rec.2020 metadata. Shared native/FFmpeg fixtures pass; actual phone color checks remain pending and no broad HDR support is advertised. All Dolby Vision variants and non-right-angle rotation are rejected. Use a genuine SDR copy for the supported fallback. See the documented [SDR delivery policy](docs/decisions/002-sdr-delivery.md).
 - Native encoding uses Apple's H.264 encoder, not FFmpeg/libx264. The shared quality field maps to a bounded bitrate; encoding-speed presets are hidden on iPhone. Audio is mixed at 48 kHz stereo and encoded as AAC. Native mixing clamps peaks to 0.98 after gain, which can distort heavily overloaded mixes; reduce gains. Desktop export retains its look-ahead limiter. Output is ordinary H.264/AAC MP4, but native encoder profiles/chroma/audio priming must be checked on the target device.
 - Rendering is foreground work. iOS can suspend apps and stop extended background encoding. The app keeps the display awake during import/export; background expiry cancels safely, and interrupted jobs are marked failed after relaunch. There is no background-render guarantee.
 - Media files are streamed in bounded chunks; native rendering holds one overlay state and encoder buffers. Shared Web Audio preview now reads 5-second PCM windows through the existing bounded native byte-range route. It retains every active overlap, and pauses with an error if the audible window set exceeds 64 MiB. Actual WKWebView playback, seams, seeks and memory must be checked on hardware. Text uses bundled DejaVu Sans; Core Text and Canvas antialiasing/metrics can differ slightly.
@@ -132,7 +132,7 @@ Before treating this as a verified iPhone release:
 
 - **Xcode command-line tools missing:** open Xcode Settings → Locations and select Xcode's command-line tools; install the iOS components. `xcodebuild -version` should report Xcode 26 or newer.
 - **Swift packages will not resolve:** the first build needs Internet access to fetch Capacitor and ZIPFoundation's pinned Swift packages. In Xcode, use File → Packages → Resolve Package Versions. The completed app does not need that connection.
-- **Signing/bundle identifier error:** select your own team and a unique identifier. Keep it stable across updates. Free Personal Team signing expires; re-run from Xcode when needed.
+- **Signing/bundle identifier error:** select the team and identifier associated with the installed app. For a first installation, select your own team and a unique identifier, then keep them stable across updates. Free Personal Team signing expires; re-run from Xcode when needed.
 - **Blank editor or missing DejaVu font:** run `npm ci` and `npm run ios:sync` from `frontend`, then rebuild App. The required bundled `public/` folder is generated by that command.
 - **Microphone denied:** enable BJJ Telestrator under Settings → Privacy & Security → Microphone. Close other recording apps and retry. A failed take must restore editor controls.
 - **Video not available:** download the original from iCloud first, check free storage, and use a complete SDR H.264/HEVC MP4 or MOV. iOS supports fewer source codecs than the desktop FFmpeg build.
@@ -171,7 +171,7 @@ large media through JavaScript.
 and recording assets. An active share sheet protects that file until dismissed.
 Old jobs without saved inputs cannot retry their old edits. Whole-project deletion
 now retains the project in **Recently deleted**. Files `.bjjproj` transfer is
-implemented in this candidate and awaits native/device acceptance. Simulator/CI verification does not establish physical
+automatically tested in this candidate and awaits physical-device acceptance. Simulator/CI verification does not establish physical
 low-space, share-sheet, thermal or 20-minute performance acceptance.
 
 

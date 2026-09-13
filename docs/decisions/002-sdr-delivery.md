@@ -1,7 +1,8 @@
 # SDR delivery from HDR input
 
-P1.04, September 13, 2026. Status: implementation spike; native fixture gate
-pending. Do not advertise broad iPhone HDR support from this experiment.
+P1.04, September 13, 2026. Status: implemented; shared native/FFmpeg synthetic
+fixtures pass. Actual phone footage/display acceptance remains pending.
+Do not advertise broad iPhone HDR support from this fixture evidence.
 
 The original stays immutable, with inspected transfer, primaries, matrix and
 range. Supported inputs are Rec.2020 nonconstant-luminance PQ/HLG with valid color

@@ -1,64 +1,60 @@
 # Verification record
 
-## Current Phase 1 completion branch — 2026-09-13
+## Current Phase 1 completion candidate — 2026-09-13
 
-Branch `codex/p1-completion`, starting at
-`dadeee523f8a933c53333c2b298a8058b9f8e604`. See the full
-[completion record](P1_COMPLETION.md) for task IDs, interfaces, commits, migration,
-rollback, generated source hashes, commands and exact open acceptance gates.
-Application version remains 1.1.0 and project schema remains 2.
+[Draft PR #12](https://github.com/BakedChicken77/bjj-telestrator/pull/12) contains
+Phase 1 code uploaded with Steve’s explicit authorization. It is stacked on #11,
+starting at `dadeee523f8a933c53333c2b298a8058b9f8e604`. App version remains
+1.1.0 and project schema remains 2. Public/local commit mappings, task records,
+interfaces, source hashes and rollback are in [P1_COMPLETION.md](P1_COMPLETION.md).
 
-The complete local `scripts/verify.py --browser` run passed 203 backend tests,
-104 frontend tests, 12 repository tests and 18 browser workflows. Ruff, ESLint,
-TypeScript, build and formatting passed. After adding the measured library-index
-optimization, the entire backend suite passed **216 tests (171.14 seconds)**;
-the repository-configured Ruff and all 12 repository tests passed again. Final
-index/cleanup failure injection passed 16 focused cases (7.09 seconds). Five
-focused browser workflows passed package retry, Files-format download/upload,
-restore/edit/real MP4, themes/non-drag controls and checkpoint/copy/trash at desktop
-and phone sizes (47.7 and 43.6 seconds). The additional lost-acknowledgement case
-makes 19 unique browser cases; no claim of one complete 19-case run is made.
+Current code candidate: `b5c7ba292d48e08e820c01a75c9c9f2f2b678f59`,
+[CI 34767642230](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34767642230).
+Frontend and repository quality, backend/FFmpeg, all browser workflows and the
+production Docker build/startup pass. **All six CI gates pass**, including
+**32 native XCTest methods (76.551 seconds)** and the unsigned archive. Native
+settings: Xcode 26.6 (17F113), iPhone 17 Pro simulator, iOS 26.4.1, SDK 26.5;
+archive version/build 1.1.0 / 33.1. This documentation commit follows the verified
+code; the PR checks identify subsequent documentation-only candidates.
+[Machine-readable evidence](p1-completion-ci.json) records jobs, artifacts and
+real output measurements. The unsigned archive is not a signed phone build.
 
-`npm run ios:sync` passed web build/asset copying. **New Swift/package/HDR/index
-code has not been compiled or tested**: this Linux runtime has no Swift, Xcode or
-Docker. Starting-commit [CI 34753976427](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34753976427)
-passed all six gates, including 25 native XCTest methods, Docker and an unsigned
-archive; that evidence does not attest to the new code. Automatic approval review
-blocked the attempted GitHub upload for unestablished remote-write authorization.
-No alternate upload route or fresh CI run was attempted. Request explicit upload
-approval for this reviewable branch, then run the existing native/Docker gates.
+The first two runs compiled the new Swift code on Xcode 26.6 and passed native
+package restore/edit/export, HDR conversion, cleanup and index checks. They caught
+errors in the new timing test: counting compressed control buffers, using media
+PTS before MP4 edits, assuming an unselected export rate, and allowing too little
+color-conversion difference for the untagged SDR fixture. The test now decodes
+pictures, checks output PTS, explicitly selects 30 fps and uses the measured color
+allowance. Every independent source/output timestamp and exact scene boundary
+passed in the second run. The third run passes the entire suite and archive.
+No timing assertion or timeout was relaxed. Detailed
+failed-run evidence and the correction are preserved in the completion record.
 
-New desktop evidence includes six PQ/HLG conversion cases, independently listed
-120 fps/VFR presentation timestamps, 37 package/service safety cases, immutable
-source hashes, accurate half-open cues and real recording/preview/AAC export.
-Actual iPhone PQ/HLG footage and native fixture equivalence remain pending; HDR
-availability is not advertised, and all Dolby Vision variants remain unsupported.
+Current shared CI: **216 backend tests (45.81 seconds), 104 frontend tests,
+12 repository tests and all 19 Playwright workflows (2.2 minutes)**. Existing
+Ruff, ESLint, TypeScript, build, Prettier, actionlint and Docker smoke gates pass.
+The full local `scripts/verify.py --browser` run previously passed 203 backend,
+104 frontend, 12 repository and 18 browser tests; the final local backend run
+passed 216 tests in 171.14 seconds, with focused coverage for the nineteenth
+browser case. Regenerating the project schema/example produced no changes.
 
-The synthetic 20-minute 1080p workload with 100 annotations and three overlapping
-long takes exported in **910.50 seconds**. Output is H.264/AAC, 1920×1080,
-1200.0 seconds, 37,132,555 bytes; the source hash is unchanged. This is a Linux
-grid/tone benchmark, not real gym footage or phone acceptance. A 200-project
-library improved from 72–73 seconds per list to 58–63 milliseconds using validated
-disposable summaries; the first cache rebuild still took 92.52 seconds. Raw reports
-are in `docs/performance/`. Complex edit latency, full-process memory versus
-retained JS heap, and real-device limits are distinguished in the completion record.
+The generated 20-minute 1080p/100-cue/three-take workload exported H.264/AAC,
+1920×1080, 1200.0 seconds and 37,132,555 bytes in **910.50 seconds**, with an
+unchanged source hash. A 200-project library improved from 72–73 seconds per
+listing to 58–63 milliseconds after indexing; first rebuild was 92.52 seconds.
+Actual editor profiling used bounded HTTP 206 narration windows and measured
+24.01 MB post-GC JS heap, with no ≥50 ms playback long task. Complex edits still
+took 0.81–2.58 seconds including development/automation overhead. These are
+synthetic Linux measurements; raw reports are in `docs/performance/`.
 
-Phase 1 remains **not accepted**. Fresh native/Docker CI, signed install/update
-over populated projects, actual iPhone↔Windows Files transfer, multigigabyte ZIP64,
+Phase 1 remains **not accepted**. Signed install/update over populated projects,
+actual iPhone↔Windows Files transfer, multigigabyte ZIP64, phone HDR/display checks,
 VoiceOver/large text, interruptions/low space, realistic 20-minute/lower-resource
-phone measurements and a fresh Windows 11 Docker-host workflow are outstanding.
-Use [DEVICE_ACCEPTANCE.md](DEVICE_ACCEPTANCE.md) with the exact candidate SHA.
+phone measurements and fresh Windows 11 Docker-host acceptance remain open.
+Linux Docker CI and simulator exports do not close those gates. Use
+[DEVICE_ACCEPTANCE.md](DEVICE_ACCEPTANCE.md) for the exact subsequent signed build.
 
-A real-editor profile with three full-length takes found and fixed the desktop
-audio panel overlapping Play. Ten style edits and 12.14 seconds of playback then
-completed, with real bounded HTTP 206 narration reads and unchanged source hash.
-The microphone/rerecord/preview/AAC browser workflow passed again (36.0 seconds;
-42.6 with setup). Post-GC browser JS heap was 24.01 MB; playback had no ≥50 ms
-long task, while complex edits still took 0.81–2.58 seconds including development
-and automation overhead. See `docs/performance/p1-browser.json`; these measurements
-are not physical sync/thermal or production performance acceptance.
-
-Earlier dated sections below are historical candidate records, not current gates.
+Earlier dated sections below are historical candidate records.
 
 ## Historical P1.04 observable import and repair candidate — 2026-09-13
 

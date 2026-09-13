@@ -117,9 +117,9 @@ flowchart TD
 
 ## iPhone import, storage, and recovery
 
-Photos uses PHPicker; Files uses security-scoped document URLs. Original bytes are copied into a generated project/source path. Photos temporary provider URLs are copied before their callback ends. AVFoundation validates actual video/audio tracks, coded/presentation dimensions, pixel aspect ratio, preferred transform, and video time range. A square-pixel SDR H.264/AAC proxy is generated at a maximum 1920-pixel long edge. The original remains the final-render input. Non-right-angle rotation, Dolby Vision and ambiguous HDR metadata produce explicit errors. Candidate PQ/HLG conversion has a native fixture/device gate; see the SDR delivery decision record.
+Photos uses PHPicker; Files uses security-scoped document URLs. Original bytes are copied into a generated project/source path. Photos temporary provider URLs are copied before their callback ends. AVFoundation validates actual video/audio tracks, coded/presentation dimensions, pixel aspect ratio, preferred transform, and video time range. A square-pixel SDR H.264/AAC proxy is generated at a maximum 1920-pixel long edge. The original remains the final-render input. Non-right-angle rotation, Dolby Vision and ambiguous HDR metadata produce explicit errors. PQ/HLG conversion passes the shared native/FFmpeg synthetic fixtures; actual phone footage/display acceptance remains open. See the SDR delivery decision record.
 
-`BJJProject` mirrors project validation and preserves the raw JSON dictionary for additive future fields. `BJJStore` validates UUID/path containment, preserves imported media metadata, and atomically replaces JSON files. `voiceover/assets.json` registers immutable audio metadata. `voiceover/pending.json` journals recordings until the editor has saved a document containing the take, so native interruption recovery survives an earlier autosave that lacks it. Existing recordings are retained for undo and export snapshots. Projects live in Application Support and survive app restarts; uninstalling removes them. There is no desktop-to-phone project transport or cloud synchronization.
+`BJJProject` mirrors project validation and preserves the raw JSON dictionary for additive future fields. `BJJStore` validates UUID/path containment, preserves imported media metadata, and atomically replaces JSON files. `voiceover/assets.json` registers immutable audio metadata. `voiceover/pending.json` journals recordings until the editor has saved a document containing the take, so native interruption recovery survives an earlier autosave that lacks it. Existing recordings are retained for undo and export snapshots. Projects live in Application Support and survive app restarts; uninstalling removes them. Portable `.bjjproj` packages transfer editable copies between desktop and phone, rebuilding platform-specific recording registries. There is no automatic cloud synchronization.
 
 The web editor debounces saves and attempts a flush when hidden. Normal app closing should follow the Saved indicator; iOS can suspend WebKit before an asynchronous last-second save completes. Native microphone completion additionally persists the clip without relying on JavaScript execution. This is why a dedicated native recorder is used rather than MediaRecorder on iPhone.
 
@@ -255,8 +255,8 @@ independently of proxy frame rounding. Inspection retains reported color/rationa
 metadata, but does not infer exact PTS or CFR from average frame rate. Desktop
 uses the shared color preflight at import and export. The candidate converts
 Rec.2020 PQ/HLG to SDR before annotations; all Dolby Vision and ambiguous metadata
-are rejected. FFmpeg fixture checks passed, while fresh native and phone footage
-acceptance remain pending. See `docs/decisions/002-sdr-delivery.md`.
+are rejected. Shared FFmpeg/native HDR fixtures pass; actual phone footage/display
+acceptance remains pending. See `docs/decisions/002-sdr-delivery.md`.
 
 
 ## Portable packages and reference-safe cleanup (P1.05/P1.06)

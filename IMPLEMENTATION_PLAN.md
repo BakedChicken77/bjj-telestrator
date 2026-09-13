@@ -16,14 +16,14 @@ is authorized by mentioning those modules.
 
 | Tasks | Status | Exact remaining gate / next action |
 | --- | --- | --- |
-| P1.01 | device/staging verification pending | Starting commit dadeee5 passed all CI gates. Current branch needs fresh native/Docker CI, then signed-install/update, real phone media/workload/VoiceOver and Windows 11 host acceptance. |
+| P1.01 | device/staging verification pending | Draft PR #12 is uploaded. Code candidate b5c7ba2 passed all six CI gates, including 32 native tests and the unsigned archive. Signed-install/update, real phone media/workload/VoiceOver and Windows 11 host acceptance remain pending. |
 | P1.02 | automatically verified | TypeScript, Python and Swift conformance plus migration/edit/export/reopen passed. Physical-device migration/reopen is still part of release acceptance. |
 | P1.03 | automatically verified | Local and native CI recovery/revision tests pass. Physical interruption, storage failure and VoiceOver acceptance remain pending. |
-| P1.06 | implemented | Earlier storage/retry/checkpoint/copy/trash slices passed native CI. New conservative preview cleanup and stale-draft proxy recovery pass desktop checks; fresh Swift and hardware verification remain pending. |
-| P1.04 | implemented | Import/repair baseline passed native CI; desktop PQ/HLG and 120 fps/VFR fixtures pass. Fresh native conversion/timing fixtures and real phone color/format acceptance remain open. |
-| P1.05 | implemented | Desktop packages pass safety, recovery and browser restore/export checks. Native implementation/tests await compilation; actual bidirectional Files transfer and multigigabyte ZIP64 remain pending. |
+| P1.06 | device/staging verification pending | Storage/retry/checkpoint/copy/trash and conservative preview cleanup pass desktop/native checks. Physical storage/lease/interruption acceptance remains pending. |
+| P1.04 | device/staging verification pending | Shared native/FFmpeg HDR fixtures and exact original/output PTS checks pass; real phone color/format acceptance remains open. |
+| P1.05 | device/staging verification pending | Desktop/native shared packages pass safety, recovery and real restore/edit/export checks. Actual bidirectional Files transfer and multigigabyte ZIP64 remain pending. |
 | P1.07 | device/staging verification pending | Non-drag six-shape controls, dialog/audio focus return and themes/large text pass browser workflows. Physical VoiceOver/large-text checks remain open. |
-| P1.08 | implemented | Reproducible profiles, immutable history sharing, bounded PCM preview and disposable library index added. Synthetic 20-minute 1080p export passes with unchanged source. Native phone memory/thermal/real-roll measurements remain pending. |
+| P1.08 | device/staging verification pending | Reproducible profiles, immutable history sharing, bounded PCM preview and disposable library index added. Synthetic 20-minute 1080p export passes with unchanged source. Native phone memory/thermal/real-roll measurements remain pending. |
 | P2.01–P2.08 | not started | Follow Phase 1 save/media/asset contracts and the brief's batch order. |
 | P3.01–P3.07 | not started | Requires Phase 2 transport/timeline/export contracts. |
 | P4.01–P4.06 | not started | Requires explicit review composition; no source-time reinterpretation. |
@@ -40,21 +40,14 @@ Sources and recording assets remain conservatively retained. Recovery cannot
 recover an edit before a draft has actually been journaled. Phase 5 is unselected.
 
 Current completion details: [Phase 1 completion record](docs/P1_COMPLETION.md).
-Automatic approval review rejected the attempted GitHub tree/branch upload because
-remote publication authorization was not established. No remote writes or new CI
-run were made for this completion branch. Finish local reviewable work before
-requesting explicit branch-upload/native-CI authorization; do not route around it.
-
-September 13 continuation: owner/admin access and public repository identity were
-verified. Automatic approval review nevertheless rejected the source/fixture tree
-upload again, interpreting the brief's publication restriction as still active.
-Nothing was pushed and no new CI was started. Explicit approval for public
-Phase 1 source/fixture upload, a draft PR and existing CI is now the exact blocker.
-
-Subsequent authorization: Steve explicitly authorized uploading Phase One code
-after the public upload, draft PR and CI scope was presented. The approval blocker
-above is historical; proceed with the prepared branch and existing CI. No release,
-merge, signing, paid service or customer billing is authorized by this upload.
+Steve explicitly authorized uploading Phase One code after two automatic-review
+blocks. The prepared source and generated fixtures are now published in
+[draft PR #12](https://github.com/BakedChicken77/bjj-telestrator/pull/12), stacked
+on #11 at `162c32916490242810afd0fb8fe693b3d72c205c`. Its source tree matches
+local `96f1c98`; public commit IDs differ because GitHub assigns commit metadata.
+Existing [CI 34766382957](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34766382957)
+failed the new timing test; corrected code passes all six gates in [CI 34767642230](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34767642230) at `b5c7ba2`. The earlier upload blockers are resolved. No release, merge, signing,
+paid service or customer billing is authorized by this upload.
 
 ### Completion record — P1.02 / P1.03
 
@@ -210,7 +203,7 @@ lint/type/build/format checks. The first HDR fixture spike passes six focused
 Python tests: native HEVC Main 10 PQ/HLG inputs produce Rec.709 H.264 320x180,
 2-second output (3,875/3,809 bytes), eight distinct gray levels, matching preview
 patches, correct half-open red-cue boundaries and unchanged source SHA-256.
-Native XCTest uses those same encoded fixture bytes; its gate is pending.
+Native XCTest now passes those same HDR fixture bytes; current CI and hardware status are recorded above.
 Decision and limits: `docs/decisions/002-sdr-delivery.md`.
 
 
@@ -218,7 +211,7 @@ Decision and limits: `docs/decisions/002-sdr-delivery.md`.
 
 The records below describe their original delivery dates. The repository now
 exists and the starting commit passed native SDK tests and an unsigned archive.
-Fresh CI for the new completion branch has not run; current status is above.
+Fresh CI for the new completion branch is recorded above and in docs/P1_COMPLETION.md.
 
 ## Milestone 1 — annotation editor and exports
 
@@ -312,7 +305,7 @@ The iPhone runtime is standalone; macOS/Xcode is needed for its build/signing, s
 - [x] Add Windows GitHub CLI bootstrap, private defaults, protection/settings requests, and retry safeguards.
 - [x] Add CODEOWNERS, issue/PR templates, Dependabot, changelog, contribution/security guidance.
 - [x] Validate workflow syntax and local packaging/signing boundaries; rerun application quality gates.
-- [x] Remote repository subsequently created by the owner; prior branches/CI exist. Current completion branch upload awaits authorization after automatic-review rejection.
+- [x] Remote repository created by the owner; Phase 1 completion uploaded with explicit authorization in draft PR #12. Code candidate b5c7ba2 passed all six CI gates; current evidence is recorded above.
 - [x] GitHub-hosted Docker/iOS jobs subsequently passed for prior candidates. Release publication remains a separately authorized action.
 - [ ] Supply Apple distribution credentials and complete physical iPhone acceptance.
 

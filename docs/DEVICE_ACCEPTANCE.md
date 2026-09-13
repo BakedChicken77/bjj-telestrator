@@ -1,10 +1,12 @@
 # Candidate-specific Windows and iPhone acceptance — P1.01
 
 Status: device/staging verification pending. No signed installation or physical
-phone has been accessed during this work. The Phase 1 starting commit
-`dadeee523f8a933c53333c2b298a8058b9f8e604` passed 25 XCTest methods and an
-unsigned archive in [CI](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34753976427).
-The subsequent package/HDR/cleanup/timing changes still need fresh native CI. That result does not prove installability. Use the exact subsequent signed candidate for every result below.
+phone has been accessed during this work. Phase 1 source is uploaded in
+[draft PR #12](https://github.com/BakedChicken77/bjj-telestrator/pull/12). Native
+compilation and package/HDR/cleanup/index tests have run on Xcode 26.6; the
+[completion record](P1_COMPLETION.md) identifies the exact candidate and current
+test/archive results. Simulator exports and an unsigned archive do not prove
+installability. Use the exact subsequent signed candidate for every result below.
 
 ## Signed pilot from Windows
 
@@ -88,8 +90,8 @@ candidate SHA/build and the input file selected from each picker.
    Record which representation was selected, source duration/rate and observed
    timing. A 30 fps preview is not every source frame; do not label time stepping
    exact. Run real VFR and HDR cases only as explicit pending format acceptance;
-   the candidate implements PQ/HLG SDR conversion, but its native and actual
-   phone color gates are still open. All Dolby Vision variants remain rejected.
+   shared native/FFmpeg fixtures pass PQ/HLG SDR conversion, while actual
+   phone footage/display acceptance remains open. All Dolby Vision variants remain rejected.
 7. With VoiceOver and large text, reach stage/status/cancel/repair, cancel without
    a drag gesture, and verify that progress does not cause per-frame announcements.
    Repeat in portrait/landscape and at 1280×720 on Windows/Docker.

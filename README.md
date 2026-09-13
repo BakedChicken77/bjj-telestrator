@@ -2,7 +2,7 @@
 
 A local desktop browser editor for reviewing Brazilian Jiu-Jitsu footage. Import a video, draw timed arrows, lines, ellipses, boxes, freehand paths and text, record coaching voiceovers, and export one ordinary MP4 with annotations permanently burned into the picture and commentary mixed into its audio. Originals are preserved. Projects and completed exports stay on your computer.
 
-**iPhone conversion:** version 1.1 adds a touch-adapted editor and a standalone Capacitor/Swift iOS target with native storage, import, recording, and MP4 export. Start with [IOS_README.md](IOS_README.md) for installation and native test instructions. It requires iOS 17+; GitHub-hosted macOS runners can build and sign it, so you do not need to own a Mac. The starting commit `dadeee5` passed all 25 native XCTest cases and the unsigned archive ([CI evidence](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34753976427)). The new Phase 1 package/HDR/cleanup code still needs fresh native compilation and device acceptance; the ZIP is source, not an installable signed IPA. The existing Windows/Docker path remains supported.
+**iPhone conversion:** version 1.1 adds a touch-adapted editor and a standalone Capacitor/Swift iOS target with native storage, import, recording, and MP4 export. Start with [IOS_README.md](IOS_README.md) for installation and native test instructions. It requires iOS 17+; GitHub-hosted macOS runners can build and sign it, so you do not need to own a Mac. The Phase 1 code has compiled on Xcode 26.6 and produced native MP4s after portable restore. See the [current candidate’s test/archive evidence](docs/P1_COMPLETION.md). Signed installation and physical-device acceptance remain pending; the source ZIP is not an installable signed IPA. The existing Windows/Docker path remains supported.
 
 **GitHub automation:** [docs/GITHUB_SETUP.md](docs/GITHUB_SETUP.md) includes the Windows repository-creation command, CI/release gates, and optional Apple signing/TestFlight setup. The owner created the public GitHub repository. Workflow configuration is included; repository-admin settings still require the owner’s GitHub CLI or Settings access.
 
@@ -46,8 +46,9 @@ start the import or repair again if needed; this restarts preparation.
 Previews are SDR H.264/AAC, at most 1920 pixels on the long edge and 30 fps.
 They may omit frames from a faster original; step controls are time steps, not
 exact source-frame navigation. Export continues to use the original source.
-The candidate includes a fixture-tested desktop PQ/HLG-to-SDR path and a native
-implementation awaiting XCTest/device verification. HDR input requires valid
+The candidate includes PQ/HLG-to-SDR paths tested with shared encoded fixtures
+in both FFmpeg and native XCTest. Actual phone color acceptance remains pending.
+HDR input requires valid
 Rec.2020 color metadata. All Dolby Vision variants and ambiguous HDR metadata are
 rejected; an SDR copy remains the supported fallback. HEVC alone does not mean
 HDR. See the [color policy and exact limitations](docs/decisions/002-sdr-delivery.md);
