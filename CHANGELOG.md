@@ -10,6 +10,7 @@
 - P1.06 project recovery: named checkpoints with before-restore protection,
   verified independent review copies, and Recently deleted with separate permanent
   removal. Source/recording assets and existing export inputs remain retained.
+  Copying preserves annotation text even when its content equals an object UUID.
 - Native recording acknowledgments now use a recoverable two-file save transaction;
   a recovered take intentionally removed after reopening is not re-added.
 

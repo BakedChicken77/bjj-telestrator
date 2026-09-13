@@ -144,7 +144,10 @@ Recovery-copy accepts the validated draft, verifies immutable media against the
 owning project, copies its source/proxy/recordings into a new project, remaps known
 UUID references, and publishes project JSON only after validation. Failed copies
 are removed; existing projects remain intact. Optional-field reference values
-matching remapped UUIDs are retained with updated IDs. There is no cross-project
+matching remapped UUIDs are retained with updated IDs. Literal `text`,
+`projectName` and `originalFilename` values are never interpreted as UUID references,
+even when their content matches an old ID. The copied review receives the explicit
+copy-name suffix. There is no cross-project
 hard-linking or portable ZIP/package format in this work package.
 
 Rollback: preserve the entire current project directory first. Use a separately
@@ -230,7 +233,7 @@ Desktop interfaces (native bridge exposes the same UUID/revision semantics):
 - `GET /api/recently-deleted`; `POST /api/recently-deleted/{trashId}/restore` returns
   `{project,copied}`; `DELETE /api/recently-deleted/{trashId}` permanently removes it.
 
-Project summaries include `revision`. Missing/stale revision returns 428/409;
+Project summaries include `revision`. Missing/stale revision returns 428/412;
 clients cannot submit paths. Recovery errors retain files and use typed conflict,
 asset/storage or `RECOVERY_INVALID`/`RECOVERY_LIMIT` codes. Old binaries do not know
 these sidecars: preserve the complete new directory before any rollback and use a

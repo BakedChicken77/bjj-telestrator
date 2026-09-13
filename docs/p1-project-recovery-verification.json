@@ -1,0 +1,217 @@
+{
+  "reportVersion": 1,
+  "date": "2026-09-13",
+  "taskId": "P1.06",
+  "scope": "Durable checkpoints, independent duplication and retained project deletion",
+  "startingCommit": "04b03a8cac59ae6266b32117ed2a7b797a4f6636",
+  "firstImplementationCommit": "976343d46dd0fd08984e6422c10b1f1bea1d7960",
+  "finalCommitOrPR": "https://github.com/BakedChicken77/bjj-telestrator/pull/10",
+  "branch": "codex/p1-project-recovery",
+  "filesChanged": [
+    "ARCHITECTURE.md",
+    "CHANGELOG.md",
+    "IMPLEMENTATION_PLAN.md",
+    "IOS_README.md",
+    "PROJECT_FORMAT.md",
+    "README.md",
+    "backend/app/jobs.py",
+    "backend/app/main.py",
+    "backend/app/migrations.py",
+    "backend/app/recovery.py",
+    "backend/app/render_plan.py",
+    "backend/app/storage.py",
+    "backend/tests/test_backend.py",
+    "backend/tests/test_project_recovery.py",
+    "backend/tests/test_voiceover.py",
+    "docs/DEVICE_ACCEPTANCE.md",
+    "docs/GITHUB_SETUP.md",
+    "docs/VERIFICATION.md",
+    "docs/p1-project-recovery-verification.json",
+    "frontend/ios/App/App.xcodeproj/project.pbxproj",
+    "frontend/ios/App/App/Native/BJJNativePlugin.swift",
+    "frontend/ios/App/App/Native/BJJProject.swift",
+    "frontend/ios/App/App/Native/BJJProjectMigrations.swift",
+    "frontend/ios/App/App/Native/BJJProjectRecovery.swift",
+    "frontend/ios/App/App/Native/BJJProjectVersions.swift",
+    "frontend/ios/App/App/Native/BJJService.swift",
+    "frontend/ios/App/AppTests/BJJNativeTests.swift",
+    "frontend/playwright.config.ts",
+    "frontend/src/App.tsx",
+    "frontend/src/api.ts",
+    "frontend/src/components/ProjectVersions.tsx",
+    "frontend/src/native.test.ts",
+    "frontend/src/native.ts",
+    "frontend/src/project/diagnostics.ts",
+    "frontend/src/styles.css",
+    "tests/browser/project-versions.spec.ts",
+    "tests/fixtures/export-plan-conformance.json"
+  ],
+  "publicInterfaces": [
+    "GET/POST projects/{id}/checkpoints",
+    "POST projects/{id}/checkpoints/{checkpointId}/restore with If-Match",
+    "POST projects/{id}/duplicate with If-Match",
+    "DELETE projects/{id} now recoverable, with If-Match",
+    "GET recently-deleted",
+    "POST recently-deleted/{trashId}/restore",
+    "DELETE recently-deleted/{trashId} only after separate user confirmation",
+    "Native Capacitor equivalents and projectCheckpoints/projectDuplicate/projectTrash capabilities"
+  ],
+  "migrationAndRetention": {
+    "projectSchema": 2,
+    "storageRecordVersion": 1,
+    "immutableInputMigration": "rejected; explicit project migration stays separate",
+    "recordings": "retained for undo, snapshots, recovery and immutable export inputs",
+    "checkpoints": "current edits checkpointed before restoration, then monotonic current revision; new undo session",
+    "copies": "fresh project/object UUIDs, remapped known references, independent verified media files; prior exports/checkpoints stay with original; literal annotation text/name/filename values stay literal even if equal to an old UUID",
+    "trash": "entire project moved; no automatic expiry; collision creates a copy and preserves the complete archived directory"
+  },
+  "automaticEvidence": {
+    "firstCandidateCI": {
+      "url": "https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34726637336",
+      "commit": "976343d46dd0fd08984e6422c10b1f1bea1d7960",
+      "result": "passed",
+      "backend": 138,
+      "frontend": 92,
+      "repository": 12,
+      "browser": 14,
+      "nativeXCTest": 22,
+      "nativeTestSeconds": 48.621,
+      "docker": "build and startup passed on Ubuntu",
+      "unsignedArchive": "passed"
+    },
+    "finalLocalGate": {
+      "result": "passed",
+      "command": "BJJ_E2E_DATA_DIR=<local temporary test directory> BJJ_E2E_CHROMIUM_PATH=<existing Chromium 149> backend/.venv/bin/python scripts/verify.py --browser",
+      "backend": 139,
+      "backendSeconds": 76.38,
+      "frontend": 92,
+      "repository": 12,
+      "browser": 14,
+      "browserReportedMinutes": 4.2,
+      "otherGates": [
+        "Ruff",
+        "ESLint",
+        "TypeScript",
+        "production build",
+        "Prettier"
+      ],
+      "applicationCommit": "3f3b286444e37d68f6628d3e0edcf41a215c8e4e"
+    },
+    "nativeSync": "npm --prefix frontend run ios:sync passed",
+    "focusedConformanceAndRecovery": "39 tests passed in 5.73 seconds",
+    "finalCandidateCI": {
+      "url": "https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34727786132",
+      "commit": "33be6315eb4fdee79ac7fe5d973292bfc09b182f",
+      "result": "passed",
+      "backend": 139,
+      "backendSeconds": 20.61,
+      "frontend": 92,
+      "repository": 12,
+      "browser": 14,
+      "browserReportedMinutes": 1.8,
+      "nativeXCTest": 22,
+      "nativeTestSeconds": 54.894,
+      "nativeCopyRegressionSeconds": 0.141,
+      "docker": "build and startup passed on Ubuntu",
+      "unsignedArchive": "passed",
+      "allSixGates": "passed"
+    },
+    "conformanceCandidateCI": {
+      "url": "https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34727251987",
+      "commit": "3f3b286444e37d68f6628d3e0edcf41a215c8e4e",
+      "result": "passed",
+      "backend": 139,
+      "frontend": 92,
+      "repository": 12,
+      "browser": 14,
+      "nativeXCTest": 22,
+      "nativeTestSeconds": 31.48,
+      "docker": "build and startup passed on Ubuntu",
+      "unsignedArchive": "passed"
+    },
+    "copyFidelityRegression": {
+      "beforeFix": "failed: copied literal text differed from original geometry",
+      "afterFix": "39 recovery/export tests passed in 5.84 s; Ruff passed",
+      "command": "backend/.venv/bin/python -m pytest -q backend/tests/test_project_recovery.py backend/tests/test_export_recovery.py",
+      "commit": "33be6315eb4fdee79ac7fe5d973292bfc09b182f"
+    }
+  },
+  "realExportEvidence": {
+    "native": {
+      "commit": "33be6315eb4fdee79ac7fe5d973292bfc09b182f",
+      "codec": "H.264/avc1 + AAC",
+      "dimensions": [
+        320,
+        180
+      ],
+      "durationSec": 4,
+      "byteSize": 26570,
+      "sourceSHA256": "912a9244dfbf0023c1696c2d368fe87a584e4980e1340c5bc720074eea501f1e",
+      "timing": "red rectangle visible at 1 s, hidden at 2 s after checkpoint, delete/restore and old-revision retry",
+      "audio": "decoded original tone energy greater than 0.05",
+      "preMigrationDocument": "exact bytes retained",
+      "ciURL": "https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34727786132"
+    },
+    "desktop": {
+      "result": "focused local FFmpeg export passed at recorded application commit; complete real FFmpeg integration suite and restored-project browser MP4 export passed again in final-candidate CI",
+      "ordinaryMP4": true,
+      "sourceModified": false,
+      "codec": "H.264, no audio",
+      "dimensions": [
+        320,
+        180
+      ],
+      "durationSec": 4.0,
+      "byteSize": 6448,
+      "sourceSHA256": "89441d06c652971cfba6065c85cb59999b2bea81f812977be4b0d91ab57cb9d5",
+      "timing": "red pixels absent at 0.9 s, present at 1.0/1.9 s, absent at 2.0 s after restart and removal of current cues",
+      "command": "backend/.venv/bin/python -m pytest -q -s backend/tests/test_export_recovery.py::test_real_mp4_retry_after_restart_keeps_old_pixels_and_hash",
+      "seconds": 4.99,
+      "applicationCommit": "3f3b286444e37d68f6628d3e0edcf41a215c8e4e"
+    }
+  },
+  "accessibilityAndPlatforms": {
+    "browserViewports": [
+      [
+        1280,
+        720
+      ],
+      [
+        390,
+        844
+      ]
+    ],
+    "controls": "semantic buttons, labeled checkpoint input, separate permanent-delete confirmation, working status; numeric/canvas editing preserved",
+    "VoiceOver": "device verification pending",
+    "Windows11": "fresh host acceptance pending; Linux Docker CI is separate evidence",
+    "signedIPhoneInstallUpdate": "device verification pending"
+  },
+  "observedLimitations": [
+    "Local checkout-backed browser data intermittently reappeared after deletion; Python audit saw removal without application recreation. Same assertions passed in clean CI and local temporary data root. Live external sync directories are unverified.",
+    "Checkpoint/copy hashing shows indeterminate progress; no separate cancellation control or resumed copy job.",
+    "Large copy/interruption, realistic 20-minute media and physical low-space/thermal behavior remain unverified.",
+    "Portable packages, HDR conversion and complete media garbage collection are subsequent tasks."
+  ],
+  "rollback": "Preserve complete project directories and pre-migration JSON. Restore retained trash with this build before reverting. Older binaries cannot interpret new recovery sidecars; use an independent prior copy. Never uninstall or overwrite newer projects to downgrade.",
+  "documentationUpdated": [
+    "IMPLEMENTATION_PLAN.md",
+    "PROJECT_FORMAT.md",
+    "ARCHITECTURE.md",
+    "README.md",
+    "IOS_README.md",
+    "docs/VERIFICATION.md",
+    "CHANGELOG.md",
+    "docs/DEVICE_ACCEPTANCE.md",
+    "docs/GITHUB_SETUP.md"
+  ],
+  "status": "automatically verified",
+  "nextEligibleTask": "P1.04 observable import/proxy repair and bounded HDR conversion spike, then P1.05 portable packages",
+  "phaseOneAccepted": false,
+  "optionalModules": {
+    "P5.01-P5.07": "not selected"
+  },
+  "releaseActions": "No merge, release, signing, TestFlight upload, paid provisioning or media upload performed",
+  "applicationCommit": "33be6315eb4fdee79ac7fe5d973292bfc09b182f",
+  "deviceStatus": "device/staging verification pending",
+  "documentationCommitPolicy": "Documentation-only follow-up identifies this tested application commit; it does not claim a signed device build."
+}
