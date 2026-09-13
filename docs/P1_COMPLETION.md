@@ -29,6 +29,18 @@ automatic approval review rejected the attempted GitHub tree upload because remo
 publication authorization was not established. Explicit branch-upload/CI approval
 is the next action after local review. No alternate upload route was attempted.
 
+Continuation attempt on September 13: after Steve replied “Continue” to the
+branch-upload/CI request, read-only GitHub checks confirmed the connected account
+is `BakedChicken77`, with administrator/push rights to this **public** repository.
+Main remains `f5323b3`; draft #11 remains open at `dadeee5`. A normal Git push
+could not authenticate in this runtime. The connected GitHub tree upload was then
+rejected by automatic approval review: it interpreted the brief's publication
+restriction as prohibiting public disclosure of the large source/fixture payload
+without specific approval. No remote branch, commit, draft PR or CI run was
+created. No retry or alternate route followed that rejection. Remaining action:
+explicit approval to upload the Phase 1 source and generated fixtures to the public
+repository, create the next draft PR above #11, and run its existing CI.
+
 ## Automated commands and results
 
 The complete local command was:

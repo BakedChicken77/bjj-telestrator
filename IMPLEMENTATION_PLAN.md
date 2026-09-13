@@ -45,6 +45,12 @@ remote publication authorization was not established. No remote writes or new CI
 run were made for this completion branch. Finish local reviewable work before
 requesting explicit branch-upload/native-CI authorization; do not route around it.
 
+September 13 continuation: owner/admin access and public repository identity were
+verified. Automatic approval review nevertheless rejected the source/fixture tree
+upload again, interpreting the brief's publication restriction as still active.
+Nothing was pushed and no new CI was started. Explicit approval for public
+Phase 1 source/fixture upload, a draft PR and existing CI is now the exact blocker.
+
 ### Completion record — P1.02 / P1.03
 
 - Outcome: storage-owned schema-2 revisions, stale-write rejection, pending-save
