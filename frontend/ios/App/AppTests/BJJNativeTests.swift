@@ -77,12 +77,24 @@ import CryptoKit
     }
     func testIndependentDuplicateAndTrashCollisionPreserveOriginals() throws {
         let initial = try project(); _ = try clip(initial)
-        let original = try store.loadRecoveringRecordings(initial.id)
+        let recorded = try store.loadRecoveringRecordings(initial.id)
+        var document = recorded.json, cue = recorded.annotations[0]
+        cue["type"] = "text"
+        cue["geometry"] = ["x": 0.2, "y": 0.3, "text": cue.s("id"), "fontSize": 0.04,
+                           "alignment": "left", "backgroundColor": "#000000", "backgroundOpacity": 0.0]
+        document["annotations"] = [cue]
+        document["futureOptional"] = ["annotationRef": cue.s("id"), "clipRef": recorded.voiceovers[0].s("id")]
+        let original = try store.save(BJJProject(document))
         let versions = BJJProjectVersions(store: store)
         let copy = try versions.duplicate(original.id, revision: original.revision)
         XCTAssertNotEqual(copy.id, original.id); XCTAssertEqual(copy.revision, 1)
         XCTAssertNotEqual(copy.annotations[0].s("id"), original.annotations[0].s("id"))
         XCTAssertNotEqual(copy.voiceovers[0].s("id"), original.voiceovers[0].s("id"))
+        XCTAssertTrue(NSDictionary(dictionary: copy.annotations[0]["geometry"] as! BJJJSON).isEqual(to: cue["geometry"] as! BJJJSON))
+        XCTAssertTrue(NSDictionary(dictionary: copy.source).isEqual(to: original.source))
+        XCTAssertTrue(NSDictionary(dictionary: copy.proxy).isEqual(to: original.proxy))
+        XCTAssertEqual((copy.json["futureOptional"] as! BJJJSON).s("annotationRef"), copy.annotations[0].s("id"))
+        XCTAssertEqual((copy.json["futureOptional"] as! BJJJSON).s("clipRef"), copy.voiceovers[0].s("id"))
         XCTAssertEqual(try BJJAssets.digest(store.asset(copy.id, copy.source.s("asset"))), try BJJAssets.digest(store.asset(original.id, original.source.s("asset"))))
         var edit = copy.json; edit["annotations"] = [BJJJSON](); edit["voiceovers"] = [BJJJSON]()
         _ = try store.save(BJJProject(edit))

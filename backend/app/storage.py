@@ -240,6 +240,7 @@ class ProjectStore:
                 document = draft.model_dump(mode='json')
                 mapping = {draft.projectId: new_id,
                            **{item.id: str(uuid4()) for item in [*draft.annotations, *draft.voiceovers]}}
+                literal_fields = {'text', 'projectName', 'originalFilename'}
 
                 def remap(value: object) -> object:
                     if isinstance(value, str):
@@ -247,7 +248,8 @@ class ProjectStore:
                     if isinstance(value, list):
                         return [remap(item) for item in value]
                     if isinstance(value, dict):
-                        return {key: remap(item) for key, item in value.items()}
+                        # User content is literal even when it equals an object UUID.
+                        return {key: item if key in literal_fields else remap(item) for key, item in value.items()}
                     return value
 
                 document = remap(document)

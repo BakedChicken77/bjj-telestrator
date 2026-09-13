@@ -89,6 +89,10 @@ def test_duplicate_remaps_ids_and_references_without_sharing_files(tmp_path):
     store = ProjectStore(tmp_path)
     project = with_recording(store, stored_project(store))
     document = project.model_dump(mode='json')
+    document['annotations'][0]['type'] = 'text'
+    document['annotations'][0]['geometry'] = {'x': .2, 'y': .3, 'text': project.annotations[0].id,
+                                             'fontSize': .04, 'alignment': 'left',
+                                             'backgroundColor': '#000000', 'backgroundOpacity': 0}
     document['futureOptional'] = {'annotationRef': project.annotations[0].id, 'clipRef': project.voiceovers[0].id}
     project = store.save(Project.model_validate(document))
     recovery = ProjectRecovery(store)
@@ -96,6 +100,8 @@ def test_duplicate_remaps_ids_and_references_without_sharing_files(tmp_path):
     copy = recovery.duplicate(project.projectId, project.revision)
     assert copy.projectId != project.projectId and copy.revision == 1
     assert copy.annotations[0].id != project.annotations[0].id and copy.voiceovers[0].id != project.voiceovers[0].id
+    assert copy.annotations[0].geometry == project.annotations[0].geometry
+    assert copy.source == project.source and copy.proxy == project.proxy
     assert copy.model_dump()['futureOptional'] == {'annotationRef': copy.annotations[0].id, 'clipRef': copy.voiceovers[0].id}
     assert recovery.checkpoints(copy.projectId) == []
     first = store.project_dir(project.projectId) / project.source.asset

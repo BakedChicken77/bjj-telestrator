@@ -63,10 +63,16 @@ extension BJJStore {
         do {
             var mapping = [draft.id: id]
             for object in draft.annotations + draft.voiceovers { mapping[object["id"] as! String] = UUID().uuidString.lowercased() }
+            let literalFields: Set<String> = ["text", "projectName", "originalFilename"]
             func remap(_ value: Any) -> Any {
                 if let text = value as? String { return mapping[text] ?? text }
                 if let array = value as? [Any] { return array.map(remap) }
-                if let object = value as? BJJJSON { return object.mapValues(remap) }
+                if let object = value as? BJJJSON {
+                    // User content is literal even when it equals an object UUID.
+                    return object.reduce(into: BJJJSON()) { result, entry in
+                        result[entry.key] = literalFields.contains(entry.key) ? entry.value : remap(entry.value)
+                    }
+                }
                 return value
             }
             var json = remap(draft.json) as! BJJJSON
