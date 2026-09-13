@@ -36,6 +36,96 @@ import CryptoKit
              "annotations": [annotation()], "voiceovers": [BJJJSON]()])
         return try store.save(result, creating: true)
     }
+    func testCheckpointRestoreRetainsRecordingAndBeforeRestoreVersion() throws {
+        let initial = try project(); let take = try clip(initial)
+        let original = try store.loadRecoveringRecordings(initial.id)
+        let versions = BJJProjectVersions(store: store)
+        let checkpoint = try versions.checkpoint(original.id, revision: original.revision, label: "Primeira revisão")
+        var edit = original.json; edit["annotations"] = [BJJJSON](); edit["voiceovers"] = [BJJJSON](); edit["projectName"] = "After edits"
+        let saved = try store.save(BJJProject(edit))
+        let restored = try versions.restoreCheckpoint(original.id, checkpoint: checkpoint.s("checkpointId"), revision: saved.revision)
+        XCTAssertEqual(restored.revision, saved.revision + 1)
+        XCTAssertTrue(NSArray(array: restored.annotations).isEqual(to: original.annotations))
+        XCTAssertTrue(NSArray(array: restored.voiceovers).isEqual(to: original.voiceovers))
+        let entries = try versions.checkpoints(original.id)
+        XCTAssertEqual(entries.count, 2)
+        let before = try XCTUnwrap(entries.first { $0.s("label").hasPrefix("Before restoring") })
+        let previous = try versions.restoreCheckpoint(original.id, checkpoint: before.s("checkpointId"), revision: restored.revision)
+        XCTAssertEqual(previous.name, "After edits"); XCTAssertEqual(previous.voiceovers.count, 0)
+        XCTAssertNoThrow(try store.asset(original.id, take.s("asset")))
+        XCTAssertEqual(try BJJStore(root: root).load(original.id).revision, previous.revision)
+        XCTAssertThrowsError(try versions.trash(original.id, revision: restored.revision))
+        XCTAssertThrowsError(try versions.duplicate(original.id, revision: restored.revision))
+        XCTAssertThrowsError(try versions.checkpoint(original.id, revision: restored.revision, label: "Stale"))
+        XCTAssertThrowsError(try versions.restoreCheckpoint(original.id, checkpoint: checkpoint.s("checkpointId"), revision: restored.revision))
+    }
+    func testCheckpointWriteFailurePreservesCurrentReview() throws {
+        let original = try project()
+        let versions = BJJProjectVersions(store: store)
+        let checkpoint = try versions.checkpoint(original.id, revision: original.revision, label: "Initial")
+        var edit = original.json; edit["annotations"] = [BJJJSON]()
+        let saved = try store.save(BJJProject(edit))
+        let failed = try BJJStore(root: root, writeFile: { data, url in
+            if url.deletingLastPathComponent().lastPathComponent == "checkpoints" { throw CocoaError(.fileWriteOutOfSpace) }
+            try data.write(to: url, options: .atomic)
+        })
+        XCTAssertThrowsError(try BJJProjectVersions(store: failed).restoreCheckpoint(original.id, checkpoint: checkpoint.s("checkpointId"), revision: saved.revision))
+        XCTAssertEqual(try store.load(original.id).revision, saved.revision)
+        XCTAssertEqual(try store.load(original.id).annotations.count, 0)
+        XCTAssertNoThrow(try failed.requireUnleased(original.id))
+        XCTAssertEqual(try versions.checkpoints(original.id).count, 1)
+    }
+    func testIndependentDuplicateAndTrashCollisionPreserveOriginals() throws {
+        let initial = try project(); _ = try clip(initial)
+        let recorded = try store.loadRecoveringRecordings(initial.id)
+        var document = recorded.json, cue = recorded.annotations[0]
+        cue["type"] = "text"
+        cue["geometry"] = ["x": 0.2, "y": 0.3, "text": cue.s("id"), "fontSize": 0.04,
+                           "alignment": "left", "backgroundColor": "#000000", "backgroundOpacity": 0.0]
+        document["annotations"] = [cue]
+        document["futureOptional"] = ["annotationRef": cue.s("id"), "clipRef": recorded.voiceovers[0].s("id")]
+        let original = try store.save(BJJProject(document))
+        let versions = BJJProjectVersions(store: store)
+        let copy = try versions.duplicate(original.id, revision: original.revision)
+        XCTAssertNotEqual(copy.id, original.id); XCTAssertEqual(copy.revision, 1)
+        XCTAssertNotEqual(copy.annotations[0].s("id"), original.annotations[0].s("id"))
+        XCTAssertNotEqual(copy.voiceovers[0].s("id"), original.voiceovers[0].s("id"))
+        XCTAssertTrue(NSDictionary(dictionary: copy.annotations[0]["geometry"] as! BJJJSON).isEqual(to: cue["geometry"] as! BJJJSON))
+        XCTAssertTrue(NSDictionary(dictionary: copy.source).isEqual(to: original.source))
+        XCTAssertTrue(NSDictionary(dictionary: copy.proxy).isEqual(to: original.proxy))
+        XCTAssertEqual((copy.json["futureOptional"] as! BJJJSON).s("annotationRef"), copy.annotations[0].s("id"))
+        XCTAssertEqual((copy.json["futureOptional"] as! BJJJSON).s("clipRef"), copy.voiceovers[0].s("id"))
+        XCTAssertEqual(try BJJAssets.digest(store.asset(copy.id, copy.source.s("asset"))), try BJJAssets.digest(store.asset(original.id, original.source.s("asset"))))
+        var edit = copy.json; edit["annotations"] = [BJJJSON](); edit["voiceovers"] = [BJJJSON]()
+        _ = try store.save(BJJProject(edit))
+        XCTAssertEqual(try store.load(original.id).voiceovers.count, 1)
+        try versions.trash(original.id, revision: original.revision)
+        let entry = try XCTUnwrap(versions.deleted().first)
+        let archived = try versions.readTrash(entry.s("trashId")).1
+        try FileManager.default.copyItem(at: archived, to: store.directory(original.id))
+        let (restored, copied) = try versions.restoreDeleted(entry.s("trashId"))
+        XCTAssertTrue(copied); XCTAssertNotEqual(restored.id, original.id)
+        XCTAssertEqual(try versions.deleted().count, 1)
+        XCTAssertEqual(try store.load(original.id).revision, original.revision)
+        try versions.permanentlyDelete(entry.s("trashId"))
+        XCTAssertEqual(try versions.deleted().count, 0)
+        XCTAssertNoThrow(try store.asset(restored.id, restored.voiceovers[0].s("asset")))
+        XCTAssertNoThrow(try store.asset(original.id, original.source.s("asset")))
+    }
+    func testDeletedRecoveryRejectsSymlinksAndKeepsLeasedProject() throws {
+        let original = try project()
+        let versions = BJJProjectVersions(store: store)
+        try store.acquireLease(original.id)
+        XCTAssertThrowsError(try versions.trash(original.id, revision: original.revision))
+        store.releaseLease(original.id)
+        XCTAssertThrowsError(try versions.permanentlyDelete("../source"))
+        try FileManager.default.createDirectory(at: versions.trashRoot(), withIntermediateDirectories: true)
+        let identifier = UUID().uuidString.lowercased()
+        try FileManager.default.createSymbolicLink(at: versions.trashEntry(identifier), withDestinationURL: store.directory(original.id))
+        XCTAssertThrowsError(try versions.restoreDeleted(identifier))
+        XCTAssertThrowsError(try versions.permanentlyDelete(identifier))
+        XCTAssertNoThrow(try store.asset(original.id, original.source.s("asset")))
+    }
     func testSharedConformanceAndIdempotentMigration() throws {
         let url = try XCTUnwrap(Bundle(for: BJJNativeTests.self).url(forResource: "project-conformance", withExtension: "json"))
         let fixtures = try BJJValidate.object(JSONSerialization.jsonObject(with: Data(contentsOf: url)), "fixtures")
@@ -383,9 +473,21 @@ import CryptoKit
         let originalAudioEnergy = try await audioEnergy(output, from: 0.2, to: 0.8)
         XCTAssertGreaterThan(originalAudioEnergy, 0.05)
         XCTAssertEqual(try BJJStore(root: root).load(project.id).annotations.count, 1)
+        let versions = BJJProjectVersions(store: store)
+        let checkpoint = try versions.checkpoint(project.id, revision: project.revision, label: "Timed cue")
         var later = project.json; later["annotations"] = [BJJJSON]()
-        let current = try store.save(BJJProject(later))
-        // A new service instance reads a durable job input after edits/restart.
+        let edited = try store.save(BJJProject(later))
+        let restoredCue = try versions.restoreCheckpoint(project.id, checkpoint: checkpoint.s("checkpointId"), revision: edited.revision)
+        XCTAssertEqual(restoredCue.annotations.count, 1)
+        var cleared = restoredCue.json; cleared["annotations"] = [BJJJSON]()
+        let current = try store.save(BJJProject(cleared))
+        try service.deleteProject(project.id, expectedRevision: current.revision)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: folder.path))
+        let deleted = try XCTUnwrap(versions.deleted().first)
+        let (restoredProject, copied) = try versions.restoreDeleted(deleted.s("trashId"))
+        XCTAssertFalse(copied); XCTAssertEqual(restoredProject.revision, current.revision)
+        XCTAssertEqual(try versions.checkpoints(project.id).count, 2)
+        // A new service reads the retained export after deletion/restore/restart.
         let restarted = try BJJService(store: store)
         let retry = try restarted.retryExport(job.jobId)
         XCTAssertEqual(retry.projectRevision, project.revision)

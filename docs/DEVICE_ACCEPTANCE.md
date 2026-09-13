@@ -1,9 +1,9 @@
 # Candidate-specific Windows and iPhone acceptance — P1.01
 
 Status: device/staging verification pending. No signed installation or physical
-phone has been accessed during this work. Baseline `f5323b3` passed 11 native
-XCTest cases and an unsigned archive in CI run 34532184666. That result does not
-prove installability. The P1.02/P1.03 candidate `06ca668eeadce6ce383d98c4c107e3998bd1434a` subsequently passed 15 native tests and an unsigned archive in [CI run 34718055711](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34718055711). Its signed-install and physical-device gates remain pending.
+phone has been accessed during this work. The P1.06 recovery candidate
+`33be6315eb4fdee79ac7fe5d973292bfc09b182f` passed all 22 native XCTest cases and
+an unsigned archive in [CI](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34727786132). That result does not prove installability. Use the exact subsequent signed candidate for every result below.
 
 ## Signed pilot from Windows
 
@@ -28,10 +28,14 @@ prove installability. The P1.02/P1.03 candidate `06ca668eeadce6ce383d98c4c107e39
 8. Exercise pending drafts: edit, interrupt/background/force-close, reopen, inspect
    recovery choices, create a recovery copy, and verify both reviews/assets. Test
    denied microphone access, low space, failed save and export cancellation.
-9. Run an actual 20-minute 1080p roll with 100 annotations and realistic narration.
+9. Save a named checkpoint, remove a take, restore the checkpoint and verify its
+   audible placement. Duplicate the review and edit it independently. Move one
+   generated project to Recently deleted, reopen the app, restore it and retry a
+   saved export. Test permanent deletion only on disposable generated projects.
+10. Run an actual 20-minute 1080p roll with 100 annotations and realistic narration.
    Record memory, thermal behavior, elapsed export time, free space and failures.
    Repeat on a lower-resource supported device before broader performance claims.
-10. Complete keyboard/VoiceOver and large-text portrait/landscape workflows.
+11. Complete keyboard/VoiceOver and large-text portrait/landscape workflows.
     Repeat Windows 11/Docker startup, editing, export, shutdown/restart persistence
     with generated/backed-up projects. Do not use `docker compose down -v` on data.
 
@@ -46,7 +50,8 @@ prove installability. The P1.02/P1.03 candidate `06ca668eeadce6ce383d98c4c107e39
 | Installed over populated build / projects retained | Pending |
 | 20-second output codec / size / duration / timing | Pending |
 | 20-minute workload / memory / thermal / elapsed export | Pending |
-| Draft recovery / copy / interruption / low-space results | Pending |
+| Draft recovery / checkpoints / independent copy / deleted-project restore | Pending |
+| Interruption / low-space / retained export retry results | Pending |
 | Files / Photos / ordinary receiving app | Pending |
 | Keyboard / VoiceOver / large text / orientation | Pending |
 | Windows 11 / Docker versions and fresh result | Pending |

@@ -25,6 +25,7 @@ from .jobs import JobManager
 from .media import MediaError, create_proxy, probe_media
 from .migrations import runtime_capabilities
 from .models import Job, Project, Voiceover
+from .recovery import ProjectRecovery
 from .storage import ProjectStore, StorageError, asset_path, safe_filename, utc_now
 from .voiceover import normalize_voiceover
 
@@ -163,7 +164,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     def expected_revision(request: Request) -> int:
         value = request.headers.get('if-match', '')
         if not value:
-            raise DomainError('REVISION_REQUIRED', 'Reopen this project in an updated client before saving or exporting.', 428)
+            raise DomainError('REVISION_REQUIRED', 'Reopen this project in an updated client before changing it or starting an export.', 428)
         if len(value) < 3 or not value.startswith('"') or not value.endswith('"') or not value[1:-1].isdigit():
             raise DomainError('REVISION_REQUIRED', 'The expected project revision is invalid.')
         return int(value[1:-1])
@@ -243,12 +244,44 @@ def create_app(config: Config | None = None) -> FastAPI:
         return store.recover_copy(project)
 
     @application.delete('/api/projects/{project_id}', status_code=204)
-    def delete_project(project_id: str) -> Response:
+    def delete_project(project_id: str, request: Request) -> Response:
         with store.lock:
             if application.state.jobs.has_active(project_id):
                 raise HTTPException(409, 'Cancel or finish this project’s active exports before deleting it')
-            store.delete(project_id)
+            ProjectRecovery(store).trash(project_id, expected_revision(request))
             application.state.jobs.forget(project_id)
+        return Response(status_code=204)
+
+    @application.post('/api/projects/{project_id}/duplicate', response_model=Project)
+    def duplicate_project(project_id: str, request: Request) -> Project:
+        return ProjectRecovery(store).duplicate(project_id, expected_revision(request))
+
+    @application.get('/api/projects/{project_id}/checkpoints')
+    def list_checkpoints(project_id: str) -> list[dict]:
+        return ProjectRecovery(store).checkpoints(project_id)
+
+    @application.post('/api/projects/{project_id}/checkpoints')
+    def create_checkpoint(project_id: str, request: Request, body: dict) -> dict:
+        return ProjectRecovery(store).checkpoint(project_id, expected_revision(request), body.get('label'))
+
+    @application.post('/api/projects/{project_id}/checkpoints/{checkpoint_id}/restore', response_model=Project)
+    def restore_checkpoint(project_id: str, checkpoint_id: str, request: Request) -> Project:
+        return ProjectRecovery(store).restore_checkpoint(project_id, checkpoint_id, expected_revision(request))
+
+    @application.get('/api/recently-deleted')
+    def recently_deleted() -> list[dict]:
+        return ProjectRecovery(store).deleted()
+
+    @application.post('/api/recently-deleted/{trash_id}/restore')
+    def restore_deleted(trash_id: str) -> dict:
+        with store.lock:
+            project, copied = ProjectRecovery(store).restore_deleted(trash_id)
+            application.state.jobs.recover_project(project.projectId)
+            return {'project': project.model_dump(mode='json'), 'copied': copied}
+
+    @application.delete('/api/recently-deleted/{trash_id}', status_code=204)
+    def permanently_delete(trash_id: str) -> Response:
+        ProjectRecovery(store).permanently_delete(trash_id)
         return Response(status_code=204)
 
     @application.get('/api/projects/{project_id}/video')

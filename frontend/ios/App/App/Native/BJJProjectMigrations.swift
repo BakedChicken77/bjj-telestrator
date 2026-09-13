@@ -42,6 +42,6 @@ enum BJJProjectMigrations {
     static var capabilities: BJJJSON {
         ["schemaVersion": currentVersion, "requiredCapabilities": supported,
          "conditionalSave": true, "conditionalExport": true, "recoveryCopy": true,
-         "exportRetry": true, "storageBreakdown": true, "exportFileCleanup": true]
+         "exportRetry": true, "storageBreakdown": true, "exportFileCleanup": true, "projectCheckpoints": true, "projectDuplicate": true, "projectTrash": true]
     }
 }

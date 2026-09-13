@@ -19,8 +19,8 @@ is authorized by mentioning those modules.
 | P1.01 | device/staging verification pending | Baseline and fresh candidate CI verified; candidate-specific signing/device template and release gate prepared. Run fresh signed-install/update and Windows/Docker acceptance. |
 | P1.02 | automatically verified | TypeScript, Python and Swift conformance plus migration/edit/export/reopen passed. Physical-device migration/reopen is still part of release acceptance. |
 | P1.03 | automatically verified | Local and native CI recovery/revision tests pass. Physical interruption, storage failure and VoiceOver acceptance remain pending. |
-| P1.06 — storage/export slice | implemented | Full local regression and native CI in progress. |
-| P1.06 — remaining recovery work | not started | Durable checkpoints, recently deleted projects, general duplication and broader reference-aware cleanup remain a separate vertical change. |
+| P1.06 — storage/export slice | automatically verified | All CI gates passed at 04b03a8 in run 34725049253, including 18 native tests and unsigned archive. Physical gates remain pending. |
+| P1.06 — project recovery | automatically verified | All six CI gates passed at 33be631 in run 34727786132, including 22 native tests, actual MP4 recovery/retry and the unsigned archive. Device gates remain pending; broad media GC remains conservative retention. |
 | P1.04–P1.05, P1.07–P1.08 | not started | Continue after the P1.06 storage/reference foundations. |
 | P2.01–P2.08 | not started | Follow Phase 1 save/media/asset contracts and the brief's batch order. |
 | P3.01–P3.07 | not started | Requires Phase 2 transport/timeline/export contracts. |
@@ -32,10 +32,9 @@ Evidence and commands: [verification](docs/VERIFICATION.md).
 Hardware/signing checklist: [device acceptance](docs/DEVICE_ACCEPTANCE.md).
 
 Limits: only the existing six visual types and linear audio are persisted. No
-HDR conversion, portable ZIP, asset garbage collection, restartable export
-manifest, broad accessibility audit, 20-minute benchmark or cloud feature is
-claimed. Native recovery-copy currently copies synchronously; large-media
-responsiveness/progress belongs to the next storage work package. Draft storage
+HDR conversion, portable ZIP, audio-asset garbage collection, broad accessibility
+audit, 20-minute benchmark or cloud feature is claimed. Large-copy responsiveness
+and interruption still need physical-device evidence. Draft storage
 is bounded and cannot preserve an edit before it has actually been journaled.
 
 ### Completion record — P1.02 / P1.03
@@ -80,10 +79,64 @@ This work package does not complete P1.06 or authorize a release.
 
 Implementation now includes Python/Swift immutable job inputs and shared fixture
 validation, source/recording retention, safe output cleanup and real shared editor
-controls. Automated verification is in progress. The first backend run passed
-123 tests, and the focused browser storage/retry workflow passed; final results
-and native CI will be recorded before the work package is declared verified.
+controls. Automated verification passed: 125 backend, 91 frontend, 12 repository and 12
+browser tests; CI run 34725049253 also passed all 18 native tests and its unsigned
+archive at 04b03a8. The native recording-receipt regression caught by the first run
+was fixed without removing its assertion.
 No physical device, signed installation or Windows/Docker acceptance is claimed.
+
+
+### Current work package — P1.06 project recovery
+
+Authorized by Steve's “Continue”. Starting commit:
+`04b03a8cac59ae6266b32117ed2a7b797a4f6636`, isolated branch
+`codex/p1-project-recovery`, stacked on draft PR #9. Selected scope: named durable
+checkpoints, restore with a preserved before-restore checkpoint, independent
+project duplication, recently deleted projects with explicit permanent deletion,
+and restore of retained export attempts. Source/recording files remain immutable;
+no automatic expiration or media garbage collection is introduced. Native work
+runs off the UI thread; hardware interruption and large-media tests remain open.
+Implementation: named, checksummed checkpoints with before-restore preservation;
+independent media copies and UUID remapping; complete-project retained deletion,
+collision-safe restore, conditional actions and working shared controls. New
+recovery metadata stays outside project edit history. The project schema remains 2.
+
+Review: [draft PR #10](https://github.com/BakedChicken77/bjj-telestrator/pull/10).
+Implementation commits: `976343d` (recovery), `3f3b286` (immutable-input validation
+and test storage), and `33be631` (literal text preservation during UUID copying).
+All six CI gates passed at `3f3b286` in [run 34727251987](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34727251987).
+Full local verification passed 139 backend, 92 frontend, 12 repository and 14 browser
+tests. The final copy-only fix passed 39 focused recovery/export tests; its complete
+CI passed all six gates in [run 34727786132](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34727786132): 139 backend, 92 frontend, 12 repository, 14 browser and 22 native tests, Docker and the unsigned archive.
+Physical device, large-copy/interruption and fresh Windows-host acceptance remain
+open; no complete Phase 1 or release acceptance is claimed. The full completion
+record, interfaces, changed files and numerical export evidence are in
+[project recovery verification](docs/p1-project-recovery-verification.json).
+
+Retention/rollback: checkpoints and deleted projects keep all source/recording
+references. Restore first saves the current edits as a checkpoint and increments
+revision; it starts a fresh undo session. Duplicate retains older exports/versions
+with the original. Preserve the entire project directory and pre-migration JSON
+before rollback; restore trash with this version first. An older binary cannot
+understand new sidecars or silently downgrade the project. Never uninstall to roll back.
+
+Documentation updated: README, IOS_README, PROJECT_FORMAT, ARCHITECTURE, CHANGELOG,
+VERIFICATION and this tracker. Next eligible feature work is P1.04's observable
+import/proxy repair and bounded HDR conversion spike, followed by P1.05 portable
+packages. Comprehensive GC remains conservative retention until every history,
+checkpoint, recovery and active-job owner is represented. Status: automatically
+verified for this package; device/staging verification pending. No Phase 1 release
+acceptance is implied.
+
+
+P1.04 inspection note: desktop `media.py` currently discards transfer/primaries/
+matrix/range metadata and does not choose a verified HDR conversion. Native
+`BJJMedia` lives in `BJJRenderer.swift` and rejects HDR transfer functions. Begin
+the next package with explicit inspection and a fixture-based conversion spike;
+keep the native rejection until preview and both exports pass. The desktop proxy
+subprocess is currently blocking, so observable import/repair needs a real tracked
+operation with cancellation, using the storage estimates and immutable source ID
+already established. No HDR support or proxy repair is claimed by this package.
 
 
 ## Historical delivery records

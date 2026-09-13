@@ -205,7 +205,7 @@ struct BJJProject {
 
     func summary() -> BJJJSON {
         ["projectId": id, "projectName": name, "updatedAt": json["updatedAt"]!,
-         "durationSec": duration, "annotationCount": annotations.count]
+         "durationSec": duration, "annotationCount": annotations.count, "revision": revision]
     }
     static func now() -> String {
         let formatter = ISO8601DateFormatter()
@@ -245,6 +245,9 @@ final class BJJStore {
     func directory(_ id: String) throws -> URL {
         try BJJValidate.uuid(id)
         let directory = root.appendingPathComponent(id, isDirectory: true)
+        guard (try? directory.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) != true else {
+            throw BJJError.domain("ASSET_UNSAFE", "Symbolic links are not supported for project directories.")
+        }
         guard directory.resolvingSymlinksInPath().path.hasPrefix(root.resolvingSymlinksInPath().path + "/") else {
             throw BJJError.invalid("Unsafe project directory.")
         }
@@ -363,16 +366,7 @@ final class BJJStore {
         }
         _ = try asset(project.id, project.source["asset"] as! String)
         _ = try asset(project.id, project.proxy["asset"] as! String)
-        let registry = try recordings(project.id)
-        for clip in project.voiceovers {
-            guard let original = registry[clip["id"] as! String] as? BJJJSON else { throw BJJError.invalid("Unknown voiceover asset.") }
-            for field in ["id", "asset", "durationSec", "recordedAt", "codec", "sampleRate", "channels"] {
-                guard NSDictionary(dictionary: ["value": clip[field]!]).isEqual(to: ["value": original[field]!]) else {
-                    throw BJJError.invalid("Recorded media metadata cannot be changed.")
-                }
-            }
-            _ = try asset(project.id, clip["asset"] as! String)
-        }
+        try validateRecordings(project)
         var json = project.json
         guard creating || project.revision < 9007199254740991 else { throw BJJError.invalid("The project revision limit was reached.") }
         let target = try directory(project.id).appendingPathComponent("project.json")
@@ -407,6 +401,18 @@ final class BJJStore {
         try writeJSON(pending, to: safeURL(id, "voiceover/pending.json"))
         try FileManager.default.removeItem(at: journal)
     }
+    func validateRecordings(_ project: BJJProject) throws {
+        let registry = try recordings(project.id)
+        for clip in project.voiceovers {
+            guard let original = registry[clip["id"] as! String] as? BJJJSON else { throw BJJError.invalid("Unknown voiceover asset.") }
+            for field in ["id", "asset", "durationSec", "recordedAt", "codec", "sampleRate", "channels"] {
+                guard NSDictionary(dictionary: ["value": clip[field]!]).isEqual(to: ["value": original[field]!]) else {
+                    throw BJJError.invalid("Recorded media metadata cannot be changed.")
+                }
+            }
+            _ = try asset(project.id, clip["asset"] as! String)
+        }
+    }
     func recordings(_ id: String) throws -> BJJJSON {
         let url = try directory(id).appendingPathComponent("voiceover/assets.json")
         return FileManager.default.fileExists(atPath: url.path) ? try readJSON(url) : [:]
@@ -435,10 +441,17 @@ final class BJJStore {
         }
         return (id, url)
     }
-    func delete(_ id: String) throws {
+    func locked<T>(_ work: () throws -> T) rethrows -> T {
         lock.lock(); defer { lock.unlock() }
-        guard leases[id, default: 0] == 0 else { throw BJJError.domain("ASSET_BUSY", "Finish or cancel active media operations before deleting this project.") }
-        try FileManager.default.removeItem(at: directory(id))
+        return try work()
+    }
+    func requireUnleased(_ id: String) throws {
+        try locked {
+            guard leases[id, default: 0] == 0 else { throw BJJError.domain("ASSET_BUSY", "Finish or cancel active media operations before deleting this project.") }
+        }
+    }
+    func delete(_ id: String) throws {
+        try locked { try BJJProjectVersions(store: self).trash(id, revision: load(id).revision) }
     }
     static func sanitized(_ name: String) -> String {
         let clean = String(name.prefix(120)).replacingOccurrences(of: "[^A-Za-z0-9._-]+", with: "-", options: .regularExpression)

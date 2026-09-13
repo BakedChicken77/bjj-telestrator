@@ -96,7 +96,7 @@ def test_soft_remove_restores_for_undo_and_project_delete_removes_assets(client_
     project['voiceovers'] = [clip]
     assert save_project(client, project).status_code == 200
     directory = application.state.store.project_dir(project['projectId'])
-    assert client.delete(f"/api/projects/{project['projectId']}").status_code == 204
+    assert client.delete(f"/api/projects/{project['projectId']}", headers={'If-Match': f'"{project["revision"]}"'}).status_code == 204
     assert not directory.exists()
 
 

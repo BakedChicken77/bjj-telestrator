@@ -2,7 +2,7 @@
 
 This repository now includes a standalone iOS application alongside the working Windows/Docker application. The iPhone app bundles the React annotation editor in Capacitor 8.5.1 and uses Swift, AVFoundation, Core Image, and Core Graphics for local files, microphone capture, and H.264/AAC MP4 rendering. It does not connect to the Windows computer or require Docker at runtime.
 
-**Release status:** the baseline native Apple SDK build, 11 XCTest cases, and unsigned archive passed in [CI](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34532184666) at `f5323b3b270e3836d7df10309d1684cf8d98e9ca`. The P1.02/P1.03 implementation at `06ca668eeadce6ce383d98c4c107e3998bd1434a` subsequently passed all 15 native tests and an unsigned archive in [fresh CI](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34718055711). Signing, installed updates, physical-iPhone export/share, and a realistic 20-minute workload remain unverified. An unsigned archive is not an installable IPA. GitHub-hosted macOS runners support the Windows-only development route.
+**Release status:** the P1.06 recovery candidate at `33be6315eb4fdee79ac7fe5d973292bfc09b182f` passed all 22 native XCTest cases, the unsigned archive and every other gate in [CI](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34727786132). Signing, installed updates, physical-iPhone export/share, and a realistic 20-minute workload remain unverified. An unsigned archive is not an installable IPA. GitHub-hosted macOS runners support the Windows-only development route.
 
 ## Windows-only build and distribution route
 
@@ -82,7 +82,7 @@ python3 scripts/test_ios.py
 python3 scripts/test_ios.py --device <simulator-UDID>
 ```
 
-The runner invokes `xcodebuild test`, saves an `.xcresult` under `tests/generated/`, and fails clearly outside macOS. Alternatively use Product → Test in Xcode with the shared **App** scheme. The tests in `BJJNativeTests.swift` include native generated video/tone fixtures and actual MP4 rendering, half-open boundaries, dimensions/orientation, audio mixing/nudge, source preservation, atomic persistence/recovery, path safety, and job cancellation. **The baseline 11 tests passed on GitHub macOS runners ([evidence](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34532184666)); new cases require a fresh run.**
+The runner invokes `xcodebuild test`, saves an `.xcresult` under `tests/generated/`, and fails clearly outside macOS. Alternatively use Product → Test in Xcode with the shared **App** scheme. The tests in `BJJNativeTests.swift` include native generated video/tone fixtures and actual MP4 rendering, half-open boundaries, dimensions/orientation, audio mixing/nudge, source preservation, atomic persistence/recovery, path safety, and job cancellation. **All 22 native tests passed for the recovery candidate on GitHub macOS runners ([evidence](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34727786132)); test every later application candidate again.**
 
 When adding Swift source files, run `python3 scripts/configure_ios.py` to wire them into the Xcode app target. The app uses Swift Package Manager; CocoaPods is not required. Do not run `cap add ios` over the customized checked-in project.
 
@@ -129,7 +129,8 @@ flush while execution is available; a final lifecycle callback is not guaranteed
 Recording recovery has its own asset journal and commits a revision when reopened.
 Use **Recover draft as a copy** to preserve both the saved review and pending edits.
 A completed copy has independent media files and object IDs. Keep the app open
-while large media is copied; progressive/cancellable storage jobs belong to P1.06.
+while large media is copied. Copying and checksums run off the main actor; there is
+no separate copy-cancel control yet. The editor shows an indeterminate working state.
 
 Use [DEVICE_ACCEPTANCE.md](docs/DEVICE_ACCEPTANCE.md) for the exact signed-build
 checklist and result fields. Retain the same bundle identity when installing an
@@ -148,6 +149,22 @@ large media through JavaScript.
 **Remove MP4** reclaims a completed output and retains its retry input and all source
 and recording assets. An active share sheet protects that file until dismissed.
 Old jobs without saved inputs cannot retry their old edits. Whole-project deletion
-is still permanent; recently deleted recovery, checkpoints and Files `.bjjproj`
-transfer remain later work. Simulator/CI verification does not establish physical
+now retains the project in **Recently deleted**. Files `.bjjproj` transfer remains
+later work. Simulator/CI verification does not establish physical
 low-space, share-sheet, thermal or 20-minute performance acceptance.
+
+
+### Local project versions
+
+In **Projects**, expand **Checkpoints and copies** for the current review. Save a
+named checkpoint, restore a previous one, or duplicate the saved project. Restore
+first preserves the current revision as a checkpoint; source and recording files
+stay immutable. A duplicate has fresh IDs and copied media, with no shared hard links.
+
+Deleted projects remain in **Recently deleted** with all their recordings,
+checkpoints and exports until separate permanent deletion. Restore retains the
+original ID when available; a collision creates a new review and leaves the full
+deleted project intact. These local copies do not protect against uninstall or
+phone loss. Keep the same bundle identity for updates and never uninstall as a
+routine rollback. Physical suspension, large copies, VoiceOver and low-space
+behavior still require the candidate-specific device checklist.

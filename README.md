@@ -2,7 +2,7 @@
 
 A local desktop browser editor for reviewing Brazilian Jiu-Jitsu footage. Import a video, draw timed arrows, lines, ellipses, boxes, freehand paths and text, record coaching voiceovers, and export one ordinary MP4 with annotations permanently burned into the picture and commentary mixed into its audio. Originals are preserved. Projects and completed exports stay on your computer.
 
-**iPhone conversion:** version 1.1 adds a touch-adapted editor and a standalone Capacitor/Swift iOS target with native storage, import, recording, and MP4 export. Start with [IOS_README.md](IOS_README.md) for installation and native test instructions. It requires iOS 17+; GitHub-hosted macOS runners can build and sign it, so you do not need to own a Mac. All 15 native XCTest cases and the unsigned archive passed for this implementation ([CI evidence](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34718055711)); signed installation and physical-device acceptance remain pending; the ZIP is source, not an installable signed IPA. The existing Windows/Docker path remains supported.
+**iPhone conversion:** version 1.1 adds a touch-adapted editor and a standalone Capacitor/Swift iOS target with native storage, import, recording, and MP4 export. Start with [IOS_README.md](IOS_README.md) for installation and native test instructions. It requires iOS 17+; GitHub-hosted macOS runners can build and sign it, so you do not need to own a Mac. All 22 native XCTest cases and the unsigned archive passed for this implementation ([CI evidence](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34727786132)); signed installation and physical-device acceptance remain pending; the ZIP is source, not an installable signed IPA. The existing Windows/Docker path remains supported.
 
 **GitHub automation:** [docs/GITHUB_SETUP.md](docs/GITHUB_SETUP.md) includes the Windows repository-creation command, CI/release gates, and optional Apple signing/TestFlight setup. The owner created the public GitHub repository. Workflow configuration is included; repository-admin settings still require the owner’s GitHub CLI or Settings access.
 
@@ -122,14 +122,14 @@ Copy `.env.example` to `.env` for Compose overrides. Native execution does not l
 - **Proxy or playback errors:** wait for import completion, check the displayed error, and inspect `docker compose logs app`. A corrupt or truncated file must be replaced with a complete copy. Try current desktop Edge/Chrome.
 - **Docker data appears missing:** check the Compose project/folder name and named volume. A different project prefix creates a different volume; this does not migrate earlier projects automatically.
 - **Microphone access:** use `localhost` and allow microphone permission for that browser origin. Verify Windows microphone privacy settings and that another application has not exclusively opened the device.
-- **Backend disconnected / save failed:** restart the backend, leave the editor open, and retry saving. Confirm Saved before closing; unsaved browser edits cannot survive closing the tab.
+- **Backend disconnected / save failed:** restart the backend, leave the editor open, and retry saving. Confirm Saved before closing when possible. After restart, check pending recovery drafts for journaled edits; an edit that was never journaled cannot be recovered.
 - **Long import/export:** CPU encoding can take time. Leave disk space available and use progress feedback. No GPU is required.
 
 ## Design and limits
 
 `ARCHITECTURE.md` documents the implementation. `IMPLEMENTATION_PLAN.md` records milestone acceptance and `docs/VERIFICATION.md` records tests actually executed, including environmental limits. This is manual telestration: annotations remain in their chosen spatial location during their visibility interval. There is no tracking or computer vision, account system, collaboration, external media upload, analytics, or watermark.
 
-The desktop editor and FFmpeg export pipeline have been tested in Linux Chromium, and the user has verified Windows 11/Docker Desktop operation. This implementation passed all 15 native XCTest cases, an unsigned archive, and the Linux Docker build/startup in [fresh CI](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34718055711); physical-device and fresh Windows 11 acceptance remain required. Non-right-angle rotation is rejected; HDR-to-SDR tone mapping is not implemented. A short desktop 1080p/100-annotation export was checked, but a full 20-minute camera recording was not benchmarked. Active narration clips require their complete decoded audio buffers in browser memory, so long or overlapping takes can use substantial RAM despite bounded prefetch caching. The project format keeps external media assets in its project directory; there is no single-file portable-project export yet. See IOS_README.md for iPhone-specific format and foreground-render limits.
+The desktop editor and FFmpeg export pipeline have been tested in Linux Chromium, and the user has verified Windows 11/Docker Desktop operation. This implementation passed all 22 native XCTest cases, an unsigned archive, and the Linux Docker build/startup in [fresh CI](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34727786132); physical-device and fresh Windows 11 acceptance remain required. Non-right-angle rotation is rejected; HDR-to-SDR tone mapping is not implemented. A short desktop 1080p/100-annotation export was checked, but a full 20-minute camera recording was not benchmarked. Active narration clips require their complete decoded audio buffers in browser memory, so long or overlapping takes can use substantial RAM despite bounded prefetch caching. The project format keeps external media assets in its project directory; there is no single-file portable-project export yet. See IOS_README.md for iPhone-specific format and foreground-render limits.
 
 ## Revision-safe saves and recovery (P1.02 / P1.03)
 
@@ -162,8 +162,31 @@ newer edits exist. **Remove MP4** removes only that completed file; its retry in
 source and recording assets remain. Downloads are protected from concurrent cleanup.
 Older exports created before this feature have no saved retry input.
 
-Removed narration stays available for undo and old exports. Whole-project deletion
-remains permanent in this work package. Checkpoints, recently deleted recovery and
-portable `.bjjproj` backup/restore are not yet implemented. Preserve original media
+Removed narration stays available for undo, checkpoints and old exports. Project deletion
+now moves the complete project to **Recently deleted**. Portable `.bjjproj` backup/restore
+is not yet implemented. Preserve original media
 and existing project folders before updating. Physical iPhone/Windows acceptance
 remains separate from automated CI.
+
+
+### Checkpoints, copies and recently deleted projects
+
+Open **Projects → Checkpoints and copies** for the current review. Enter a label
+and choose **Save checkpoint** after pending edits save. **Restore checkpoint**
+verifies the referenced media and saves a **Before restoring …** checkpoint before
+replacing editable fields. It opens a fresh undo history and advances the current
+revision; the previous review remains recoverable from that checkpoint.
+
+**Duplicate project** opens an independent copy of the saved review with new
+project/annotation/recording IDs and verified local media copies. Existing exports,
+checkpoints and removed takes remain with the original. Allow enough free space
+for the required source, proxy and recordings plus a safety margin; keep the app
+open during copying.
+
+**Delete project** moves the entire project to **Recently deleted**, retaining all
+media, versions and export inputs. **Restore project** brings it back. If its ID
+already exists, restoration opens a fresh copy and keeps the full deleted project.
+**Permanently delete** requires a separate confirmation and cannot be undone.
+There is no automatic expiry. Checkpoints and deleted projects use local storage;
+they are not a backup against device loss. Up to 1,000 checkpoints per project and
+1,000 deleted projects are supported. Active media jobs/share operations prevent deletion.

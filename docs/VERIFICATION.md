@@ -1,5 +1,44 @@
 # Verification record
 
+## P1.06 project recovery candidate — 2026-09-13 (started September 12)
+
+Start: `04b03a8cac59ae6266b32117ed2a7b797a4f6636`, branch
+`codex/p1-project-recovery`. Both service adapters and the shared UI implement
+checkpoints, before-restore preservation, independent copies and retained deletion.
+Initial backend suite: 138 passed (89.81 s), including 13 new recovery cases.
+Frontend: 92 passed. The first candidate passed all six CI gates in [run 34726637336](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34726637336) at
+`976343d46dd0fd08984e6422c10b1f1bea1d7960`. Native SDK compilation, all 22 XCTest
+methods (48.621 s) and the unsigned archive passed. The follow-up conformance candidate also passed all six gates in
+[run 34727251987](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34727251987). The existing real native export test now includes checkpoint restoration,
+project deletion/restoration and retry from the retained input, keeping its pixel,
+audio, codec/duration and source-hash assertions. Four new native recovery tests
+cover stale revisions, checkpoint write failure, copy/collision and unsafe paths.
+
+Local browser checks initially collided with retained test-project names. Cases
+now use unique project names, await the destructive response and assert absence
+through HTTP after reload. The checkout-backed local fixture store intermittently
+returned removed directories after successful `os.rename`/`shutil.rmtree` calls;
+an isolated Python filesystem audit recorded no application recreation call.
+The **unchanged deletion/reload assertions passed** in clean GitHub CI (all 14
+browser scenarios; new desktop/phone cases 6.7/6.3 s) and locally using a temporary
+data root outside the synced checkout (23.0/17.3 s, 46.4 s including setup).
+This isolates the observed anomaly to the local checkout-backed test storage;
+it does not establish support for externally synchronized live project folders.
+`BJJ_E2E_DATA_DIR` now permits an isolated local test data root. Normal CI keeps its
+existing generated fixture path. No runtime save/delete workaround, weakened
+assertion, disabled gate or enlarged timeout was introduced.
+
+Local non-browser `scripts/verify.py` passed all backend/frontend/repository,
+lint/type/build/format gates. Native compilation, 22 tests and the archive passed for the first candidate; physical install, VoiceOver, interruption, low-space
+and realistic 20-minute workload checks remain open.
+
+A follow-up conformance review found that Python's direct render-plan validator
+could migrate schema-1 input while Swift rejected it. Both now reject migration
+inside an immutable job/checkpoint input; the shared invalid fixture retains this
+boundary. This preserves the separate explicit project-migration path. Recovery
+metadata also validates timestamps and bounded storage revisions consistently.
+
+
 ## P1.06 storage/export work package — 2026-09-12
 
 Starting commit: `dd0d0843ccc912fb5fa0cdd8e036979e7d9f6262`, whose complete CI
@@ -22,10 +61,11 @@ The source SHA-256 stayed
 Native tests add the shared 16-case input corpus, revision retry after restart,
 retained recording references, cancellation, lease/space/path guards, and real
 H.264/AAC retry with timed pixels and audio energy. `npm run ios:sync` passed.
-The first native CI run compiled successfully and passed the real native retry export (H.264/AAC, 320×180, 4 s, 26,570 bytes), but one recording-journal assertion failed: a just-recovered take could reappear after removal. The assertion is retained; native save now journals the document and recording acknowledgments as one recoverable transaction. A write-failure replay test was added. Fresh CI is required for this fix.
+The first native CI run compiled successfully and passed the real native retry export (H.264/AAC, 320×180, 4 s, 26,570 bytes), but one recording-journal assertion failed: a just-recovered take could reappear after removal. The assertion is retained; native save now journals the document and recording acknowledgments as one recoverable transaction. A write-failure replay test was added. The fix passed fresh CI at `04b03a8cac59ae6266b32117ed2a7b797a4f6636`: [run 34725049253](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34725049253), all six gates including 18 native tests (195.008 s) and the unsigned archive. Its real native retry was H.264/AAC, 320×180, 4 s, 26,558 bytes, source SHA-256 `a4b27a39adf8ddca0e036080f1af375295c28819275d5fc38afca143d9e08555`.
 Physical signed install/update, interrupted recording, low-space/share-sheet
 behavior, thermal/memory/20-minute performance and Windows 11/Docker acceptance
-remain open. No HDR, package transfer, checkpoints or trash recovery is claimed.
+remain open. Checkpoints and trash are the next separately verified work package;
+no HDR or package transfer is claimed by this storage/export slice.
 
 
 ## P1.02 / P1.03 first vertical package — 2026-09-12
@@ -278,3 +318,68 @@ Re-ran the actual application gates after adding repository automation:
 Do not interpret static workflow validation or mocked bootstrap boundary tests as proof of a successful GitHub API operation or native iOS build. First-run native failures must be fixed before publication; the release workflow enforces that gate.
 
 Release packaging smoke test passed: 145 tracked source files were archived, required workflow/native/setup files were present, ZIP integrity checks passed, the compiled web package was produced, and SHA256 files were generated. Generated iOS public assets remain outside Git and are recreated by `npm run ios:sync`; the downloadable working-source archive also retains them for continuity.
+
+
+### Isolated local browser data
+
+For a synced/virtual checkout, run the existing browser gate with a local temporary
+data root: `BJJ_E2E_DATA_DIR=/tmp/bjj-recovery-tests BJJ_E2E_CHROMIUM_PATH=<existing compatible Chromium> backend/.venv/bin/python scripts/verify.py --browser`.
+Use a task-specific generated directory; never point this test setting at real
+projects. On Windows, set `BJJ_E2E_DATA_DIR` to a generated test directory on local
+storage if needed. This changes fixture placement, not test assertions or product
+storage behavior. Keep live projects in the documented application container or
+Docker volume, not a concurrently synchronized working tree.
+
+
+### Native recovery export evidence
+
+CI run 34726637336 exported and retried a real four-second H.264 (`avc1`)/AAC,
+320×180 MP4 after checkpoint restoration and whole-project deletion/restore.
+The retained revision's rectangle appeared at 1 s and was absent at 2 s; decoded
+audio energy passed. Retry output: 26,570 bytes. The original source SHA-256 stayed
+`6d4b3d63ff338abd82642b25c4624d1ed723b7883433b7e370c7d6050093c1f7`.
+The preserved pre-migration document also matched exactly. This is simulator SDK
+and encoded-file evidence, not a signed phone installation or listening acceptance.
+
+
+### Final local regression — 2026-09-13
+
+Application commit `3f3b286444e37d68f6628d3e0edcf41a215c8e4e` passed the full
+`verify.py --browser` gate using isolated local temporary test storage: **139
+backend tests (76.38 s), 92 frontend tests, 12 repository tests, 14 browser scenarios
+(4.2 min)**, Ruff, ESLint, strict TypeScript, production build and Prettier. Native
+sync also passed. No test assertions or timeouts were weakened. The final shared
+immutable-input corpus has 17 cases.
+
+A focused FFmpeg evidence run passed in 4.99 s: silent H.264, 320×180, 4.0 seconds,
+6,448 bytes; red visibility at 0.9/1.0/1.9/2.0 seconds was false/true/true/false.
+Source SHA-256 stayed `89441d06c652971cfba6065c85cb59999b2bea81f812977be4b0d91ab57cb9d5`.
+The actual restored-review browser exports and native recovery/retry render are
+separate end-to-end evidence. CI for this final application commit is [run
+34727251987](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34727251987);
+all six gates passed, including 22 native tests (31.480 s), the unsigned archive,
+real FFmpeg/browser exports and the Ubuntu Docker build/startup.
+
+
+### Copy fidelity regression — 2026-09-13
+
+The duplicate regression reproduced a text annotation changing when its literal
+text equaled the original annotation UUID. Both Python and Swift now preserve
+literal text/name/filename fields while remapping object IDs and references. The
+existing copy tests retain their independence/hash assertions and additionally
+check exact geometry/text, unchanged media metadata and remapped optional references.
+The Python regression failed before the fix; the focused recovery/export suite
+then passed **39 tests in 5.84 s**, with Ruff and diff checks passing. No UI or
+renderer changed. Application commit `33be6315eb4fdee79ac7fe5d973292bfc09b182f`
+passed every CI gate in [run 34727786132](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34727786132): **139 backend (20.61 s), 92 frontend, 12 repository, 14 browser (1.8 min), 22 native (54.894 s)**, lint/type/build/format, Docker and the unsigned archive. The expanded native copy regression passed in 0.141 s.
+
+The final native recovery/retry export was H.264 (`avc1`)/AAC, 320×180, 4 seconds,
+26,570 bytes. Source SHA-256 remained
+`912a9244dfbf0023c1696c2d368fe87a584e4980e1340c5bc720074eea501f1e`;
+retained-revision cue boundaries, decoded audio and pre-migration bytes all passed.
+The new browser recovery workflows passed at desktop/phone sizes in 6.7/6.4 s.
+
+This is the automatically verified application commit; the accompanying completion
+record is a documentation-only follow-up. Signed installation/update, a fresh
+Windows 11 host run, VoiceOver and realistic device workloads remain pending.
+See [the complete task record](p1-project-recovery-verification.json).

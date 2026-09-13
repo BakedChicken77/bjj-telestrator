@@ -1,6 +1,14 @@
 import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor/core';
 import { projectSchema, readProject, voiceoverSchema, type Project, type Voiceover } from './model';
-import type { ExportJob, ProjectSummary, ProjectStorage, RuntimeCapabilities } from './api';
+import type {
+  Checkpoint,
+  DeletedProject,
+  RestoredProject,
+  ExportJob,
+  ProjectSummary,
+  ProjectStorage,
+  RuntimeCapabilities,
+} from './api';
 import type { Draft } from './project/saveSession';
 
 /** JSON crosses this bridge; video and microphone bytes stay in the iOS sandbox. */
@@ -24,7 +32,27 @@ export interface BJJNativePlugin {
     project: Project;
     expectedRevision: number;
   }): Promise<{ project: unknown }>;
-  deleteProject(options: { projectId: string }): Promise<void>;
+  deleteProject(options: { projectId: string; expectedRevision: number }): Promise<void>;
+  duplicateProject(options: {
+    projectId: string;
+    expectedRevision: number;
+  }): Promise<{ project: unknown }>;
+  listCheckpoints(options: { projectId: string }): Promise<{ checkpoints: Checkpoint[] }>;
+  createCheckpoint(options: {
+    projectId: string;
+    expectedRevision: number;
+    label: string;
+  }): Promise<{ checkpoint: Checkpoint }>;
+  restoreCheckpoint(options: {
+    projectId: string;
+    checkpointId: string;
+    expectedRevision: number;
+  }): Promise<{ project: unknown }>;
+  listDeletedProjects(): Promise<{ projects: DeletedProject[] }>;
+  restoreDeletedProject(options: {
+    trashId: string;
+  }): Promise<{ project: unknown; copied: boolean }>;
+  permanentlyDeleteProject(options: { trashId: string }): Promise<void>;
   listExports(options: { projectId: string }): Promise<{ jobs: ExportJob[] }>;
   createExport(options: {
     projectId: string;
@@ -107,10 +135,26 @@ export const nativeAPI = {
         })
       ).project,
     ),
-  deleteProject: async (projectId: string) => {
-    await nativeBridge.deleteProject({ projectId });
+  deleteProject: async (projectId: string, expectedRevision: number) => {
+    await nativeBridge.deleteProject({ projectId, expectedRevision });
     for (const key of urls.keys()) if (key.startsWith(`${projectId}:`)) urls.delete(key);
   },
+  duplicateProject: async (projectId: string, expectedRevision: number) =>
+    readProject((await nativeBridge.duplicateProject({ projectId, expectedRevision })).project),
+  checkpoints: async (projectId: string) =>
+    (await nativeBridge.listCheckpoints({ projectId })).checkpoints,
+  createCheckpoint: async (projectId: string, expectedRevision: number, label: string) =>
+    (await nativeBridge.createCheckpoint({ projectId, expectedRevision, label })).checkpoint,
+  restoreCheckpoint: async (projectId: string, checkpointId: string, expectedRevision: number) =>
+    readProject(
+      (await nativeBridge.restoreCheckpoint({ projectId, checkpointId, expectedRevision })).project,
+    ),
+  deletedProjects: async () => (await nativeBridge.listDeletedProjects()).projects,
+  restoreDeletedProject: async (trashId: string): Promise<RestoredProject> => {
+    const result = await nativeBridge.restoreDeletedProject({ trashId });
+    return { ...result, project: readProject(result.project) };
+  },
+  permanentlyDeleteProject: (trashId: string) => nativeBridge.permanentlyDeleteProject({ trashId }),
   exports: async (projectId: string) => (await nativeBridge.listExports({ projectId })).jobs,
   export: async (projectId: string, expectedRevision: number) =>
     (await nativeBridge.createExport({ projectId, expectedRevision })).job,

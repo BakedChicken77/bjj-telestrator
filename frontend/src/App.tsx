@@ -1,3 +1,4 @@
+import { ProjectVersions } from './components/ProjectVersions';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, type ExportJob, type ProjectSummary } from './api';
 import { ProjectStorage } from './components/ProjectStorage';
@@ -140,6 +141,8 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [storageTools, setStorageTools] = useState(false);
+  const [recoveryTools, setRecoveryTools] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [mobilePanel, setMobilePanel] = useState<'timeline' | 'properties'>('timeline');
   const {
     status,
@@ -166,6 +169,13 @@ export default function App() {
     async function start() {
       try {
         const capabilities = await api.capabilities();
+        setRecoveryTools(
+          !!(
+            capabilities.projectCheckpoints &&
+            capabilities.projectDuplicate &&
+            capabilities.projectTrash
+          ),
+        );
         setStorageTools(
           !!(
             capabilities.exportRetry &&
@@ -413,6 +423,11 @@ export default function App() {
           </button>
         </div>
       </header>
+      {notice && (
+        <p className="recovery-notice" role="status">
+          {notice}
+        </p>
+      )}
       {support !== null && <SupportDialog text={support} onClose={() => setSupport(null)} />}
       {project && status === 'conflict' && (
         <section className="recovery-banner" aria-label="Save conflict recovery">
@@ -547,6 +562,7 @@ export default function App() {
                 <button
                   className="close-button"
                   aria-label="Close projects"
+                  disabled={!!busy}
                   onClick={() => setBrowserOpen(false)}
                 >
                   ×
@@ -604,6 +620,17 @@ export default function App() {
                 Refresh
               </button>
             </div>
+            {recoveryTools && (
+              <ProjectVersions
+                project={project}
+                projects={projects}
+                busy={!!busy}
+                flush={flush}
+                onBusy={setBusy}
+                onLoad={loadProject}
+                onNotice={setNotice}
+              />
+            )}
             <div className="project-list">
               {projects.length === 0 ? (
                 <div className="empty-projects">
@@ -640,17 +667,25 @@ export default function App() {
                     <button
                       className="delete-project"
                       aria-label={`Delete project ${item.projectName}`}
-                      title="Delete project"
-                      disabled={Boolean(busy)}
+                      title="Move to Recently deleted"
+                      disabled={Boolean(busy) || !recoveryTools || !!item.unavailableCode}
                       onClick={async () => {
                         if (
                           !window.confirm(
-                            `Delete “${item.projectName}” and all its video assets and exports? This cannot be undone.`,
+                            `Move “${item.projectName}” to Recently deleted? Its video, recordings, checkpoints and exports will be kept until permanent deletion.`,
                           )
                         )
                           return;
+                        setBusy('Moving project to Recently deleted…');
                         try {
-                          await api.deleteProject(item.projectId);
+                          const saved = await flush();
+                          const revision =
+                            saved?.projectId === item.projectId ? saved.revision : item.revision;
+                          if (revision === undefined)
+                            throw new Error(
+                              'Refresh the project list before deleting this project.',
+                            );
+                          await api.deleteProject(item.projectId, revision);
                           setProjects((list) =>
                             list.filter((entry) => entry.projectId !== item.projectId),
                           );
@@ -658,8 +693,13 @@ export default function App() {
                             useEditor.getState().setProject(null);
                             localStorage.removeItem('bjj:lastProject');
                           }
+                          setNotice(
+                            'Project moved to Recently deleted. Its files are still recoverable.',
+                          );
                         } catch (cause) {
                           setError(errorText(cause));
+                        } finally {
+                          setBusy(null);
                         }
                       }}
                     >

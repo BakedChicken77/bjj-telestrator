@@ -14,7 +14,7 @@ py scripts/setup_github.py --resume
 
 The script preserves the existing visibility. The fresh-private-repository instructions below are only for a new setup. Native builds, signing and release publication must be confirmed in Actions; source upload alone does not verify them.
 
-The existing Windows application remains intact. The iPhone source has not yet passed an Apple SDK build or physical-device acceptance. Native checks are mandatory CI gates, so an Apple build failure blocks a release instead of publishing an unverified archive.
+The existing Windows application remains intact. The recovery candidate at `33be6315eb4fdee79ac7fe5d973292bfc09b182f` passed an Apple SDK build, all 22 native tests and the unsigned archive in [CI](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34727786132). Signed installation and physical-device acceptance remain pending. Native checks are mandatory CI gates, so an Apple build failure blocks a release instead of publishing an unverified archive.
 
 ## Windows 11 setup
 

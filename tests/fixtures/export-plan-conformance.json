@@ -107,7 +107,7 @@
             "keep": [
               1,
               true,
-              "a\u00e7\u00e3o"
+              "ação"
             ],
             "objectRef": "33333333-3333-4333-8333-333333333333"
           }
@@ -269,7 +269,7 @@
             "keep": [
               1,
               true,
-              "a\u00e7\u00e3o"
+              "ação"
             ],
             "objectRef": "33333333-3333-4333-8333-333333333333"
           }
@@ -431,7 +431,7 @@
             "keep": [
               1,
               true,
-              "a\u00e7\u00e3o"
+              "ação"
             ],
             "objectRef": "33333333-3333-4333-8333-333333333333"
           }
@@ -593,7 +593,7 @@
             "keep": [
               1,
               true,
-              "a\u00e7\u00e3o"
+              "ação"
             ],
             "objectRef": "33333333-3333-4333-8333-333333333333"
           }
@@ -755,7 +755,7 @@
             "keep": [
               1,
               true,
-              "a\u00e7\u00e3o"
+              "ação"
             ],
             "objectRef": "33333333-3333-4333-8333-333333333333"
           }
@@ -917,7 +917,7 @@
             "keep": [
               1,
               true,
-              "a\u00e7\u00e3o"
+              "ação"
             ],
             "objectRef": "33333333-3333-4333-8333-333333333333"
           }
@@ -1079,7 +1079,7 @@
             "keep": [
               1,
               true,
-              "a\u00e7\u00e3o"
+              "ação"
             ],
             "objectRef": "33333333-3333-4333-8333-333333333333"
           }
@@ -1242,7 +1242,7 @@
             "keep": [
               1,
               true,
-              "a\u00e7\u00e3o"
+              "ação"
             ],
             "objectRef": "33333333-3333-4333-8333-333333333333"
           }
@@ -1404,7 +1404,7 @@
             "keep": [
               1,
               true,
-              "a\u00e7\u00e3o"
+              "ação"
             ],
             "objectRef": "33333333-3333-4333-8333-333333333333"
           }
@@ -1536,7 +1536,7 @@
             "keep": [
               1,
               true,
-              "a\u00e7\u00e3o"
+              "ação"
             ],
             "objectRef": "33333333-3333-4333-8333-333333333333"
           }
@@ -1727,7 +1727,7 @@
             "keep": [
               1,
               true,
-              "a\u00e7\u00e3o"
+              "ação"
             ],
             "objectRef": "33333333-3333-4333-8333-333333333333"
           }
@@ -1889,7 +1889,7 @@
             "keep": [
               1,
               true,
-              "a\u00e7\u00e3o"
+              "ação"
             ],
             "objectRef": "33333333-3333-4333-8333-333333333333"
           }
@@ -2051,7 +2051,7 @@
             "keep": [
               1,
               true,
-              "a\u00e7\u00e3o"
+              "ação"
             ],
             "objectRef": "33333333-3333-4333-8333-333333333333"
           }
@@ -2213,7 +2213,7 @@
             "keep": [
               1,
               true,
-              "a\u00e7\u00e3o"
+              "ação"
             ],
             "objectRef": "33333333-3333-4333-8333-333333333333"
           }
@@ -2375,7 +2375,7 @@
             "keep": [
               1,
               true,
-              "a\u00e7\u00e3o"
+              "ação"
             ],
             "objectRef": "33333333-3333-4333-8333-333333333333"
           }
@@ -2540,7 +2540,7 @@
             "keep": [
               1,
               true,
-              "a\u00e7\u00e3o"
+              "ação"
             ],
             "objectRef": "33333333-3333-4333-8333-333333333333"
           }
@@ -2584,6 +2584,168 @@
               "codedHeight": 1080,
               "displayWidth": 321,
               "displayHeight": 183,
+              "sampleAspectRatio": "1:1",
+              "displayAspectRatio": "16:9",
+              "rotation": 0.0,
+              "avgFrameRate": 30.0,
+              "optionalFuture": {
+                "primaries": "retained"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "immutable input cannot silently migrate schema 1",
+      "valid": false,
+      "plan": {
+        "version": 1,
+        "projectId": "11111111-1111-4111-8111-111111111111",
+        "revision": 1,
+        "requiredCapabilities": [
+          "project.revisions.v1"
+        ],
+        "project": {
+          "schemaVersion": 1,
+          "revision": 1,
+          "requiredCapabilities": [
+            "project.revisions.v1"
+          ],
+          "projectId": "11111111-1111-4111-8111-111111111111",
+          "projectName": "Synthetic conformance",
+          "createdAt": "2026-09-05T00:00:00Z",
+          "updatedAt": "2026-09-05T00:00:00Z",
+          "source": {
+            "asset": "source/original.mp4",
+            "videoStartSec": 0.0,
+            "videoStreamIndex": 0,
+            "audioStreamIndex": null,
+            "originalFilename": "original.mp4",
+            "durationSec": 20.0,
+            "codec": "h264",
+            "audioCodec": "aac",
+            "hasAudio": true,
+            "codedWidth": 1920,
+            "codedHeight": 1080,
+            "displayWidth": 1920,
+            "displayHeight": 1080,
+            "sampleAspectRatio": "1:1",
+            "displayAspectRatio": "16:9",
+            "rotation": 0.0,
+            "avgFrameRate": 30.0,
+            "optionalFuture": {
+              "primaries": "retained"
+            }
+          },
+          "proxy": {
+            "asset": "proxy/editing.mp4",
+            "videoStartSec": 0.0,
+            "videoStreamIndex": 0,
+            "audioStreamIndex": null,
+            "originalFilename": "original.mp4",
+            "durationSec": 20.0,
+            "codec": "h264",
+            "audioCodec": "aac",
+            "hasAudio": true,
+            "codedWidth": 1920,
+            "codedHeight": 1080,
+            "displayWidth": 1920,
+            "displayHeight": 1080,
+            "sampleAspectRatio": "1:1",
+            "displayAspectRatio": "16:9",
+            "rotation": 0.0,
+            "avgFrameRate": 30.0
+          },
+          "settings": {
+            "defaultAnnotationDuration": 5.0,
+            "seekStepSec": 0.1,
+            "largeSeekStepSec": 1.0,
+            "originalAudioGain": 1.0,
+            "originalAudioMuted": false,
+            "voiceoverMasterGain": 1.0,
+            "optionalFuture": "preserved"
+          },
+          "exportSettings": {
+            "fps": 30.0,
+            "crf": 18,
+            "preset": "medium"
+          },
+          "annotations": [
+            {
+              "id": "33333333-3333-4333-8333-333333333333",
+              "startSec": 5.0,
+              "endSec": 10.0,
+              "zIndex": 0,
+              "strokeColor": "#ff0000",
+              "strokeWidth": 0.006,
+              "strokeOpacity": 1.0,
+              "fillColor": "#ff0000",
+              "fillOpacity": 0.0,
+              "createdAt": "2026-09-05T00:00:00Z",
+              "updatedAt": "2026-09-05T00:00:00Z",
+              "type": "arrow",
+              "geometry": {
+                "x1": 0.2,
+                "y1": 0.3,
+                "x2": 0.6,
+                "y2": 0.5,
+                "arrowheadSize": 0.025,
+                "optionalFuture": {
+                  "keep": true
+                }
+              }
+            }
+          ],
+          "voiceovers": [],
+          "optionalFuture": {
+            "keep": [
+              1,
+              true,
+              "ação"
+            ],
+            "objectRef": "33333333-3333-4333-8333-333333333333"
+          }
+        },
+        "output": {
+          "startSec": 0,
+          "endSec": 20,
+          "width": 1920,
+          "height": 1080,
+          "fps": 30,
+          "quality": {
+            "fps": 30,
+            "crf": 18,
+            "preset": "medium"
+          },
+          "container": "mp4",
+          "videoCodec": "h264",
+          "audioCodec": "aac",
+          "pixelFormat": "yuv420p",
+          "colorPolicy": "supported-sdr-v1",
+          "audioPolicy": "linear-mix-v1"
+        },
+        "assets": [
+          {
+            "assetId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "kind": "source",
+            "reference": "source/original.mp4",
+            "byteSize": 6,
+            "sha256": "41cf6794ba4200b839c53531555f0f3998df4cbb01a4d5cb0b94e3ca5e23947d",
+            "metadata": {
+              "asset": "source/original.mp4",
+              "videoStartSec": 0.0,
+              "videoStreamIndex": 0,
+              "audioStreamIndex": null,
+              "originalFilename": "original.mp4",
+              "durationSec": 20.0,
+              "codec": "h264",
+              "audioCodec": "aac",
+              "hasAudio": true,
+              "codedWidth": 1920,
+              "codedHeight": 1080,
+              "displayWidth": 1920,
+              "displayHeight": 1080,
               "sampleAspectRatio": "1:1",
               "displayAspectRatio": "16:9",
               "rotation": 0.0,
