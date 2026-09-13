@@ -9,11 +9,28 @@ import type {
   ProjectStorage,
   RuntimeCapabilities,
   MediaJob,
+  PackageJob,
+  PackageRequest,
+  SpaceEstimate,
 } from './api';
 import type { Draft } from './project/saveSession';
 
 /** JSON crosses this bridge; video and microphone bytes stay in the iOS sandbox. */
 export interface BJJNativePlugin {
+  createPackageJob(options: PackageRequest): Promise<{ job: PackageJob }>;
+  getPackageJob(options: { jobId: string }): Promise<{ job: PackageJob }>;
+  listPackageJobs(): Promise<{ jobs: PackageJob[] }>;
+  cancelPackageJob(options: { jobId: string }): Promise<{ job: PackageJob }>;
+  removePackageJob(options: { jobId: string }): Promise<void>;
+  getPackageEstimate(options: { projectId: string; includeProxy: boolean }): Promise<SpaceEstimate>;
+  importPackage(options: {
+    jobId: string;
+    fromInbox: boolean;
+  }): Promise<{ job?: PackageJob; cancelled?: boolean }>;
+  sharePackage(options: { jobId: string }): Promise<{ completed: boolean }>;
+  getPendingPackage(): Promise<{ available: boolean }>;
+  discardPendingPackage(): Promise<void>;
+  addListener(event: 'packageOpened', callback: () => void): Promise<PluginListenerHandle>;
   createImportJob(): Promise<{ job: MediaJob }>;
   getMediaJob(options: { jobId: string }): Promise<{ job: MediaJob }>;
   cancelMediaJob(options: { jobId: string }): Promise<{ job: MediaJob }>;
@@ -69,6 +86,10 @@ export interface BJJNativePlugin {
   retryExport(options: { jobId: string }): Promise<{ job: ExportJob }>;
   removeExportFile(options: { jobId: string }): Promise<{ job: ExportJob }>;
   getProjectStorage(options: { projectId: string }): Promise<ProjectStorage>;
+  cleanupPreviews(options: {
+    projectId: string;
+    expectedRevision: number;
+  }): Promise<NonNullable<ProjectStorage['derivedCleanup']>>;
   getAssetURL(options: {
     projectId: string;
     kind: 'video' | 'voiceover';
@@ -124,6 +145,14 @@ export const voiceoverURL = (projectId: string, clipId: string) =>
     : Promise.resolve(`/api/projects/${projectId}/voiceovers/${clipId}/audio`);
 
 export const nativeAPI = {
+  packageJobs: async () => (await nativeBridge.listPackageJobs()).jobs,
+  createPackage: async (options: PackageRequest) =>
+    (await nativeBridge.createPackageJob(options)).job,
+  packageJob: async (jobId: string) => (await nativeBridge.getPackageJob({ jobId })).job,
+  cancelPackage: async (jobId: string) => (await nativeBridge.cancelPackageJob({ jobId })).job,
+  removePackage: async (jobId: string) => nativeBridge.removePackageJob({ jobId }),
+  packageEstimate: async (projectId: string, includeProxy: boolean) =>
+    nativeBridge.getPackageEstimate({ projectId, includeProxy }),
   createImportJob: async () => (await nativeBridge.createImportJob()).job,
   mediaJob: async (jobId: string) => (await nativeBridge.getMediaJob({ jobId })).job,
   cancelMediaJob: async (jobId: string) => (await nativeBridge.cancelMediaJob({ jobId })).job,
@@ -176,6 +205,8 @@ export const nativeAPI = {
   retryExport: async (jobId: string) => (await nativeBridge.retryExport({ jobId })).job,
   removeExportFile: async (jobId: string) => (await nativeBridge.removeExportFile({ jobId })).job,
   storage: async (projectId: string) => nativeBridge.getProjectStorage({ projectId }),
+  cleanupPreviews: async (projectId: string, expectedRevision: number) =>
+    nativeBridge.cleanupPreviews({ projectId, expectedRevision }),
   stopRecording: async (startSec?: number): Promise<Voiceover | null> => {
     const result = await nativeBridge.stopRecording({ startSec });
     return result.clip ? voiceoverSchema.parse(result.clip) : null;

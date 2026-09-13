@@ -51,6 +51,8 @@ export interface SpaceEstimate {
   requiredBytes: number;
 }
 export interface ProjectStorage {
+  derivedCleanup?: { files: number; bytes: number; graceHours: number; removed: boolean };
+  cleanupBlocked?: string;
   projectId: string;
   revision: number;
   sourceBytes: number;
@@ -97,6 +99,36 @@ export interface RuntimeCapabilities {
   mediaJobs?: boolean;
   proxyRepair?: boolean;
   hdrToSdr?: boolean;
+  projectPackages?: boolean;
+}
+
+export interface PackageJob {
+  jobId: string;
+  projectId: string;
+  projectRevision?: number | null;
+  operation: 'backup' | 'restore';
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+  stage:
+    | 'copying'
+    | 'inspecting'
+    | 'packing'
+    | 'extracting'
+    | 'validating'
+    | 'preparing_preview'
+    | 'ready';
+  progress: number | null;
+  includeProxy: boolean;
+  cancelRequested: boolean;
+  errorCode?: string | null;
+  error?: string | null;
+  createdAt: string;
+}
+export interface PackageRequest {
+  requestId: string;
+  operation: 'backup' | 'restore';
+  projectId?: string;
+  expectedRevision?: number;
+  includeProxy?: boolean;
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -137,6 +169,31 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 const desktopAPI = {
+  packageJobs: () => request<PackageJob[]>('/api/package-jobs'),
+  createPackage: (options: PackageRequest) =>
+    request<PackageJob>('/api/package-jobs', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(options.expectedRevision ? { 'If-Match': `"${options.expectedRevision}"` } : {}),
+      },
+      body: JSON.stringify(options),
+    }),
+  packageJob: (jobId: string) => request<PackageJob>(`/api/package-jobs/${jobId}`),
+  cancelPackage: (jobId: string) =>
+    request<PackageJob>(`/api/package-jobs/${jobId}/cancel`, { method: 'POST' }),
+  removePackage: (jobId: string) =>
+    request<void>(`/api/package-jobs/${jobId}`, { method: 'DELETE' }),
+  uploadPackage: (jobId: string, file: File) =>
+    request<PackageJob>(`/api/package-jobs/${jobId}/content`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/zip' },
+      body: file,
+    }),
+  packageEstimate: (projectId: string, includeProxy: boolean) =>
+    request<SpaceEstimate>(
+      `/api/projects/${projectId}/package-estimate?include_proxy=${includeProxy}`,
+    ),
   createImportJob: () => request<MediaJob>('/api/import-jobs', { method: 'POST' }),
   mediaJob: (jobId: string) => request<MediaJob>(`/api/media-jobs/${jobId}`),
   cancelMediaJob: (jobId: string) =>
@@ -246,11 +303,29 @@ const desktopAPI = {
   removeExportFile: (id: string) =>
     request<ExportJob>(`/api/exports/${id}/file`, { method: 'DELETE' }),
   storage: (id: string) => request<ProjectStorage>(`/api/projects/${id}/storage`),
+  cleanupPreviews: (id: string, revision: number) =>
+    request<NonNullable<ProjectStorage['derivedCleanup']>>(`/api/projects/${id}/derived-cleanup`, {
+      method: 'POST',
+      headers: { 'If-Match': `"${revision}"` },
+    }),
 };
 
 /** Keep the verified desktop HTTP path; iOS uses an entirely local native service. */
 export const api = {
   ...desktopAPI,
+  createPackage: (options: PackageRequest) =>
+    isNativeIOS() ? nativeAPI.createPackage(options) : desktopAPI.createPackage(options),
+  packageJobs: () => (isNativeIOS() ? nativeAPI.packageJobs() : desktopAPI.packageJobs()),
+  packageJob: (id: string) =>
+    isNativeIOS() ? nativeAPI.packageJob(id) : desktopAPI.packageJob(id),
+  cancelPackage: (id: string) =>
+    isNativeIOS() ? nativeAPI.cancelPackage(id) : desktopAPI.cancelPackage(id),
+  removePackage: (id: string) =>
+    isNativeIOS() ? nativeAPI.removePackage(id) : desktopAPI.removePackage(id),
+  packageEstimate: (id: string, includeProxy: boolean) =>
+    isNativeIOS()
+      ? nativeAPI.packageEstimate(id, includeProxy)
+      : desktopAPI.packageEstimate(id, includeProxy),
   createImportJob: () =>
     isNativeIOS() ? nativeAPI.createImportJob() : desktopAPI.createImportJob(),
   mediaJob: (id: string) => (isNativeIOS() ? nativeAPI.mediaJob(id) : desktopAPI.mediaJob(id)),
@@ -299,4 +374,8 @@ export const api = {
   removeExportFile: (id: string) =>
     isNativeIOS() ? nativeAPI.removeExportFile(id) : desktopAPI.removeExportFile(id),
   storage: (id: string) => (isNativeIOS() ? nativeAPI.storage(id) : desktopAPI.storage(id)),
+  cleanupPreviews: (id: string, revision: number) =>
+    isNativeIOS()
+      ? nativeAPI.cleanupPreviews(id, revision)
+      : desktopAPI.cleanupPreviews(id, revision),
 };

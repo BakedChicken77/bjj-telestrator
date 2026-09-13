@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from 'react';
+import { useEffect, useId, useRef, useState, type RefObject } from 'react';
 import { useEditor } from '../store';
 import { useRecording } from '../useRecording';
 import { clampVoiceoverOffset, clampVoiceoverStart } from '../recording';
@@ -61,6 +61,13 @@ export function VoiceoverPanel({
   const recording = useEditor((state) => state.recording);
   const { state, message, start, stop } = useRecording(videoRef);
   const [expanded, setExpanded] = useState(false);
+  const toggle = useRef<HTMLButtonElement>(null);
+  const close = useRef<HTMLButtonElement>(null);
+  const drawerId = useId();
+  const closeDrawer = () => {
+    setExpanded(false);
+    toggle.current?.focus();
+  };
   const count = project?.voiceovers.length ?? 0;
   useEffect(() => {
     if (count > 0) setExpanded(true);
@@ -102,20 +109,39 @@ export function VoiceoverPanel({
               `${count} voiceover ${count === 1 ? 'clip' : 'clips'} · record from the playhead`}
         </span>
         <button
+          ref={toggle}
           className="audio-toggle"
           aria-label="Audio & voiceovers"
           aria-expanded={expanded}
-          onClick={() => setExpanded((value) => !value)}
+          aria-controls={expanded ? drawerId : undefined}
+          onClick={() => {
+            if (expanded) closeDrawer();
+            else {
+              setExpanded(true);
+              requestAnimationFrame(() => close.current?.focus());
+            }
+          }}
         >
           Audio & voiceovers {expanded ? '⌄' : '⌃'}
         </button>
       </div>
       {expanded && (
-        <div className="audio-drawer">
+        <div
+          className="audio-drawer"
+          id={drawerId}
+          role="region"
+          aria-label="Audio and voiceover controls"
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.stopPropagation();
+              closeDrawer();
+            }
+          }}
+        >
           <div className="audio-drawer-heading">
             <strong>Audio & voiceovers</strong>
             <span>Use headphones while recording.</span>
-            <button aria-label="Close audio controls" onClick={() => setExpanded(false)}>
+            <button ref={close} aria-label="Close audio controls" onClick={closeDrawer}>
               ×
             </button>
           </div>
