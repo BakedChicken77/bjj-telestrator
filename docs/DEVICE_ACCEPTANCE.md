@@ -1,9 +1,10 @@
 # Candidate-specific Windows and iPhone acceptance — P1.01
 
 Status: device/staging verification pending. No signed installation or physical
-phone has been accessed during this work. The P1.04 import/repair candidate
-`34fa4f206615d3d1da2449d3db93c552b5beae17` passed all 25 native XCTest cases and
-an unsigned archive in [CI](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34753579589). That result does not prove installability. Use the exact subsequent signed candidate for every result below.
+phone has been accessed during this work. The Phase 1 starting commit
+`dadeee523f8a933c53333c2b298a8058b9f8e604` passed 25 XCTest methods and an
+unsigned archive in [CI](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34753976427).
+The subsequent package/HDR/cleanup/timing changes still need fresh native CI. That result does not prove installability. Use the exact subsequent signed candidate for every result below.
 
 ## Signed pilot from Windows
 
@@ -54,6 +55,9 @@ an unsigned archive in [CI](https://github.com/BakedChicken77/bjj-telestrator/ac
 | Interruption / low-space / retained export retry results | Pending |
 | Files / Photos / ordinary receiving app | Pending |
 | Import stages / cancel / same-project preview repair / source hash | Pending |
+| iPhone→Windows→iPhone package edits / hashes / collision / interrupted restore | Pending |
+| PQ/HLG preview/output colors / mastering facts / displayed device | Pending |
+| Long/overlapping narration window seams / seeks / loops / peak memory | Pending |
 | Keyboard / VoiceOver / large text / orientation | Pending |
 | Windows 11 / Docker versions and fresh result | Pending |
 | Failures, limitations, tester, date, evidence location | Pending |
@@ -84,13 +88,39 @@ candidate SHA/build and the input file selected from each picker.
    Record which representation was selected, source duration/rate and observed
    timing. A 30 fps preview is not every source frame; do not label time stepping
    exact. Run real VFR and HDR cases only as explicit pending format acceptance;
-   the current candidate does not provide HDR conversion.
+   the candidate implements PQ/HLG SDR conversion, but its native and actual
+   phone color gates are still open. All Dolby Vision variants remain rejected.
 7. With VoiceOver and large text, reach stage/status/cancel/repair, cancel without
    a drag gesture, and verify that progress does not cause per-frame announcements.
    Repeat in portrait/landscape and at 1280×720 on Windows/Docker.
 
 All results above are **device/staging verification pending**. Automated browser
 and simulator evidence does not mark these hardware checks passed.
+
+
+## Portable transfer and accessible review — P1.05/P1.07/P1.08
+
+1. Back up a generated project with annotations and narration on iPhone to Files.
+   Restore on Windows as a new copy, edit geometry/time/audio, export a normal MP4,
+   back up there and restore on iPhone. Compare original source/recording SHA-256,
+   all geometry/time values and audible tone placement. Repeat with/without proxy.
+2. Restore the same package twice and verify independent object IDs and edits.
+   Test opening directly from Files, cancelled picker/share, corrupt/hash-mismatched
+   archives, missing assets, low space, copy cancellation and app interruption.
+   Run a real ZIP64/multigigabyte transfer within the stated limits; record bytes,
+   elapsed time, memory and available space. Existing projects must remain intact.
+3. Repair a preview, preserve a checkpoint and pending draft, then reclaim eligible
+   obsolete previews after the 24-hour grace period. Active export/share must pin
+   assets. Recover the draft as a copy and verify source, narration and timing.
+4. Use iPhone VoiceOver to import, select/add all six types, edit coordinates/points,
+   timing and layer order, select narration, save/export and dismiss dialogs. Repeat
+   with larger text and system/light/dark in portrait/landscape. Check roughly
+   44-point controls, visible focus and progress without per-frame announcements.
+5. Play long overlapping narration across several five-second PCM boundaries,
+   rapid seeks, pauses and interruptions. Confirm all audible voices and approximately
+   100 ms preview synchronization. Record peak memory; an explicit capacity error
+   must pause rather than silently drop a voice. Frame-rate choices remain viewing/
+   export settings; exact VFR frame navigation is not supplied by this phase.
 
 ## Release evidence binding
 

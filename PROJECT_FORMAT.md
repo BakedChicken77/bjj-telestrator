@@ -23,6 +23,14 @@ Media metadata includes `asset`, `originalFilename`, `durationSec`, `codec`, `au
 
 Only project-relative paths such as `source/<uuid>.mov` or `proxy/<uuid>.mp4` are valid asset references. Absolute paths, traversal components, Windows drive prefixes, backslashes and NUL bytes are rejected. The backend verifies filesystem containment and asset existence. Clients cannot substitute source/proxy metadata during edits.
 
+`project.index.json` is optional derived display metadata, limited to 8 KiB on read.
+It contains only the existing project-list summary and a local file fingerprint,
+cache version and supported schema/capabilities. It is not part of schema 2, undo,
+portable packages or asset ownership. Missing or stale summaries rebuild from the
+validated document; cache failure cannot invalidate a confirmed save. Native
+listing completes pending save transactions before using a summary. Opening,
+saving and exporting always validate the full authoritative document.
+
 ## Annotation base fields
 
 Every annotation contains `id`, `type`, `startSec`, `endSec`, `zIndex`, `strokeColor`, `strokeWidth`, `strokeOpacity`, `fillColor`, `fillOpacity`, `geometry`, `createdAt` and `updatedAt`.
@@ -148,7 +156,7 @@ matching remapped UUIDs are retained with updated IDs. Literal `text`,
 `projectName` and `originalFilename` values are never interpreted as UUID references,
 even when their content matches an old ID. The copied review receives the explicit
 copy-name suffix. There is no cross-project
-hard-linking or portable ZIP/package format in this work package.
+hard-linking. The subsequent portable package contract is described below.
 
 Rollback: preserve the entire current project directory first. Use a separately
 copied directory plus `project.pre-migration-v1.json` with the previous binary for
@@ -185,8 +193,8 @@ See `tests/fixtures/export-plan-conformance.json` and
 Runtime capabilities add `exportRetry`, `storageBreakdown` and
 `exportFileCleanup`. HTTP/native equivalents are project-scoped storage inspection,
 retry by job UUID, and completed-file removal by job UUID. Clients provide no
-asset path. Source/recording files are never reclaimed by this work package;
-portable packages and full reference-based collection remain later work.
+asset path. Source/recording files remain retained. Portable packages and
+conservative preview collection are specified below.
 Checkpoints and project trash are described below.
 
 
@@ -245,15 +253,15 @@ separate prior copy; never remove new versions to simulate a downgrade.
 Schema stays at 2. Optional media strings are `transferFunction`, `colorPrimaries`,
 `colorMatrix`, `colorRange`, `averageFrameRateRational`, `nominalFrameRateRational`
 and `timeBase`; each is absent/null or 1–100 characters. `dolbyVision` is an
-optional strict Boolean. The 26-case TypeScript/Python/Swift corpus covers these
-fields in addition to prior migration/capability rules. No new required rendering
-capability is introduced. Unknown optional fields continue to round-trip.
+optional strict Boolean. The shared TypeScript/Python/Swift corpus covers these
+fields in addition to prior migration/capability rules. HDR projects additionally
+require `media.hdr-to-sdr.v1`. Unknown optional fields continue to round-trip.
 
 These are reported immutable inspection facts, not editable delivery intent.
 FFprobe strings use its metadata names; AVFoundation retains its reported color
-identifiers and uses `unknown` when range is unavailable. Missing color metadata
-is not proof of SDR. Native does not fabricate an exact rational frame rate from
-its floating nominal rate. `timeBase` describes the inspected track; these fields
+identifiers with canonical transfer/primaries/matrix names. Missing color metadata
+is not proof of SDR. Native derives nominal rational intent from positive track minimum frame duration
+when present, never by treating floating nominal rate as exact source-frame PTS. `timeBase` describes the inspected track; these fields
 are not a presentation-timestamp index and cannot establish exact VFR stepping.
 
 Runtime `mediaJobs` / `proxyRepair` report support; `hdrToSdr` remains false.
@@ -277,3 +285,90 @@ Rollback to the preceding schema-2 build retains originals and project JSON;
 keep a whole-project copy before switching binaries. Do not uninstall the phone
 app. The previous binary lacks preparation controls and does not understand these
 operation records, but the additive media fields do not alter rendering semantics.
+
+
+### HDR and frame-timing inspection additions
+
+Schema remains 2. Required capability `media.hdr-to-sdr.v1` selects the versioned
+`hdr-rec709-v1` export color policy. Older clients must reject saving/exporting
+such a project. Existing SDR requests retain `supported-sdr-v1`. Original bytes
+and source metadata are preserved; no lossy downgrade is provided.
+
+Opaque optional `hdrMetadata` retains bounded native probe facts with `provider`
+and `entries`: FFprobe's mastering/content-light/DOVI records, or CoreMedia's
+static mastering/content-light data with explicit base64 encoding. These entries
+are metadata, never media bytes, and are not editable tone-map settings. No entries
+means that probe did not expose static metadata; it does not prove SDR. The fixed
+delivery peak is documented in the color ADR. `frameTimingInspection` identifies
+stream or nominal-track metadata, not an exact presentation-timestamp index.
+
+### Portable `.bjjproj` package version 1
+
+This ZIP/ZIP64 container has `manifest.json`, `project.json`, and entries named
+`assets/<canonical-lowercase-UUID>`. Asset entry names are generated, with no user
+filenames or nested paths. Original filenames stay in metadata. The manifest is:
+
+```json
+{
+  "format": "bjjproj",
+  "version": 1,
+  "includeProxy": false,
+  "project": {"entry": "project.json", "sha256": "<64 hex digits>", "byteSize": 123},
+  "assets": [{
+    "assetId": "<UUID>", "kind": "source",
+    "reference": "source/original.mp4", "entry": "assets/<UUID>",
+    "byteSize": 456, "sha256": "<64 hex digits>", "metadata": {}
+  }]
+}
+```
+
+The document is a confirmed immutable revision. Required source and referenced
+recording assets must appear exactly once with matching kind/reference/metadata,
+size and SHA-256. Proxy inclusion is optional. Exports, deleted takes, checkpoints
+and undo history are excluded; a full data-directory backup preserves those too.
+Already compressed media is stored, not recompressed. Readers support stored and
+deflated entries. Defaults: 16 GiB archive and actual expanded bytes; 4 GiB per
+asset; 512 files; 32 MiB per JSON document; 1 MiB central directory; JSON depth 64.
+Desktop transfer/expansion caps are configurable. Native uses these same defaults.
+
+Raw/local/central headers must agree. Encryption, symlinks, traversal, absolute
+paths, duplicate/confusable names, unsupported compression, trailing deflate data,
+missing assets, altered hashes and forged expansion sizes are rejected. ZIP64
+structure tests use tiny files; they do not prove multigigabyte device transfers.
+
+Restore always creates a copy, with new project/annotation/recording and other
+editable-object UUIDs and a complete reference map. Literal text/name/note fields
+are preserved. Service-owned references are generated inside staging; the preserved
+original document, manifest and ID map remain as recovery sidecars. Unknown required
+capabilities block restoration; optional fields round-trip. Actual source and WAV
+media are checked; optional proxy regeneration does not change source time. Native
+track identifiers and FFprobe stream indices are local to their decoder, so restore
+reprobes them rather than copying another platform's indices into a render request.
+The staged review is validated and reopened before installation is reported ready.
+
+Runtime `projectPackages` reports the implemented API. Desktop routes are
+`POST/GET /api/package-jobs`, `GET/DELETE /api/package-jobs/{id}`,
+`POST /api/package-jobs/{id}/cancel`, `PUT /api/package-jobs/{id}/content`,
+`GET /api/package-jobs/{id}/file`, and
+`GET /api/projects/{id}/package-estimate?include_proxy=false`. Backup creation
+requires `If-Match` and a request UUID. Native bridge methods mirror these jobs,
+with Files picker/share and inbox handling. Status is queued/running/completed/
+failed/cancelled, with stage, bounded units/progress and typed error. Receipts and
+restore-install markers reconcile a restart without publishing a partial project.
+Retrying preparation starts over; retained completed backups are downloadable.
+
+### Derived preview collection
+
+`POST /api/projects/{id}/derived-cleanup` (native `cleanupPreviews`) requires the
+current revision. Storage breakdown includes an eligibility count/bytes or a
+blocked reason. Collection only removes unreachable UUID-named `proxy/*.mp4`
+older than 24 hours, while holding the store lock and excluding leased projects.
+Live/retained JSON references pin files; source and recording assets remain
+retained for undo, recovery and immutable exports. Metadata scan limits fail closed.
+It does not change revision, source metadata, annotations or narration. Recovery
+of an older pending draft resolves the current durable proxy after source checks.
+
+Theme, larger text, last package-operation selection and decoded PCM windows are
+local view/runtime data. They are not project fields, do not affect exports and
+are excluded from portable backups. Schema 3 and review composition remain future
+work; no Phase 4 timing is implied by these additions.

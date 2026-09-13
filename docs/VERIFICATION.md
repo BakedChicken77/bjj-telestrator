@@ -1,6 +1,66 @@
 # Verification record
 
-## P1.04 observable import and repair candidate — 2026-09-13
+## Current Phase 1 completion branch — 2026-09-13
+
+Branch `codex/p1-completion`, starting at
+`dadeee523f8a933c53333c2b298a8058b9f8e604`. See the full
+[completion record](P1_COMPLETION.md) for task IDs, interfaces, commits, migration,
+rollback, generated source hashes, commands and exact open acceptance gates.
+Application version remains 1.1.0 and project schema remains 2.
+
+The complete local `scripts/verify.py --browser` run passed 203 backend tests,
+104 frontend tests, 12 repository tests and 18 browser workflows. Ruff, ESLint,
+TypeScript, build and formatting passed. After adding the measured library-index
+optimization, the entire backend suite passed **216 tests (171.14 seconds)**;
+the repository-configured Ruff and all 12 repository tests passed again. Final
+index/cleanup failure injection passed 16 focused cases (7.09 seconds). Five
+focused browser workflows passed package retry, Files-format download/upload,
+restore/edit/real MP4, themes/non-drag controls and checkpoint/copy/trash at desktop
+and phone sizes (47.7 and 43.6 seconds). The additional lost-acknowledgement case
+makes 19 unique browser cases; no claim of one complete 19-case run is made.
+
+`npm run ios:sync` passed web build/asset copying. **New Swift/package/HDR/index
+code has not been compiled or tested**: this Linux runtime has no Swift, Xcode or
+Docker. Starting-commit [CI 34753976427](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34753976427)
+passed all six gates, including 25 native XCTest methods, Docker and an unsigned
+archive; that evidence does not attest to the new code. Automatic approval review
+blocked the attempted GitHub upload for unestablished remote-write authorization.
+No alternate upload route or fresh CI run was attempted. Request explicit upload
+approval for this reviewable branch, then run the existing native/Docker gates.
+
+New desktop evidence includes six PQ/HLG conversion cases, independently listed
+120 fps/VFR presentation timestamps, 37 package/service safety cases, immutable
+source hashes, accurate half-open cues and real recording/preview/AAC export.
+Actual iPhone PQ/HLG footage and native fixture equivalence remain pending; HDR
+availability is not advertised, and all Dolby Vision variants remain unsupported.
+
+The synthetic 20-minute 1080p workload with 100 annotations and three overlapping
+long takes exported in **910.50 seconds**. Output is H.264/AAC, 1920×1080,
+1200.0 seconds, 37,132,555 bytes; the source hash is unchanged. This is a Linux
+grid/tone benchmark, not real gym footage or phone acceptance. A 200-project
+library improved from 72–73 seconds per list to 58–63 milliseconds using validated
+disposable summaries; the first cache rebuild still took 92.52 seconds. Raw reports
+are in `docs/performance/`. Complex edit latency, full-process memory versus
+retained JS heap, and real-device limits are distinguished in the completion record.
+
+Phase 1 remains **not accepted**. Fresh native/Docker CI, signed install/update
+over populated projects, actual iPhone↔Windows Files transfer, multigigabyte ZIP64,
+VoiceOver/large text, interruptions/low space, realistic 20-minute/lower-resource
+phone measurements and a fresh Windows 11 Docker-host workflow are outstanding.
+Use [DEVICE_ACCEPTANCE.md](DEVICE_ACCEPTANCE.md) with the exact candidate SHA.
+
+A real-editor profile with three full-length takes found and fixed the desktop
+audio panel overlapping Play. Ten style edits and 12.14 seconds of playback then
+completed, with real bounded HTTP 206 narration reads and unchanged source hash.
+The microphone/rerecord/preview/AAC browser workflow passed again (36.0 seconds;
+42.6 with setup). Post-GC browser JS heap was 24.01 MB; playback had no ≥50 ms
+long task, while complex edits still took 0.81–2.58 seconds including development
+and automation overhead. See `docs/performance/p1-browser.json`; these measurements
+are not physical sync/thermal or production performance acceptance.
+
+Earlier dated sections below are historical candidate records, not current gates.
+
+## Historical P1.04 observable import and repair candidate — 2026-09-13
 
 Starting commit `57af80a4d78242e1f691a5cf6b05ae696e907d78`, isolated branch
 `codex/p1-media-jobs`, stacked on draft PR #10. Starting CI

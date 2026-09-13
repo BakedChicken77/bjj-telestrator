@@ -2,7 +2,7 @@
 
 A local desktop browser editor for reviewing Brazilian Jiu-Jitsu footage. Import a video, draw timed arrows, lines, ellipses, boxes, freehand paths and text, record coaching voiceovers, and export one ordinary MP4 with annotations permanently burned into the picture and commentary mixed into its audio. Originals are preserved. Projects and completed exports stay on your computer.
 
-**iPhone conversion:** version 1.1 adds a touch-adapted editor and a standalone Capacitor/Swift iOS target with native storage, import, recording, and MP4 export. Start with [IOS_README.md](IOS_README.md) for installation and native test instructions. It requires iOS 17+; GitHub-hosted macOS runners can build and sign it, so you do not need to own a Mac. All 22 native XCTest cases and the unsigned archive passed for this implementation ([CI evidence](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34727786132)); signed installation and physical-device acceptance remain pending; the ZIP is source, not an installable signed IPA. The existing Windows/Docker path remains supported.
+**iPhone conversion:** version 1.1 adds a touch-adapted editor and a standalone Capacitor/Swift iOS target with native storage, import, recording, and MP4 export. Start with [IOS_README.md](IOS_README.md) for installation and native test instructions. It requires iOS 17+; GitHub-hosted macOS runners can build and sign it, so you do not need to own a Mac. The starting commit `dadeee5` passed all 25 native XCTest cases and the unsigned archive ([CI evidence](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34753976427)). The new Phase 1 package/HDR/cleanup code still needs fresh native compilation and device acceptance; the ZIP is source, not an installable signed IPA. The existing Windows/Docker path remains supported.
 
 **GitHub automation:** [docs/GITHUB_SETUP.md](docs/GITHUB_SETUP.md) includes the Windows repository-creation command, CI/release gates, and optional Apple signing/TestFlight setup. The owner created the public GitHub repository. Workflow configuration is included; repository-admin settings still require the owner’s GitHub CLI or Settings access.
 
@@ -46,9 +46,12 @@ start the import or repair again if needed; this restarts preparation.
 Previews are SDR H.264/AAC, at most 1920 pixels on the long edge and 30 fps.
 They may omit frames from a faster original; step controls are time steps, not
 exact source-frame navigation. Export continues to use the original source.
-Known PQ/HLG/Dolby Vision inputs are rejected on desktop until HDR conversion is
-verified. Native PQ/HLG rejection remains in place. HEVC alone does not mean HDR.
-Choose a supported SDR recording; no broad HDR support is claimed.
+The candidate includes a fixture-tested desktop PQ/HLG-to-SDR path and a native
+implementation awaiting XCTest/device verification. HDR input requires valid
+Rec.2020 color metadata. All Dolby Vision variants and ambiguous HDR metadata are
+rejected; an SDR copy remains the supported fallback. HEVC alone does not mean
+HDR. See the [color policy and exact limitations](docs/decisions/002-sdr-delivery.md);
+no broad iPhone HDR support is claimed.
 
 The desktop interface consists of a project/save/export top bar, annotation toolbar, central video stage and playback controls, properties inspector, and zoomable annotation timeline. It is designed for a 1280×720 or larger display.
 
@@ -144,7 +147,14 @@ Copy `.env.example` to `.env` for Compose overrides. Native execution does not l
 
 `ARCHITECTURE.md` documents the implementation. `IMPLEMENTATION_PLAN.md` records milestone acceptance and `docs/VERIFICATION.md` records tests actually executed, including environmental limits. This is manual telestration: annotations remain in their chosen spatial location during their visibility interval. There is no tracking or computer vision, account system, collaboration, external media upload, analytics, or watermark.
 
-The desktop editor and FFmpeg export pipeline have been tested in Linux Chromium, and the user has verified Windows 11/Docker Desktop operation. This implementation passed all 22 native XCTest cases, an unsigned archive, and the Linux Docker build/startup in [fresh CI](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34727786132); physical-device and fresh Windows 11 acceptance remain required. Non-right-angle rotation is rejected; HDR-to-SDR tone mapping is not implemented. A short desktop 1080p/100-annotation export was checked, but a full 20-minute camera recording was not benchmarked. Active narration clips require their complete decoded audio buffers in browser memory, so long or overlapping takes can use substantial RAM despite bounded prefetch caching. The project format keeps external media assets in its project directory; there is no single-file portable-project export yet. See IOS_README.md for iPhone-specific format and foreground-render limits.
+The desktop editor and FFmpeg exports are tested in Linux Chromium. The starting
+commit passed all six CI gates, including 25 XCTest methods, Docker and an unsigned
+archive; those results do not attest to the new candidate. Fresh native/Docker CI,
+signed iPhone testing and Windows 11 host acceptance remain open. Non-right-angle
+rotation and Dolby Vision are rejected. Synthetic media measurements do not establish
+20-minute real-roll performance. Narration preview reads bounded PCM windows and
+pauses with a useful message if all audible overlaps exceed its 64 MiB budget.
+See [Phase 1 evidence](docs/VERIFICATION.md) and [iPhone limits](IOS_README.md).
 
 ## Revision-safe saves and recovery (P1.02 / P1.03)
 
@@ -178,9 +188,8 @@ source and recording assets remain. Downloads are protected from concurrent clea
 Older exports created before this feature have no saved retry input.
 
 Removed narration stays available for undo, checkpoints and old exports. Project deletion
-now moves the complete project to **Recently deleted**. Portable `.bjjproj` backup/restore
-is not yet implemented. Preserve original media
-and existing project folders before updating. Physical iPhone/Windows acceptance
+now moves the complete project to **Recently deleted**. Use a portable `.bjjproj`
+backup and preserve existing project folders before updating. Physical iPhone/Windows acceptance
 remains separate from automated CI.
 
 
@@ -205,3 +214,54 @@ already exists, restoration opens a fresh copy and keeps the full deleted projec
 There is no automatic expiry. Checkpoints and deleted projects use local storage;
 they are not a backup against device loss. Up to 1,000 checkpoints per project and
 1,000 deleted projects are supported. Active media jobs/share operations prevent deletion.
+
+
+### Editable project backup and restore — P1.05
+
+In **Projects → Editable project backups**, choose **Back up editable project**.
+The app first confirms the saved revision, estimates space, then copies and hashes
+its source and referenced narration into a `.bjjproj` ZIP/ZIP64 archive. Include
+the preview optionally for faster restore. Completed MP4s, removed takes, local
+checkpoints and undo history are excluded; keep a full data-folder backup if you
+need those retained versions as well.
+
+Use **Download editable backup** on desktop or **Save backup to Files or share** on iPhone.
+Keep the app open during preparation and use Cancel when needed. Temporary package
+files stay until **Remove temporary package**; downloading alone does not delete
+them. These files are independent of your project and its source.
+
+Choose **Restore project package** on desktop or **Restore project from Files** on
+iPhone. Opening a `.bjjproj` from Files asks you to review the restore first. Hashes,
+archive structure, schema, references and actual media are checked in staging.
+Every restore creates a new project with new object IDs and leaves the existing
+review intact. **Open restored project** opens the copy after saving current edits.
+If the preview was omitted, restore regenerates it from the original.
+
+The default limits are 16 GiB per archive/actual expansion, 4 GiB per asset, 512
+entries and 32 MiB per JSON document. ZIP64 structures have bounded automated tests;
+actual multigigabyte transfers and native Files interchange still need device
+acceptance. No account or automatic upload is involved. A package you put in your
+own cloud folder is manual backup, not synchronization.
+
+### Accessible editing and device appearance — P1.07
+
+In **Properties → Annotations without dragging**, select an object or add any of
+the six types at the paused playhead. Use percentage coordinates, endpoint/point
+fields, movement buttons, time fields, style and layer controls. These actions use
+the same project and undo history as canvas gestures. At the exact video end,
+seek earlier before adding a positive-duration cue.
+
+**Projects → Appearance and keyboard help** offers System/Dark/Light and larger
+text. Preferences stay on this device and never change exports. The phone toolbar
+wraps so undo/redo remain reachable. Dialogs support Escape and return focus;
+focused buttons retain normal Space/Enter behavior. Reduced motion follows the
+system preference. Physical iPhone VoiceOver remains a separate acceptance gate.
+
+### Safe preview cleanup — P1.06
+
+In **Export MP4 → Project storage**, remove eligible obsolete previews after their
+24-hour grace period. Current previews and references from retained versions,
+drafts and job inputs stay protected. Active jobs/downloads/shares block cleanup;
+damaged retention metadata blocks deletion. Original media and recording assets
+are never reclaimed by preview cleanup. A stale pending draft can recover as a
+copy using the current valid preview after a repair.
