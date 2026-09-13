@@ -1,6 +1,13 @@
 import { create } from 'zustand';
-import { projectSchema, type Project, type Tool } from './model';
+import {
+  projectSchema,
+  editedProjectSchema,
+  retainValidatedProject,
+  type Project,
+  type Tool,
+} from './model';
 import { editableContent } from './project/saveSession';
+import { shareUnchanged } from './project/shareUnchanged';
 
 interface EditorStore {
   project: Project | null;
@@ -41,7 +48,7 @@ export const useEditor = create<EditorStore>((set, get) => ({
   error: null,
   setProject: (project) =>
     set({
-      project: project ? projectSchema.parse(project) : null,
+      project: project ? retainValidatedProject(projectSchema.parse(project)) : null,
       selectedId: null,
       tool: 'select',
       currentTime: 0,
@@ -58,9 +65,9 @@ export const useEditor = create<EditorStore>((set, get) => ({
     if (!current || current.projectId !== saved.projectId) return null;
     const project =
       editableContent(current) === editableContent(target)
-        ? saved
+        ? shareUnchanged(current, saved)
         : { ...current, revision: saved.revision };
-    set({ project });
+    set({ project: retainValidatedProject(project) });
     return project;
   },
   edit: (recipe) => {
@@ -71,13 +78,13 @@ export const useEditor = create<EditorStore>((set, get) => ({
     draft.revision = state.project.revision;
     if (JSON.stringify(draft) === JSON.stringify(state.project)) return;
     draft.updatedAt = new Date().toISOString();
-    const result = projectSchema.safeParse(draft);
+    const result = editedProjectSchema.safeParse(shareUnchanged(state.project, draft));
     if (!result.success) {
       set({ error: result.error.issues.map((issue) => issue.message).join('; ') });
       return;
     }
     set({
-      project: result.data,
+      project: retainValidatedProject(shareUnchanged(state.project, result.data)),
       past: [...state.past.slice(-99), state.project],
       future: [],
       revision: state.revision + 1,
