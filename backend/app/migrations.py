@@ -6,7 +6,7 @@ from copy import deepcopy
 from .errors import DomainError
 
 SCHEMA_VERSION = 2
-CAPABILITIES = ('project.revisions.v1',)
+CAPABILITIES = ('project.revisions.v1', 'media.hdr-to-sdr.v1')
 MAX_REVISION = 9007199254740991  # JSON/JavaScript safe integer, shared with Swift.
 
 

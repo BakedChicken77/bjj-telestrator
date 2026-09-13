@@ -1,6 +1,6 @@
 /** Pure migration registry. Services preserve the original before installation. */
 export const SCHEMA_VERSION = 2;
-export const CAPABILITIES = ['project.revisions.v1'] as const;
+export const CAPABILITIES = ['project.revisions.v1', 'media.hdr-to-sdr.v1'] as const;
 
 export class ProjectError extends Error {
   constructor(

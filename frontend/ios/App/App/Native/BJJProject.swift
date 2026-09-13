@@ -127,6 +127,9 @@ struct BJJProject {
         try BJJValidate.timestamp(value["updatedAt"])
         let source = try BJJValidate.object(value["source"], "source")
         try BJJValidate.media(source)
+        if BJJColor.isHDR(source) && !(value["requiredCapabilities"] as! [String]).contains(BJJColor.capability) {
+            throw BJJError.invalid("The HDR delivery capability is missing.")
+        }
         try BJJValidate.media(BJJValidate.object(value["proxy"], "proxy"))
         let duration = (source["durationSec"] as! NSNumber).doubleValue
         let settings = try BJJValidate.object(value["settings"], "settings")

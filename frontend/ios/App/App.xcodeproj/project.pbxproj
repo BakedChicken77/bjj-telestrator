@@ -32,6 +32,7 @@
 		4F642E8E2EA8E79AF8A373DC = {isa = PBXBuildFile; fileRef = 611409C32D2003589A19C233;};
 		AE7B7702FDB3AC626938F495 = {isa = PBXBuildFile; fileRef = E844101F5F80837C9418E01C;};
 		EA818F39D15161682D8CE3A6 = {isa = PBXBuildFile; fileRef = 953EEBC42CDDB61A535324AE;};
+		028C1F41097071DDEB55A7F7 = {isa = PBXBuildFile; fileRef = C79F983F1064F0A52BAD2C31;};
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -63,6 +64,7 @@
 		611409C32D2003589A19C233 = {isa = PBXFileReference; lastKnownFileType = text.json; path = "../../../../tests/fixtures/export-plan-conformance.json"; sourceTree = "<group>";};
 		E844101F5F80837C9418E01C = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJProjectVersions.swift"; sourceTree = "<group>";};
 		953EEBC42CDDB61A535324AE = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJMediaJobs.swift"; sourceTree = "<group>";};
+		C79F983F1064F0A52BAD2C31 = {isa = PBXFileReference; lastKnownFileType = text.json; path = "../../../../tests/fixtures/hdr-conformance.json"; sourceTree = "<group>";};
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -214,7 +216,7 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		C07A97930E4E5BC84D76F326 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (
-				4F642E8E2EA8E79AF8A373DC,34C8798CFA7D90D784962368,); runOnlyForDeploymentPostprocessing = 0;};
+				4F642E8E2EA8E79AF8A373DC,34C8798CFA7D90D784962368,028C1F41097071DDEB55A7F7,); runOnlyForDeploymentPostprocessing = 0;};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */

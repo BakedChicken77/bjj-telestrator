@@ -260,6 +260,9 @@ class Project(Model):
 
     @model_validator(mode='after')
     def valid_project(self) -> Self:
+        from .color import HDR_CAPABILITY, is_hdr
+        if is_hdr(self.source.model_dump(mode='json')) and HDR_CAPABILITY not in self.requiredCapabilities:
+            raise ValueError('The HDR delivery capability is missing')
         if not self.projectName.strip():
             raise ValueError('Enter a project name')
         identifiers = [a.id for a in self.annotations] + [v.id for v in self.voiceovers]

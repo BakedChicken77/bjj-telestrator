@@ -171,6 +171,33 @@ retained. The complete phase is not yet accepted.
 
 ## Historical delivery records
 
+### September 13 — complete remaining Phase 1 work
+
+Steve authorized completion of Phase 1. Actual starting commit:
+`dadeee523f8a933c53333c2b298a8058b9f8e604`, isolated worktree on
+`codex/p1-completion`. Starting CI run 34753976427 passed all six gates,
+including 25 native tests and the unsigned archive. Preserve the stacked draft
+PRs; do not reset main or publish a release.
+
+Scope: P1.04 fixture-verified SDR delivery from supported PQ/HLG sources;
+P1.05 streaming portable project packages on both platforms; P1.06 conservative
+derived-asset cleanup; P1.07 accessible alternatives/themes; P1.08 reproducible
+profiling/security checks. Finish independent implementation and automation
+while P1.01 signed/physical/Windows-host acceptance remains explicitly pending.
+No Phase 5 module is selected. Each implementation slice records its own checks
+and limitations before the next slice. New HDR support remains experimental
+until both native and FFmpeg fixtures verify preview and final output.
+
+Fresh starting baseline: `backend/.venv/bin/python scripts/verify.py` passed
+153 backend tests (96.27 s), 97 frontend tests, 12 repository tests and all
+lint/type/build/format checks. The first HDR fixture spike passes six focused
+Python tests: native HEVC Main 10 PQ/HLG inputs produce Rec.709 H.264 320x180,
+2-second output (3,875/3,809 bytes), eight distinct gray levels, matching preview
+patches, correct half-open red-cue boundaries and unchanged source SHA-256.
+Native XCTest uses those same encoded fixture bytes; its gate is pending.
+Decision and limits: `docs/decisions/002-sdr-delivery.md`.
+
+
 These are dated delivery snapshots, not the current candidate status. The September 12 record above supersedes old unchecked native/repository setup items: the remote repository exists and main passed native SDK tests and an unsigned archive. Fresh candidate CI now passes; signed-build and physical-device gates remain open.
 
 ## Milestone 1 — annotation editor and exports

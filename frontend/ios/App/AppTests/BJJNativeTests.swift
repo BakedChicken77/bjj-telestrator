@@ -12,6 +12,56 @@ import CryptoKit
         store = try BJJStore(root: root)
     }
     override func tearDownWithError() throws { try? FileManager.default.removeItem(at: root) }
+    func testRealPQAndHLGProduceSDRBeforeCompositing() async throws {
+        let fixture = try XCTUnwrap(Bundle(for: BJJNativeTests.self).url(forResource: "hdr-conformance", withExtension: "json"))
+        let cases = try store.readJSON(fixture)["cases"] as! [BJJJSON]
+        for item in cases {
+            let data = try XCTUnwrap(Data(base64Encoded: item.s("movieBase64")))
+            let original = root.appendingPathComponent("\(item.s("name")).mp4")
+            try data.write(to: original)
+            XCTAssertEqual(try BJJAssets.digest(original), item.s("sha256"))
+            let inspected = try await BJJMedia.inspect(original, reference: "source/ramp.mp4", originalName: "ramp.mp4")
+            XCTAssertEqual(inspected.json.s("transferFunction"), item.s("transferFunction"))
+            let service = try BJJService(store: store)
+            let imported = try await service.importFile(original, originalName: "ramp.mp4")
+            XCTAssertTrue((imported.json["requiredCapabilities"] as! [String]).contains(BJJColor.capability))
+            var document = imported.json; document["annotations"] = [annotation(start: 0.5, end: 1.5)]
+            let project = try store.save(BJJProject(document))
+            let result = root.appendingPathComponent("\(item.s("name"))-review.mp4")
+            try await BJJRenderer().render(media: inspected, project: project, store: store, output: result) { _ in }
+            let preview = try store.asset(project.id, project.proxy.s("asset"))
+            var ramps = [[Int]]()
+            for url in [preview, result] {
+                let media = try await BJJMedia.inspect(url, reference: "proxy/output.mp4", originalName: "output.mp4")
+                XCTAssertEqual(media.json.s("codec"), "avc1")
+                XCTAssertEqual(media.json.s("transferFunction"), "bt709")
+                XCTAssertEqual(media.json.s("colorPrimaries"), "bt709")
+                XCTAssertEqual(media.json.s("colorMatrix"), "bt709")
+                XCTAssertEqual(media.videoRange.duration.seconds, 2, accuracy: 1.0 / 30)
+                let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+                generator.requestedTimeToleranceBefore = .zero; generator.requestedTimeToleranceAfter = .zero
+                let cg = try generator.copyCGImage(at: CMTime(seconds: 0.25, preferredTimescale: 600), actualTime: nil)
+                var pixels = [UInt8](repeating: 0, count: 320 * 180 * 4)
+                pixels.withUnsafeMutableBytes { bytes in
+                    let context = CGContext(data: bytes.baseAddress, width: 320, height: 180, bitsPerComponent: 8,
+                        bytesPerRow: 320 * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+                    context.draw(cg, in: CGRect(x: 0, y: 0, width: 320, height: 180))
+                }
+                let ramp = (item["sampleX"] as! [Int]).map { Int(pixels[(135 * 320 + $0) * 4]) }
+                XCTAssertLessThan(ramp[0], 12, "\(ramp)")
+                XCTAssertGreaterThan(ramp[7], 210, "\(ramp)")
+                for index in 1..<8 { XCTAssertGreaterThan(ramp[index], ramp[index - 1] + 1, "Highlights/shadows collapsed: \(ramp)") }
+                ramps.append(ramp)
+            }
+            for index in 0..<8 { XCTAssertLessThanOrEqual(abs(ramps[0][index] - ramps[1][index]), 6, "Preview/export differ: \(ramps)") }
+            XCTAssertEqual(try redPixels(result, time: 0.25), 0)
+            XCTAssertGreaterThan(try redPixels(result, time: 0.5), 1500)
+            XCTAssertGreaterThan(try redPixels(result, time: 1.25), 1500)
+            XCTAssertEqual(try redPixels(result, time: 1.5), 0)
+            XCTAssertEqual(try BJJAssets.digest(store.asset(project.id, project.source.s("asset"))), item.s("sha256"))
+            print("P1.04 HDR \(item.s("name")): ramps=\(ramps), H.264 Rec.709 320x180 2s bytes=\(try result.resourceValues(forKeys: [.fileSizeKey]).fileSize!), source_sha256=\(item.s("sha256"))")
+        }
+    }
     private func annotation(start: Double = 1, end: Double = 2) -> BJJJSON {
         ["id": UUID().uuidString.lowercased(), "type": "rectangle", "startSec": start, "endSec": end,
          "zIndex": 1, "strokeColor": "#ff0000", "strokeWidth": 0.02, "strokeOpacity": 1.0,

@@ -228,6 +228,17 @@ const currentProjectSchema = z
   })
   .passthrough()
   .superRefine((project, context) => {
+    if (
+      ['smpte2084', 'arib-std-b67', 'SMPTE_ST_2084_PQ', 'ITU_R_2100_HLG'].includes(
+        project.source.transferFunction ?? '',
+      ) &&
+      !project.requiredCapabilities.includes('media.hdr-to-sdr.v1')
+    )
+      context.addIssue({
+        code: 'custom',
+        path: ['requiredCapabilities'],
+        message: 'The HDR delivery capability is missing',
+      });
     const ids = new Set<string>();
     for (const [index, item] of project.annotations.entries()) {
       if (item.endSec > project.source.durationSec + 0.000001)

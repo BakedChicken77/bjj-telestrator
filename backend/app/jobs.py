@@ -22,9 +22,12 @@ TERMINAL = {'completed', 'failed', 'cancelled'}
 
 
 def validate_output(path: Path, project: Project) -> None:
+    from .color import HDR_CAPABILITY
     from .media import probe_media
     from .renderer import audible_voiceovers, output_dimensions
     media = probe_media(path, 'exports/output.mp4', 'output.mp4')
+    if HDR_CAPABILITY in project.requiredCapabilities and (media.transferFunction, media.colorPrimaries, media.colorMatrix, media.colorRange) != ('bt709', 'bt709', 'bt709', 'tv'):
+        raise DomainError('EXPORT_VALIDATION_FAILED', 'The MP4 failed its Rec.709 SDR color check. Retry the export.')
     audio = project.source.hasAudio or bool(audible_voiceovers(project))
     if (media.codec != 'h264' or (media.displayWidth, media.displayHeight) != output_dimensions(project.source)
             or abs(media.durationSec - project.source.durationSec) > max(.1, 1 / project.exportSettings.fps)

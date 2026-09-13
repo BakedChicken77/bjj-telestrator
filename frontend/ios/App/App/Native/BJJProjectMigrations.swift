@@ -2,7 +2,7 @@ import Foundation
 
 enum BJJProjectMigrations {
     static let currentVersion = 2
-    static let supported = ["project.revisions.v1"]
+    static let supported = ["project.revisions.v1", "media.hdr-to-sdr.v1"]
     static let registry: [Int: (BJJJSON) -> BJJJSON] = [
         1: { document in
             var result = document

@@ -250,7 +250,8 @@ struct BJJExportJob: Codable {
                 let expectedAudio = (media.json["hasAudio"] as! Bool) || project.voiceovers.contains {
                     !($0["muted"] as! Bool) && $0.n("gain") * project.settings.n("voiceoverMasterGain") > 0
                 }
-                guard probe.json.s("codec") == "avc1", abs(probe.videoRange.duration.seconds - project.duration) <= tolerance,
+                guard !BJJColor.isHDR(probe.json), probe.json.s("transferFunction") == "bt709", probe.json.s("colorPrimaries") == "bt709",
+                      probe.json.s("colorMatrix") == "bt709", probe.json.s("codec") == "avc1", abs(probe.videoRange.duration.seconds - project.duration) <= tolerance,
                       probe.orientedSize == BJJRenderer.outputSize(CGSize(width: project.source.n("displayWidth"), height: project.source.n("displayHeight"))),
                       (probe.json["hasAudio"] as? Bool) == expectedAudio,
                       !expectedAudio || probe.json["audioCodec"] as? String == "aac" else {
