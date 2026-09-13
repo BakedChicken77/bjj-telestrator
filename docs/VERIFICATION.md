@@ -18,8 +18,36 @@ arrow symbol; no render timeout or application assertion was weakened.
 
 A repair failure before encoder setup now releases its project lease, including
 unsafe staging paths. Missing-preview tests also save pending edits before repair
-and reject publishing a missing replacement. Full local gates and native CI are
-in progress. Native source exists but no new SDK/device result is claimed yet.
+and reject publishing a missing replacement. The complete local gate passed 153 backend tests (98.06 s), 97 frontend,
+12 repository and all 16 browser tests (4.9 min), plus lint/type/build/format.
+`npm run ios:sync` passed. The newly probed repaired-review browser exports are
+H.264/AAC, 360×640, 30 fps, 4.0 s, 89,794 / 89,780 bytes at the desktop/phone viewport. Their source SHA-256 is
+recorded in the machine-readable report (generated rotated SDR fixture).
+
+[Draft PR #11](https://github.com/BakedChicken77/bjj-telestrator/pull/11) is open.
+Initial native compilation at `3af35d4` found two missing explicit `self` captures
+inside the Photos callback. Commit `34fa4f2` fixes them. All six gates passed in
+[34753579589](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34753579589):
+153 backend (30.63 s), 97 frontend, 12 repository, 16 browser (2.1 min), 25 native
+XCTest methods (38.606 s), Docker build/startup and the unsigned archive.
+
+The native repair and final review are H.264/AAC, 320×180, 4.0 s: 26,039-byte
+preview and 26,906-byte review. Red cue pixels are absent at 0.5 s, present at
+1 s and absent at 2 s; narration is audible at 1.3–1.8 s. The original source
+SHA-256 remains `d92c6d4ca94778763da45ea9670e1ca1b30e63a33e8d9b6e8cecf30effebf9f4`.
+These measurements belong to `34fa4f2`, not a physical phone or signed build.
+
+A final API review also prevents an upload naming a queued repair operation from
+changing that operation's status. The focused ten-case media suite passed again
+(16.32 s), with its new ownership assertion and Ruff passing. The PR's checks and
+engineering description record full CI for the final guard/documentation commit.
+The native implementation remains the measured Swift tree above.
+
+The first full local run also exposed a cancellation exception regression while
+probing an export. Cancellation now retains the established `ExportCancelled`
+result and cleanup; its original assertions pass. The immutable-metadata test
+uses the current saved revision to exercise its existing rejection assertion;
+stale revisions are checked separately and return the typed conflict response.
 
 HDR tone mapping is not implemented. Known desktop PQ/HLG/Dolby Vision and native
 PQ/HLG input remain rejected. Synthetic metadata inspection is not visual color

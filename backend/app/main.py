@@ -236,7 +236,7 @@ def create_app(config: Config | None = None) -> FastAPI:
             return await run_in_threadpool(future.result)
         except BaseException as exc:
             # A second request must not cancel or delete the first request's staging.
-            if started or job.status == 'queued' and manager.get(job.jobId).status == 'queued':
+            if started or (job.operation == 'import' and job.status == 'queued' and manager.get(job.jobId).status == 'queued'):
                 manager.fail(job.jobId, exc)
             raise
         finally:

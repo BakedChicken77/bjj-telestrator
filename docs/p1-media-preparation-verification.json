@@ -5,7 +5,7 @@
   "scope": "Observable SDR import, real cancellation and revision-checked preview repair; metadata inspection and bounded preview policy",
   "startingCommit": "57af80a4d78242e1f691a5cf6b05ae696e907d78",
   "branch": "codex/p1-media-jobs",
-  "finalCommitOrPR": null,
+  "finalCommitOrPR": "https://github.com/BakedChicken77/bjj-telestrator/pull/11",
   "filesChanged": [
     "ARCHITECTURE.md",
     "CHANGELOG.md",
@@ -23,6 +23,7 @@
     "backend/app/storage.py",
     "backend/tests/test_backend.py",
     "backend/tests/test_media_jobs.py",
+    "docs/DEVICE_ACCEPTANCE.md",
     "docs/VERIFICATION.md",
     "docs/p1-media-preparation-verification.json",
     "docs/project.schema.json",
@@ -89,7 +90,18 @@
     },
     {
       "command": "BJJ_E2E_DATA_DIR=/tmp/bjj-p1-media-full2 BJJ_E2E_CHROMIUM_PATH=<Chromium 149> backend/.venv/bin/python scripts/verify.py --browser",
-      "result": "in progress"
+      "result": "passed: 153 backend in 98.06 s, 97 frontend, 12 repository, 16 browser in 4.9 min, Ruff/ESLint/TypeScript/build/Prettier"
+    },
+    {
+      "command": "GitHub Actions CI run 34753579589",
+      "url": "https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34753579589",
+      "commit": "34fa4f206615d3d1da2449d3db93c552b5beae17",
+      "result": "all six gates passed: 153 backend (30.63 s), 97 frontend, 12 repository, 16 browser (2.1 min), 25 native (38.606 s), Docker and unsigned archive"
+    },
+    {
+      "command": "backend/.venv/bin/python -m pytest backend/tests/test_media_jobs.py -q -s; backend/.venv/bin/python -m ruff check backend/app/main.py backend/tests/test_media_jobs.py",
+      "result": "10 passed in 16.32 s and Ruff passed after final wrong-operation upload ownership guard",
+      "scope": "An upload naming a queued repair job cannot mark that repair failed. Existing duplicate/cancel/lease/source/revision assertions remain."
     }
   ],
   "realExportEvidence": {
@@ -106,8 +118,56 @@
       "sourceRate": 60,
       "checks": "source hash, missing preview recovery, same project/annotation/audio metadata and logical duration"
     },
-    "browser": "actual completed MP4 fetched after repair and reload in both layouts",
-    "native": "SDK/real export checks pending CI"
+    "browser": [
+      {
+        "viewportWidth": 1280,
+        "projectRevision": 3,
+        "annotationCount": 1,
+        "sourceSha256": "62237e560bf30c1b2e0dba4eee2316eab4e73f872ae3057e421df37f10a9907e",
+        "sourceVideoStartSec": 0.0,
+        "codec": "h264",
+        "audioCodec": "aac",
+        "width": 360,
+        "height": 640,
+        "frameRate": "30/1",
+        "durationSec": 4.0,
+        "bytes": 89794
+      },
+      {
+        "viewportWidth": 390,
+        "projectRevision": 3,
+        "annotationCount": 1,
+        "sourceSha256": "62237e560bf30c1b2e0dba4eee2316eab4e73f872ae3057e421df37f10a9907e",
+        "sourceVideoStartSec": 0.0,
+        "codec": "h264",
+        "audioCodec": "aac",
+        "width": 360,
+        "height": 640,
+        "frameRate": "30/1",
+        "durationSec": 4.0,
+        "bytes": 89780
+      }
+    ],
+    "native": {
+      "commit": "34fa4f206615d3d1da2449d3db93c552b5beae17",
+      "run": "https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34753579589",
+      "codec": "H.264 (avc1)/AAC",
+      "dimensions": [
+        320,
+        180
+      ],
+      "durationSec": 4,
+      "previewBytes": 26039,
+      "repairedReviewBytes": 26906,
+      "sourceSha256": "d92c6d4ca94778763da45ea9670e1ca1b30e63a33e8d9b6e8cecf30effebf9f4",
+      "assertions": "same project, saved annotations and narration; unchanged source hash; red cue absent at 0.5 s, present at 1 s, absent at 2 s; audible energy at 1.3\u20131.8 s; valid AAC, orientation, duration and reopened proxy",
+      "environment": {
+        "xcode": "26.6",
+        "simulator": "iPhone 17 Pro",
+        "runtime": "iOS 26.4.1",
+        "physicalDevice": false
+      }
+    }
   },
   "accessibilityAndPlatformChecks": {
     "sharedUI": "semantic status and cancel/dismiss/repair buttons; progress updates outside live announcement; 44px minimum controls; no horizontal overflow in new desktop/phone scenarios",
@@ -119,7 +179,7 @@
     "Up-to-30 fps previews may omit frames from faster sources; no exact source-frame navigation or VFR classification claimed",
     "No native completion guarantee while backgrounded or force-quit; interrupted work restarts from zero",
     "Old proxies retained; no automatic general asset GC or portable package UI",
-    "No local Swift/Xcode, physical iPhone, signed install/update, fresh Windows host/Docker acceptance or 20-minute workload available"
+    "No local Swift/Xcode; native SDK/XCTest/archive passed in GitHub macOS CI. Physical iPhone, signed install/update, fresh Windows host/Docker acceptance and 20-minute workload remain unavailable"
   ],
   "rollbackRecovery": "Retain a whole-project copy and source assets before switching binaries. Earlier schema-2 build can read additive fields; it lacks media preparation controls. Do not uninstall the phone app. Older schema-1 recovery uses retained pre-migration copies, not a lossy overwrite.",
   "documentationUpdated": [
@@ -130,9 +190,13 @@
     "IOS_README.md",
     "docs/VERIFICATION.md",
     "docs/project.schema.json",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "docs/DEVICE_ACCEPTANCE.md"
   ],
-  "status": "implemented",
-  "remainingGate": "Full local/native CI verification and physical media acceptance; HDR conversion remains a separate P1.04 gate",
-  "nextEligibleTask": "P1.04 bounded HDR conversion spike with cross-renderer fixtures; then P1.05 portable editable backup/restore prerequisites"
+  "status": "automatically verified",
+  "remainingGate": "Physical media/signing/Windows acceptance and separate HDR conversion gate; this is the import/repair slice, not all of P1.04",
+  "nextEligibleTask": "P1.04 bounded HDR conversion spike with cross-renderer fixtures; then P1.05 portable editable backup/restore prerequisites",
+  "firstImplementationCommit": "3af35d4a308e500d318a7afe5baf462332705607",
+  "measuredCommit": "34fa4f206615d3d1da2449d3db93c552b5beae17",
+  "currentHeadEvidence": "The draft PR checks and engineering description record the fresh full CI for the final guard and documentation commit; numerical native outputs above belong to the named measured commit."
 }

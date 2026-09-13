@@ -21,7 +21,7 @@ is authorized by mentioning those modules.
 | P1.03 | automatically verified | Local and native CI recovery/revision tests pass. Physical interruption, storage failure and VoiceOver acceptance remain pending. |
 | P1.06 — storage/export slice | automatically verified | All CI gates passed at 04b03a8 in run 34725049253, including 18 native tests and unsigned archive. Physical gates remain pending. |
 | P1.06 — project recovery | automatically verified | All six CI gates passed at 33be631 in run 34727786132, including 22 native tests, actual MP4 recovery/retry and the unsigned archive. Device gates remain pending; broad media GC remains conservative retention. |
-| P1.04 — import/repair slice | implemented | Local verification and native CI in progress; HDR conversion and physical phone-media acceptance remain open. |
+| P1.04 — import/repair slice | automatically verified | All six CI gates passed at 34fa4f2, including 25 native tests and the unsigned archive. HDR conversion and physical phone-media acceptance remain open. |
 | P1.05, P1.07–P1.08 | not started | Continue after the P1.04 media contract and remaining package prerequisites. |
 | P2.01–P2.08 | not started | Follow Phase 1 save/media/asset contracts and the brief's batch order. |
 | P3.01–P3.07 | not started | Requires Phase 2 transport/timeline/export contracts. |
@@ -158,8 +158,13 @@ the authoritative revision; a stale concurrent edit remains a recoverable confli
 HDR conversion is a separate fixture-based spike and remains an explicit open
 P1.04 gate; native rejection stays until preview and both export conversions pass.
 Physical Photos/Files, cancellation/background and real phone-media acceptance
-remain pending. Status: implemented; verification in progress. Ten focused media
-cases and both browser viewport workflows pass. A source/preview cache failure
+remain pending. Status: automatically verified for this slice. Local gates pass
+153 backend, 97 frontend, 12 repository and 16 browser tests. All six CI gates
+passed at `34fa4f2` in [34753579589](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34753579589), including 25 native tests and the unsigned archive.
+The final wrong-operation upload guard passed all ten focused media cases; full
+current-head CI is recorded on [draft PR #11](https://github.com/BakedChicken77/bjj-telestrator/pull/11).
+The completion record, interfaces, retention/rollback and numerical MP4 evidence
+are in [media preparation verification](docs/p1-media-preparation-verification.json). A missing derived preview
 cannot block saving pending edits; creation and replacement still require media.
 Repair opens a fresh undo session. The original source and all old proxies remain
 retained. The complete phase is not yet accepted.

@@ -192,6 +192,12 @@ def test_unused_cancelled_import_and_duplicate_request_cannot_damage_existing_jo
         duplicate = client.post('/api/projects/import', files={'file': ('test.mov', handle, 'video/quicktime')}, headers={'X-BJJ-Import-ID': existing['jobId']})
     assert duplicate.status_code == 409
     assert client.get(f'/api/media-jobs/{existing["jobId"]}').json()['status'] == 'completed'
+    repair = app.state.media.create(_project)
+    with source.open('rb') as handle:
+        wrong_operation = client.post('/api/projects/import', files={'file': ('test.mov', handle, 'video/quicktime')}, headers={'X-BJJ-Import-ID': repair.jobId})
+    assert wrong_operation.status_code == 409
+    assert app.state.media.get(repair.jobId).status == 'queued'
+    app.state.media.cancel(repair.jobId)
     assert len(app.state.store.list()) == 1
 
 
