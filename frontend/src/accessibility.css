@@ -196,6 +196,14 @@ label:has(> input[type='checkbox']) {
 .audio-drawer {
   max-height: min(70dvh, 520px);
 }
+@media (min-width: 1000px) {
+  .audio-drawer {
+    position: static;
+    margin: 0 12px 10px;
+    max-height: min(35dvh, 280px);
+    box-shadow: none;
+  }
+}
 .audio-drawer input[type='number'],
 .color-control input[type='color'] {
   min-height: 44px;
