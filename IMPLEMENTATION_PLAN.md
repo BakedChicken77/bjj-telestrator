@@ -51,6 +51,11 @@ upload again, interpreting the brief's publication restriction as still active.
 Nothing was pushed and no new CI was started. Explicit approval for public
 Phase 1 source/fixture upload, a draft PR and existing CI is now the exact blocker.
 
+Subsequent authorization: Steve explicitly authorized uploading Phase One code
+after the public upload, draft PR and CI scope was presented. The approval blocker
+above is historical; proceed with the prepared branch and existing CI. No release,
+merge, signing, paid service or customer billing is authorized by this upload.
+
 ### Completion record — P1.02 / P1.03
 
 - Outcome: storage-owned schema-2 revisions, stale-write rejection, pending-save

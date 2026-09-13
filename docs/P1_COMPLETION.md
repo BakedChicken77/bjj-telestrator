@@ -4,6 +4,12 @@ Status: implemented with local automated evidence; **Phase 1 is not accepted**.
 The new native code has not compiled or run against an Apple SDK. Physical-device,
 signed-update, actual Files interchange and fresh Windows/Docker gates remain open.
 
+Upload authorization received: Steve explicitly authorized uploading Phase One
+code after the public repository/source/fixture/CI scope was presented. The earlier
+approval blocks below are historical. Upload the prepared commits, open the next
+draft PR above #11 and run the existing CI; signing, release publication and
+physical-device acceptance remain separate gates.
+
 Starting commit: `dadeee523f8a933c53333c2b298a8058b9f8e604`; branch
 `codex/p1-completion`, isolated from the original workspace. Application version
 remains 1.1.0; project schema remains 2. No existing branch was reset.
