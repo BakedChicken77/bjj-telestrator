@@ -4,11 +4,13 @@ from __future__ import annotations
 import json
 import os
 import shutil
+from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
 from .assets import manifest_assets, require_space, space_estimate
 from .errors import DomainError, conflict
+from .migrations import MAX_REVISION
 from .models import Project
 from .render_plan import build_plan, validate_plan, verify_assets
 from .storage import ProjectStore, StorageError, asset_path, atomic_json, require_uuid, utc_now
@@ -65,9 +67,13 @@ class ProjectRecovery:
             if value['projectId'] != project_id or value['checkpointId'] != checkpoint_id:
                 raise ValueError()
             validate_plan(value['input'], project_id, value['revision'])
-            if not isinstance(value['label'], str) or not 1 <= len(value['label']) <= 120 or not isinstance(value['createdAt'], str):
+            if (not isinstance(value['label'], str) or not 1 <= len(value['label']) <= 120
+                    or not isinstance(value['createdAt'], str) or len(value['createdAt']) > 80
+                    or datetime.fromisoformat(value['createdAt'].replace('Z', '+00:00')).tzinfo is None):
                 raise ValueError()
         except (ValueError, TypeError, KeyError) as exc:
+            if isinstance(exc, DomainError):
+                raise
             raise DomainError('RECOVERY_INVALID', 'This checkpoint is damaged or unsupported. Its files were preserved.', 409) from exc
         return value
 
@@ -130,7 +136,11 @@ class ProjectRecovery:
         entry = self.trash_entry(trash_id)
         value = read_record(asset_path(entry, 'metadata.json'))
         try:
-            if value['trashId'] != trash_id or not isinstance(value['projectName'], str) or not isinstance(value['deletedAt'], str):
+            if (value['trashId'] != trash_id or not isinstance(value['projectName'], str)
+                    or not 1 <= len(value['projectName']) <= 160
+                    or type(value['revision']) is not int or not 1 <= value['revision'] <= MAX_REVISION
+                    or not isinstance(value['deletedAt'], str) or len(value['deletedAt']) > 80
+                    or datetime.fromisoformat(value['deletedAt'].replace('Z', '+00:00')).tzinfo is None):
                 raise ValueError()
             folder = asset_path(entry, f'projects/{require_uuid(value["projectId"])}')
             if not folder.is_dir():

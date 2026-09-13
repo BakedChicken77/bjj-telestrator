@@ -119,6 +119,7 @@ struct BJJProjectVersions {
         let entry = try trashEntry(id), value = try readRecord(entry.appendingPathComponent("metadata.json"))
         guard value["trashId"] as? String == id else { throw BJJError.domain("RECOVERY_INVALID", "The deleted project identity differs from its storage.") }
         let projectId = try BJJValidate.uuid(value["projectId"] as? String)
+        try BJJValidate.number(value["revision"], "deleted project revision", 1...9007199254740991, integer: true)
         _ = try BJJValidate.string(value["projectName"], "project name", max: 160)
         _ = try BJJValidate.timestamp(value["deletedAt"])
         let projects = entry.appendingPathComponent("projects", isDirectory: true), folder = projects.appendingPathComponent(projectId, isDirectory: true)

@@ -43,7 +43,7 @@ export default defineConfig({
       cwd: root,
       url: `http://127.0.0.1:${apiPort}/api/health`,
       env: {
-        BJJ_DATA_DIR: path.join(root, 'tests/generated/e2e-data'),
+        BJJ_DATA_DIR: process.env.BJJ_E2E_DATA_DIR ?? path.join(root, 'tests/generated/e2e-data'),
         BJJ_ALLOWED_ORIGINS: `http://127.0.0.1:${webPort}`,
       },
       reuseExistingServer: false,

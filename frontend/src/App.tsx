@@ -380,11 +380,6 @@ export default function App() {
           </span>
         </div>
         <div className="topbar-divider" />
-        {notice && (
-          <p className="recovery-notice" role="status">
-            {notice}
-          </p>
-        )}
         {project ? (
           <ProjectName project={project} />
         ) : (
@@ -428,6 +423,11 @@ export default function App() {
           </button>
         </div>
       </header>
+      {notice && (
+        <p className="recovery-notice" role="status">
+          {notice}
+        </p>
+      )}
       {support !== null && <SupportDialog text={support} onClose={() => setSupport(null)} />}
       {project && status === 'conflict' && (
         <section className="recovery-banner" aria-label="Save conflict recovery">

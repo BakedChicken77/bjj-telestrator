@@ -47,7 +47,8 @@ def read_plan(path: Path, project_id: str, revision: int | None) -> dict:
 
 def validate_plan(plan: dict, project_id: str, revision: int | None) -> Project:
     project = Project.model_validate(plan['project'])
-    if (type(plan['version']) is not int or plan['version'] != 1
+    if (project.schemaVersion != plan['project']['schemaVersion']
+            or type(plan['version']) is not int or plan['version'] != 1
             or type(plan['revision']) is not int or plan['projectId'] != project_id or project.projectId != project_id
             or plan['revision'] != revision or project.revision != revision
             or plan['requiredCapabilities'] != project.requiredCapabilities or plan['output'] != output_contract(project)):
