@@ -97,6 +97,10 @@ enum BJJValidate {
         try bool(m["hasAudio"], "audio flag")
         for field in ["codec", "sampleAspectRatio", "displayAspectRatio"] { try string(m[field], field, max: 100) }
         if !(m["audioCodec"] is NSNull) { try string(m["audioCodec"], "audio codec", max: 100) }
+        for key in ["transferFunction", "colorPrimaries", "colorMatrix", "colorRange", "averageFrameRateRational", "nominalFrameRateRational", "timeBase"] {
+            if let value = m[key], !(value is NSNull) { try string(value, key, max: 100) }
+        }
+        if let value = m["dolbyVision"], !(value is NSNull) { try bool(value, "Dolby Vision flag") }
     }
 }
 
@@ -333,7 +337,7 @@ final class BJJStore {
         }
         return results.sorted { ($0["updatedAt"] as! String) > ($1["updatedAt"] as! String) }
     }
-    func save(_ input: BJJProject, creating: Bool = false, acknowledgeRecordings: Bool = true) throws -> BJJProject {
+    func save(_ input: BJJProject, creating: Bool = false, acknowledgeRecordings: Bool = true, replacingProxy: Bool = false) throws -> BJJProject {
         lock.lock(); defer { lock.unlock() }
         let previous = creating ? nil : try load(input.id)
         if let previous, previous.revision != input.revision {
@@ -358,14 +362,19 @@ final class BJJStore {
             guard previous.revision == project.revision else {
                 throw BJJError.domain("PROJECT_CONFLICT", "This project changed in another session. Keep your edits as a copy or reload the saved version.")
             }
-            for field in ["source", "proxy", "createdAt"] {
+            for field in replacingProxy ? ["source", "createdAt"] : ["source", "proxy", "createdAt"] {
                 guard NSDictionary(dictionary: ["value": project.json[field]!]).isEqual(to: ["value": previous.json[field]!]) else {
                     throw BJJError.invalid("Imported media metadata cannot be replaced by an edit.")
                 }
             }
         }
         _ = try asset(project.id, project.source["asset"] as! String)
-        _ = try asset(project.id, project.proxy["asset"] as! String)
+        let proxyURL = try safeURL(project.id, project.proxy["asset"] as! String)
+        // Preserve pending edits even when the unchanged derived preview is missing.
+        // Creation and privileged replacement still require a validated file.
+        if creating || replacingProxy || FileManager.default.fileExists(atPath: proxyURL.path) {
+            _ = try asset(project.id, project.proxy["asset"] as! String)
+        }
         try validateRecordings(project)
         var json = project.json
         guard creating || project.revision < 9007199254740991 else { throw BJJError.invalid("The project revision limit was reached.") }
@@ -433,9 +442,9 @@ final class BJJStore {
         // atomically; do not advance the editor's revision behind its back.
         _ = try load(id)
     }
-    func createDirectory() throws -> (String, URL) {
-        let id = UUID().uuidString.lowercased()
+    func createDirectory(id: String = UUID().uuidString.lowercased()) throws -> (String, URL) {
         let url = try directory(id)
+        guard !FileManager.default.fileExists(atPath: url.path) else { throw BJJError.invalid("This project directory already exists.") }
         for folder in ["source", "proxy", "voiceover", "exports", "temp"] {
             try FileManager.default.createDirectory(at: url.appendingPathComponent(folder), withIntermediateDirectories: true)
         }

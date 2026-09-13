@@ -12,6 +12,21 @@ export interface ProjectSummary {
   unavailableCode?: string;
   revision?: number;
 }
+export interface MediaJob {
+  jobId: string;
+  projectId: string;
+  operation: 'import' | 'repair';
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+  stage: 'copying' | 'inspecting' | 'preparing_preview' | 'validating' | 'ready';
+  progress: number | null;
+  copiedBytes: number;
+  totalBytes?: number | null;
+  cancelRequested: boolean;
+  errorCode?: string | null;
+  error?: string | null;
+  projectRevision?: number | null;
+  createdAt: string;
+}
 export interface ExportJob {
   jobId: string;
   projectId: string;
@@ -79,6 +94,9 @@ export interface RuntimeCapabilities {
   projectCheckpoints?: boolean;
   projectDuplicate?: boolean;
   projectTrash?: boolean;
+  mediaJobs?: boolean;
+  proxyRepair?: boolean;
+  hdrToSdr?: boolean;
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -86,6 +104,8 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   try {
     response = await fetch(url, init);
   } catch {
+    if (init?.signal?.aborted)
+      throw new ProjectError('JOB_CANCELLED', 'Video preparation was cancelled.');
     recordDiagnostic('CONNECTION_UNAVAILABLE');
     throw new ProjectError(
       'CONNECTION_UNAVAILABLE',
@@ -117,6 +137,15 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 const desktopAPI = {
+  createImportJob: () => request<MediaJob>('/api/import-jobs', { method: 'POST' }),
+  mediaJob: (jobId: string) => request<MediaJob>(`/api/media-jobs/${jobId}`),
+  cancelMediaJob: (jobId: string) =>
+    request<MediaJob>(`/api/media-jobs/${jobId}`, { method: 'DELETE' }),
+  repairProxy: (projectId: string, revision: number) =>
+    request<MediaJob>(`/api/projects/${projectId}/proxy-jobs`, {
+      method: 'POST',
+      headers: { 'If-Match': `"${revision}"` },
+    }),
   capabilities: () => request<RuntimeCapabilities>('/api/capabilities'),
   recoverCopy: async (project: Project) =>
     readProject(
@@ -144,12 +173,21 @@ const desktopAPI = {
   },
   projects: () => request<ProjectSummary[]>('/api/projects'),
   project: async (id: string) => readProject(await request<unknown>(`/api/projects/${id}`)),
-  importVideo: async (file: File, name?: string) => {
+  importVideo: async (
+    file: File,
+    name?: string,
+    options?: { jobId: string; signal?: AbortSignal },
+  ) => {
     const form = new FormData();
     form.append('file', file);
     if (name) form.append('name', name);
     return projectSchema.parse(
-      await request<unknown>('/api/projects/import', { method: 'POST', body: form }),
+      await request<unknown>('/api/projects/import', {
+        method: 'POST',
+        body: form,
+        headers: options ? { 'X-BJJ-Import-ID': options.jobId } : undefined,
+        signal: options?.signal,
+      }),
     );
   },
   save: async (project: Project) =>
@@ -213,6 +251,13 @@ const desktopAPI = {
 /** Keep the verified desktop HTTP path; iOS uses an entirely local native service. */
 export const api = {
   ...desktopAPI,
+  createImportJob: () =>
+    isNativeIOS() ? nativeAPI.createImportJob() : desktopAPI.createImportJob(),
+  mediaJob: (id: string) => (isNativeIOS() ? nativeAPI.mediaJob(id) : desktopAPI.mediaJob(id)),
+  cancelMediaJob: (id: string) =>
+    isNativeIOS() ? nativeAPI.cancelMediaJob(id) : desktopAPI.cancelMediaJob(id),
+  repairProxy: (id: string, revision: number) =>
+    isNativeIOS() ? nativeAPI.repairProxy(id, revision) : desktopAPI.repairProxy(id, revision),
   capabilities: () => (isNativeIOS() ? nativeAPI.capabilities() : desktopAPI.capabilities()),
   recoverCopy: (project: Project) =>
     isNativeIOS() ? nativeAPI.recoverCopy(project) : desktopAPI.recoverCopy(project),

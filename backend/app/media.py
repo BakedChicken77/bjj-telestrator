@@ -5,11 +5,16 @@ import json
 import logging
 import math
 import os
+import queue
 import subprocess
+import threading
+import time
+from collections.abc import Callable
 from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
+from .errors import DomainError
 from .models import Media
 
 log = logging.getLogger(__name__)
@@ -21,6 +26,17 @@ INPUT_PROTOCOLS = 'file,pipe'
 
 class MediaError(Exception):
     pass
+
+
+def check_cancelled(cancel: threading.Event | None) -> None:
+    if cancel and cancel.is_set():
+        raise DomainError('JOB_CANCELLED', 'Video preparation was cancelled.', 409)
+
+
+def require_sdr(metadata: Media) -> None:
+    # Codec alone cannot distinguish SDR HEVC from PQ/HLG/Dolby Vision.
+    if metadata.transferFunction in ('smpte2084', 'arib-std-b67') or metadata.dolbyVision:
+        raise DomainError('MEDIA_UNSUPPORTED', 'HDR video needs an SDR copy until verified HDR conversion is available. The original was preserved.', 422)
 
 
 def ratio(value: object, default: float = 1) -> float:
@@ -65,24 +81,51 @@ def parse_probe(data: dict[str, Any], asset: str, original_filename: str) -> Med
                      displayWidth=display_width, displayHeight=display_height,
                      sampleAspectRatio=video.get('sample_aspect_ratio', '1:1'),
                      displayAspectRatio=video.get('display_aspect_ratio', f'{display_width}:{display_height}'),
-                     rotation=rotation, avgFrameRate=ratio(video.get('avg_frame_rate'), ratio(video.get('r_frame_rate'), 30)))
+                     rotation=rotation, avgFrameRate=ratio(video.get('avg_frame_rate'), ratio(video.get('r_frame_rate'), 30)),
+                     transferFunction=video.get('color_transfer', 'unknown'), colorPrimaries=video.get('color_primaries', 'unknown'),
+                     colorMatrix=video.get('color_space', 'unknown'), colorRange=video.get('color_range', 'unknown'),
+                     dolbyVision=any('DOVI' in side.get('side_data_type', '') for side in video.get('side_data_list', [])),
+                     averageFrameRateRational=video.get('avg_frame_rate', '0/0'),
+                     nominalFrameRateRational=video.get('r_frame_rate', '0/0'), timeBase=video.get('time_base', 'unknown'))
     except (KeyError, TypeError, ValueError) as exc:
         raise MediaError('The video metadata is incomplete or invalid') from exc
 
 
-def probe_media(path: Path, asset: str, original_filename: str) -> Media:
+def probe_media(path: Path, asset: str, original_filename: str, cancel: threading.Event | None = None) -> Media:
+    process = None
     try:
-        result = subprocess.run([os.getenv('BJJ_FFPROBE_PATH', 'ffprobe'), '-v', 'error', '-show_streams',
+        check_cancelled(cancel)
+        process = subprocess.Popen([os.getenv('BJJ_FFPROBE_PATH', 'ffprobe'), '-v', 'error', '-show_streams',
                                  '-show_format', '-of', 'json', '-protocol_whitelist', INPUT_PROTOCOLS,
                                  '-format_whitelist', INPUT_FORMATS, str(path)],
-                                capture_output=True, text=True, check=True, timeout=120)
-        return parse_probe(json.loads(result.stdout), asset, original_filename)
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        deadline = time.monotonic() + 120
+        while True:
+            check_cancelled(cancel)
+            if time.monotonic() > deadline:
+                raise subprocess.TimeoutExpired(process.args, 120)
+            try:
+                stdout, stderr = process.communicate(timeout=.1)
+                break
+            except subprocess.TimeoutExpired:
+                continue
+        if process.returncode:
+            raise subprocess.CalledProcessError(process.returncode, process.args, stderr=stderr)
+        return parse_probe(json.loads(stdout), asset, original_filename)
     except FileNotFoundError as exc:
         raise MediaError('FFprobe is not installed or is not available on PATH') from exc
     except (subprocess.SubprocessError, json.JSONDecodeError) as exc:
         log.exception('FFprobe failed')
         log.error('FFprobe detail: %s', getattr(exc, 'stderr', '')[-6000:])
         raise MediaError('The video cannot be read. It may be damaged, incomplete, or unsupported') from exc
+    finally:
+        if process:
+            from .renderer import _terminate
+            _terminate(process)
+            if process.stdout:
+                process.stdout.close()
+            if process.stderr:
+                process.stderr.close()
 
 
 def proxy_dimensions(metadata: Media) -> tuple[int, int]:
@@ -92,6 +135,7 @@ def proxy_dimensions(metadata: Media) -> tuple[int, int]:
 
 
 def proxy_args(source: Path, dest: Path, metadata: Media) -> list[str]:
+    require_sdr(metadata)
     width, height = proxy_dimensions(metadata)
     origin = format(metadata.videoStartSec, '.9f')
     args = [os.getenv('BJJ_FFMPEG_PATH', 'ffmpeg'), '-hide_banner', '-loglevel', 'error', '-nostdin',
@@ -99,7 +143,7 @@ def proxy_args(source: Path, dest: Path, metadata: Media) -> list[str]:
             '-format_whitelist', INPUT_FORMATS, '-i', str(source), '-map', f'0:{metadata.videoStreamIndex}']
     if metadata.hasAudio and metadata.audioStreamIndex is not None:
         args += ['-map', f'0:{metadata.audioStreamIndex}']
-    args += ['-vf', f'scale={width}:{height}:flags=lanczos,setsar=1,setpts=PTS-({origin})/TB',
+    args += ['-vf', f'scale={width}:{height}:flags=lanczos,setsar=1,setpts=PTS-({origin})/TB,fps={min(30, metadata.avgFrameRate):.12g}',
              '-af', f'asetpts=PTS-({origin})/TB,aresample=async=1:first_pts=0',
              '-c:v', 'libx264', '-preset', 'veryfast',
              '-threads', os.getenv('BJJ_FFMPEG_THREADS', '2'), '-crf', '22',
@@ -109,10 +153,48 @@ def proxy_args(source: Path, dest: Path, metadata: Media) -> list[str]:
     return args
 
 
-def create_proxy(source: Path, dest: Path, metadata: Media) -> None:
+def create_proxy(source: Path, dest: Path, metadata: Media, cancel: threading.Event | None = None,
+                 progress: Callable[[float], None] = lambda _seconds: None) -> None:
+    process = None
+    completed = False
+    reader = None
+    log_path = dest.with_suffix('.ffmpeg.log')
     try:
-        subprocess.run(proxy_args(source, dest, metadata), capture_output=True, text=True,
-                       check=True, timeout=7200)
+        check_cancelled(cancel)
+        args = proxy_args(source, dest, metadata)
+        args[-1:-1] = ['-progress', 'pipe:1', '-nostats']
+        with log_path.open('w+', encoding='utf-8') as errors:
+            process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=errors, text=True)
+            updates: queue.Queue[float] = queue.Queue(maxsize=8)
+            def read_progress() -> None:
+                for line in process.stdout:
+                    if line.startswith('out_time_us='):
+                        try:
+                            updates.put_nowait(int(line.split('=', 1)[1]) / 1_000_000)
+                        except (ValueError, queue.Full):
+                            pass
+            reader = threading.Thread(target=read_progress, daemon=True)
+            reader.start()
+            deadline = time.monotonic() + 7200
+            while process.poll() is None:
+                check_cancelled(cancel)
+                if time.monotonic() > deadline:
+                    raise MediaError('Preview preparation exceeded its time limit. Retry with a shorter source.')
+                try:
+                    seconds = updates.get(timeout=.1)
+                    progress(max(0, min(metadata.durationSec, seconds)))
+                except queue.Empty:
+                    pass
+            check_cancelled(cancel)
+            reader.join(timeout=1)
+            if process.returncode:
+                errors.seek(max(0, errors.tell() - 8192))
+                detail = errors.read()
+                if 'No space left on device' in detail:
+                    raise DomainError('STORAGE_LOW', 'Storage filled during preview preparation. Free space and retry.', 507)
+                raise MediaError('Could not prepare the preview. Check available storage and the source file.')
+        completed = True
+        progress(metadata.durationSec)
     except FileNotFoundError as exc:
         raise MediaError('FFmpeg is not installed or is not available on PATH') from exc
     except subprocess.SubprocessError as exc:
@@ -120,3 +202,14 @@ def create_proxy(source: Path, dest: Path, metadata: Media) -> None:
         log.error('FFmpeg detail: %s', getattr(exc, 'stderr', '')[-6000:])
         dest.unlink(missing_ok=True)
         raise MediaError('Could not create the editing video. Check free disk space and the source file') from exc
+    finally:
+        if process:
+            from .renderer import _terminate
+            _terminate(process)
+            if reader:
+                reader.join(timeout=1)
+            if process.stdout:
+                process.stdout.close()
+        log_path.unlink(missing_ok=True)
+        if not completed:
+            dest.unlink(missing_ok=True)

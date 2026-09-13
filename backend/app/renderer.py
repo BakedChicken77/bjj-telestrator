@@ -331,6 +331,9 @@ def render_export(
 ) -> None:
     """Render a validated immutable snapshot. Progress reports encoded seconds."""
     source = safe_asset(project_dir, project.source.asset)
+    # Older projects may predate color inspection; check the immutable original
+    # before rendering instead of silently treating every HEVC source as SDR.
+    from .media import probe_media, require_sdr
     temp_dir.mkdir(parents=True, exist_ok=True)
     output.parent.mkdir(parents=True, exist_ok=True)
     process: subprocess.Popen[str] | None = None
@@ -338,6 +341,12 @@ def render_export(
     try:
         if cancel_event.is_set():
             raise ExportCancelled()
+        try:
+            require_sdr(probe_media(source, project.source.asset, project.source.originalFilename, cancel_event))
+        except Exception:
+            if cancel_event.is_set():
+                raise ExportCancelled() from None
+            raise
         manifest = write_overlay_timeline(project, temp_dir, cancel_event)
         args = build_ffmpeg_args(project, source, manifest, output, project_dir)
         logger.info(json.dumps({"event": "export_encoder_start", "projectId": project.projectId, "states": len(list(temp_dir.glob("overlay-*.png")))}))

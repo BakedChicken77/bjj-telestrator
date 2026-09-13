@@ -1,5 +1,33 @@
 # Verification record
 
+## P1.04 observable import and repair candidate — 2026-09-13
+
+Starting commit `57af80a4d78242e1f691a5cf6b05ae696e907d78`, isolated branch
+`codex/p1-media-jobs`, stacked on draft PR #10. Starting CI
+[34728175000](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34728175000)
+passed all six gates. A fresh local non-browser baseline passed 139 backend,
+92 frontend and 12 repository tests plus lint/type/build/format.
+
+Implemented scope: tracked import/cancel, real same-source preview repair,
+revision/path/space protection, bounded preview policy and descriptive media
+inspection. Ten focused backend cases passed (19.44 s); desktop/phone-size browser
+workflows passed (18.1 / 14.9 s, 39.5 s including setup), through an actual MP4
+response. The first browser assertion used the wrong exact download-link name;
+the completed output was already present. Its locator now includes the visible
+arrow symbol; no render timeout or application assertion was weakened.
+
+A repair failure before encoder setup now releases its project lease, including
+unsafe staging paths. Missing-preview tests also save pending edits before repair
+and reject publishing a missing replacement. Full local gates and native CI are
+in progress. Native source exists but no new SDK/device result is claimed yet.
+
+HDR tone mapping is not implemented. Known desktop PQ/HLG/Dolby Vision and native
+PQ/HLG input remain rejected. Synthetic metadata inspection is not visual color
+acceptance. Real iPhone Photos/Files/cancellation/background, high-speed/VFR,
+VoiceOver, signed install/update, a 20-minute workload and fresh Windows-host
+acceptance remain pending. Docker CI runs on Linux. P1.04 and Phase 1 are not
+accepted in full by this package.
+
 ## P1.06 project recovery candidate — 2026-09-13 (started September 12)
 
 Start: `04b03a8cac59ae6266b32117ed2a7b797a4f6636`, branch

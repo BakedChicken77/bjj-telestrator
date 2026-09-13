@@ -1,0 +1,138 @@
+{
+  "reportVersion": 1,
+  "date": "2026-09-13",
+  "taskId": "P1.04",
+  "scope": "Observable SDR import, real cancellation and revision-checked preview repair; metadata inspection and bounded preview policy",
+  "startingCommit": "57af80a4d78242e1f691a5cf6b05ae696e907d78",
+  "branch": "codex/p1-media-jobs",
+  "finalCommitOrPR": null,
+  "filesChanged": [
+    "ARCHITECTURE.md",
+    "CHANGELOG.md",
+    "IMPLEMENTATION_PLAN.md",
+    "IOS_README.md",
+    "PROJECT_FORMAT.md",
+    "README.md",
+    "backend/app/assets.py",
+    "backend/app/main.py",
+    "backend/app/media.py",
+    "backend/app/media_jobs.py",
+    "backend/app/migrations.py",
+    "backend/app/models.py",
+    "backend/app/renderer.py",
+    "backend/app/storage.py",
+    "backend/tests/test_backend.py",
+    "backend/tests/test_media_jobs.py",
+    "docs/VERIFICATION.md",
+    "docs/p1-media-preparation-verification.json",
+    "docs/project.schema.json",
+    "frontend/ios/App/App.xcodeproj/project.pbxproj",
+    "frontend/ios/App/App/Native/BJJAssets.swift",
+    "frontend/ios/App/App/Native/BJJMediaJobs.swift",
+    "frontend/ios/App/App/Native/BJJNativePlugin.swift",
+    "frontend/ios/App/App/Native/BJJProject.swift",
+    "frontend/ios/App/App/Native/BJJProjectMigrations.swift",
+    "frontend/ios/App/App/Native/BJJRenderer.swift",
+    "frontend/ios/App/App/Native/BJJService.swift",
+    "frontend/ios/App/AppTests/BJJNativeTests.swift",
+    "frontend/src/App.tsx",
+    "frontend/src/api.ts",
+    "frontend/src/components/MediaPreparation.tsx",
+    "frontend/src/components/VideoStage.tsx",
+    "frontend/src/model.ts",
+    "frontend/src/native.test.ts",
+    "frontend/src/native.ts",
+    "frontend/src/project/diagnostics.ts",
+    "frontend/src/styles.css",
+    "frontend/src/useMediaPreparation.ts",
+    "tests/browser/media-preparation.spec.ts",
+    "tests/fixtures/project-conformance.json"
+  ],
+  "publicInterfaces": [
+    "POST /api/import-jobs",
+    "X-BJJ-Import-ID on existing POST /api/projects/import",
+    "GET/DELETE /api/media-jobs/{jobId}",
+    "POST /api/projects/{projectId}/proxy-jobs with If-Match",
+    "Native createImportJob/getMediaJob/cancelMediaJob/repairProxy; expectedRevision and generated UUIDs",
+    "Runtime mediaJobs/proxyRepair true; hdrToSdr false",
+    "Optional source/proxy color and rational timing metadata"
+  ],
+  "migrationAndRetention": {
+    "projectSchema": 2,
+    "operationRecordVersion": 1,
+    "projectEdits": "unchanged six annotation types and linear voiceovers; timing remains source-relative",
+    "repair": "same project/source identity; validated new proxy reference, monotonic revision; source, annotation and narration JSON preserved",
+    "missingPreview": "unchanged missing derived preview does not block a pending edit save; new/replacement media, sources and recordings remain required",
+    "assets": "original bytes/checksums preserved; previous previews retained; active repair leases prevent project removal",
+    "restart": "interrupted preparation is restart-from-zero; committed import recovered as complete; an interrupted repair may have committed a valid proxy before status recording",
+    "undo": "repair reopens the saved review in a fresh undo session"
+  },
+  "automatedCommands": [
+    {
+      "command": "backend/.venv/bin/python scripts/verify.py",
+      "scope": "starting baseline",
+      "result": "139 backend, 92 frontend, 12 repository plus lint/type/build/format passed"
+    },
+    {
+      "command": "backend/.venv/bin/python -m pytest backend/tests/test_media_jobs.py -q -s",
+      "scope": "initial focused media failure/repair cases",
+      "result": "10 passed in 19.44 s"
+    },
+    {
+      "command": "BJJ_E2E_DATA_DIR=/tmp/bjj-p1-media-tests2 BJJ_E2E_CHROMIUM_PATH=<Chromium 149> BJJ_E2E_PYTHON=backend/.venv/bin/python npm run test:e2e -- media-preparation.spec.ts",
+      "scope": "desktop 1280x720 and phone 390x844; actual APIs/encode/download; held upload only for isolated cancellation",
+      "result": "2 passed in 39.5 s; scenarios 18.1 and 14.9 s"
+    },
+    {
+      "command": "npm run ios:sync",
+      "result": "passed; no local Apple SDK execution"
+    },
+    {
+      "command": "BJJ_E2E_DATA_DIR=/tmp/bjj-p1-media-full2 BJJ_E2E_CHROMIUM_PATH=<Chromium 149> backend/.venv/bin/python scripts/verify.py --browser",
+      "result": "in progress"
+    }
+  ],
+  "realExportEvidence": {
+    "desktopRepairedPreview": {
+      "codec": "H.264/AAC",
+      "dimensions": [
+        160,
+        120
+      ],
+      "frameRate": 30,
+      "durationSec": 2.2,
+      "bytes": 38788,
+      "sourceSha256": "53fc11451a16d79fc812d81aec780ff796d11453055f4d8dd786d02f8449c8e3",
+      "sourceRate": 60,
+      "checks": "source hash, missing preview recovery, same project/annotation/audio metadata and logical duration"
+    },
+    "browser": "actual completed MP4 fetched after repair and reload in both layouts",
+    "native": "SDK/real export checks pending CI"
+  },
+  "accessibilityAndPlatformChecks": {
+    "sharedUI": "semantic status and cancel/dismiss/repair buttons; progress updates outside live announcement; 44px minimum controls; no horizontal overflow in new desktop/phone scenarios",
+    "physical": "VoiceOver, large text and Photos/Files hardware interaction pending"
+  },
+  "knownLimitations": [
+    "HDR-to-SDR conversion is not implemented; native PQ/HLG rejection retained and desktop known PQ/HLG/Dolby Vision rejection explicit",
+    "Missing metadata is not proof of SDR; no broad color or Dolby Vision support claimed",
+    "Up-to-30 fps previews may omit frames from faster sources; no exact source-frame navigation or VFR classification claimed",
+    "No native completion guarantee while backgrounded or force-quit; interrupted work restarts from zero",
+    "Old proxies retained; no automatic general asset GC or portable package UI",
+    "No local Swift/Xcode, physical iPhone, signed install/update, fresh Windows host/Docker acceptance or 20-minute workload available"
+  ],
+  "rollbackRecovery": "Retain a whole-project copy and source assets before switching binaries. Earlier schema-2 build can read additive fields; it lacks media preparation controls. Do not uninstall the phone app. Older schema-1 recovery uses retained pre-migration copies, not a lossy overwrite.",
+  "documentationUpdated": [
+    "IMPLEMENTATION_PLAN.md",
+    "PROJECT_FORMAT.md",
+    "ARCHITECTURE.md",
+    "README.md",
+    "IOS_README.md",
+    "docs/VERIFICATION.md",
+    "docs/project.schema.json",
+    "CHANGELOG.md"
+  ],
+  "status": "implemented",
+  "remainingGate": "Full local/native CI verification and physical media acceptance; HDR conversion remains a separate P1.04 gate",
+  "nextEligibleTask": "P1.04 bounded HDR conversion spike with cross-renderer fixtures; then P1.05 portable editable backup/restore prerequisites"
+}

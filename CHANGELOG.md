@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- P1.04 preparation slice: tracked import stages, real cancellation and same-project
+  preview repair on desktop/native iOS. Pending edits can save through a missing
+  derived preview; repair validates media and source hashes before revisioned
+  publication. Previews are bounded to 1920 pixels / 30 fps. Reported color and
+  timing metadata are retained; HDR conversion remains unavailable.
+
 - P1.06 storage/export slice: retained asset checksums, storage estimates/breakdown,
   restart-safe retry of immutable saved revisions, and safe completed-MP4 cleanup.
   Desktop exports are probed before atomic publication. Individual recording files

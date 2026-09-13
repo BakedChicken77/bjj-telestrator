@@ -18,11 +18,12 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from .assets import proxy_estimate, recording_estimate, require_space, space_estimate, storage_summary
+from .assets import recording_estimate, require_space, space_estimate, storage_summary
 from .config import Config
 from .errors import DomainError, conflict
 from .jobs import JobManager
-from .media import MediaError, create_proxy, probe_media
+from .media import MediaError, check_cancelled
+from .media_jobs import MediaJobs
 from .migrations import runtime_capabilities
 from .models import Job, Project, Voiceover
 from .recovery import ProjectRecovery
@@ -116,8 +117,12 @@ def create_app(config: Config | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(application: FastAPI):
         application.state.jobs = JobManager(store, settings.export_workers)
-        yield
-        await run_in_threadpool(application.state.jobs.close)
+        application.state.media = MediaJobs(store)
+        try:
+            yield
+        finally:
+            await run_in_threadpool(application.state.media.close)
+            await run_in_threadpool(application.state.jobs.close)
 
     application = FastAPI(title='BJJ Telestrator', version='1.0.0', lifespan=lifespan)
     application.state.store = store
@@ -173,51 +178,70 @@ def create_app(config: Config | None = None) -> FastAPI:
     def list_projects() -> list[dict[str, object]]:
         return store.list()
 
+    @application.post('/api/import-jobs')
+    def create_import_job() -> dict:
+        return application.state.media.create().model_dump()
+
+    @application.get('/api/media-jobs/{job_id}')
+    def get_media_job(job_id: str, response: Response) -> dict:
+        response.headers['Cache-Control'] = 'no-store'
+        return application.state.media.get(job_id).model_dump()
+
+    @application.delete('/api/media-jobs/{job_id}')
+    def cancel_media_job(job_id: str) -> dict:
+        return application.state.media.cancel(job_id).model_dump()
+
+    @application.post('/api/projects/{project_id}/proxy-jobs', status_code=202)
+    def repair_proxy(project_id: str, request: Request) -> dict:
+        return application.state.media.repair(project_id, expected_revision(request)).model_dump()
+
     @application.post('/api/projects/import', response_model=Project)
-    async def import_video(file: Annotated[UploadFile, File()],
+    async def import_video(request: Request, file: Annotated[UploadFile, File()],
                            name: Annotated[str | None, Form()] = None) -> Project:
-        content_type = (file.content_type or '').split(';')[0]
-        if content_type and not (content_type.startswith('video/') or content_type in (
-                'application/octet-stream', 'application/mp4', 'application/x-matroska')):
-            await file.close()
-            raise HTTPException(415, 'Choose a video file such as MP4, MOV, MKV, or WebM')
-        original_name = safe_filename(file.filename or 'video.mp4')
-        suffix = Path(original_name).suffix.lower()
-        if len(suffix) > 12 or not suffix:
-            suffix = '.bin'
-        project_id = str(uuid4())
-        folder = store.create_dir(project_id)
-        source_asset, proxy_asset = f'source/{uuid4()}{suffix}', f'proxy/{uuid4()}.mp4'
-        source_path, proxy_path = asset_path(folder, source_asset), asset_path(folder, proxy_asset)
-        success = False
+        manager: MediaJobs = application.state.media
+        job_id = request.headers.get('x-bjj-import-id')
+        job = manager.get(job_id) if job_id else manager.create()
+        folder = None
+        started = False
         try:
+            content_type = (file.content_type or '').split(';')[0]
+            if content_type and not (content_type.startswith('video/') or content_type in (
+                    'application/octet-stream', 'application/mp4', 'application/x-matroska')):
+                raise HTTPException(415, 'Choose a video file such as MP4, MOV, MKV, or WebM')
+            original_name = safe_filename(file.filename or 'video.mp4')
+            suffix = Path(original_name).suffix.lower()
+            if len(suffix) > 12 or not suffix:
+                suffix = '.bin'
+            folder = manager.begin_import(job.jobId)
+            started = True
+            source_asset = f'source/{uuid4()}{suffix}'
+            source_path = asset_path(folder, source_asset)
             require_space(folder, space_estimate('import', incoming=file.size or 0, output=0))
             count = 0
             with source_path.open('xb') as destination:
                 while chunk := await file.read(1024 * 1024):
+                    check_cancelled(manager.events[job.jobId])
                     count += len(chunk)
                     if count > settings.max_upload_bytes:
                         raise HTTPException(413, 'Upload exceeds the configured size limit')
                     if count % (16 * 1024**2) < len(chunk):
                         require_space(folder, space_estimate('import', output=0))
                     await run_in_threadpool(destination.write, chunk)
+                    manager.copied(job.jobId, count, file.size)
+                await run_in_threadpool(destination.flush)
+                await run_in_threadpool(os.fsync, destination.fileno())
             if not count:
                 raise HTTPException(422, 'The uploaded file is empty')
-            source = await run_in_threadpool(probe_media, source_path, source_asset, original_name)
-            require_space(folder, proxy_estimate(source.durationSec))
-            await run_in_threadpool(create_proxy, source_path, proxy_path, source)
-            proxy = await run_in_threadpool(probe_media, proxy_path, proxy_asset, original_name)
-            now = utc_now()
-            project = Project(projectId=project_id, projectName=(name or Path(original_name).stem)[:160],
-                              createdAt=now, updatedAt=now, source=source, proxy=proxy,
-                              exportSettings={'fps': min(120, source.avgFrameRate), 'crf': 18, 'preset': 'medium'})
-            saved = await run_in_threadpool(store.save, project, existing=False)
-            success = True
-            log.info('Video imported', extra={'projectId': project_id})
-            return saved
+            future = manager.import_copied(job.jobId, source_asset, original_name, name)
+            return await run_in_threadpool(future.result)
+        except BaseException as exc:
+            # A second request must not cancel or delete the first request's staging.
+            if started or job.status == 'queued' and manager.get(job.jobId).status == 'queued':
+                manager.fail(job.jobId, exc)
+            raise
         finally:
             await file.close()
-            if not success:
+            if folder and not (folder / 'project.json').exists() and manager.get(job.jobId).status in ('failed', 'cancelled'):
                 shutil.rmtree(folder, ignore_errors=True)
 
     @application.get('/api/projects/{project_id}', response_model=Project)
