@@ -46,7 +46,11 @@ import CryptoKit
                     let pixel = try XCTUnwrap(frames.indices.contains(index) ? frames[index].rgb : nil)
                     let green = index >= 30
                     XCTAssertGreaterThan(pixel[green ? 1 : 2], 200, "\(movie.lastPathComponent) frame \(index): \(pixel)")
-                    XCTAssertLessThan(pixel[green ? 2 : 1], 40, "\(movie.lastPathComponent) frame \(index): \(pixel)")
+                    // The untagged SDR source becomes [38,46,254] blue under
+                    // native Rec.709 conversion (CI 34767065154). A 64 ceiling
+                    // allows that measured conversion while a wrong blue/green
+                    // frame still fails by over 130 levels; timing stays exact.
+                    XCTAssertLessThan(pixel[green ? 2 : 1], 64, "\(movie.lastPathComponent) frame \(index): \(pixel)")
                 }
             }
             XCTAssertEqual(try redPixels(output, time: 14.0 / 30), 0)
