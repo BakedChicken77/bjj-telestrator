@@ -18,20 +18,19 @@ import CryptoKit
             let original = root.appendingPathComponent("\(item.s("name")).mp4")
             try XCTUnwrap(Data(base64Encoded: item.s("movieBase64"))).write(to: original)
             let media = try await BJJMedia.inspect(original, reference: "source/original.mp4", originalName: "original.mp4")
-            let reader = try AVAssetReader(asset: media.asset)
-            let samples = AVAssetReaderTrackOutput(track: media.video, outputSettings: nil)
-            samples.alwaysCopiesSampleData = false
-            XCTAssertTrue(reader.canAdd(samples)); reader.add(samples)
-            XCTAssertTrue(reader.startReading())
-            var timestamps = [Double]()
-            while let sample = samples.copyNextSampleBuffer() { timestamps.append(CMSampleBufferGetPresentationTimeStamp(sample).seconds) }
-            XCTAssertEqual(reader.status, .completed)
-            timestamps.sort()
+            // Compressed output includes control buffers and media-time PTS
+            // before MP4 edits. Decode display frames, as FFprobe -show_frames
+            // does, and use output PTS after trimming/time mapping.
+            let decoded = try decodedTimingFrames(media)
+            let timestamps = decoded.map(\.time)
             let expected = (item["ptsTicks"] as! [NSNumber]).map { $0.doubleValue / item.n("timescale") }
             XCTAssertEqual(timestamps.count, expected.count)
             for (actual, expected) in zip(timestamps, expected) { XCTAssertEqual(actual, expected, accuracy: 0.000001) }
+            XCTAssertEqual(try XCTUnwrap(decoded.first { $0.rgb[1] > 200 && $0.rgb[2] < 40 }).time, 1, accuracy: 0.000001)
             let imported = try await BJJService(store: store).importFile(original, originalName: "timing.mp4")
             var document = imported.json; document["annotations"] = [annotation(start: 0.5, end: 1.5)]
+            var settings = imported.exportSettings; settings["fps"] = 30.0
+            document["exportSettings"] = settings // Import defaults may preserve up to 60 fps.
             let project = try store.save(BJJProject(document))
             let output = root.appendingPathComponent("\(item.s("name"))-export.mp4")
             try await BJJRenderer().render(media: media, project: project, store: store, output: output) { _ in }
@@ -39,8 +38,16 @@ import CryptoKit
                 let result = try await BJJMedia.inspect(movie, reference: "proxy/result.mp4", originalName: "result.mp4")
                 XCTAssertEqual(result.fps, 30, accuracy: 0.001)
                 XCTAssertEqual(result.videoRange.duration.seconds, 2, accuracy: 0.1)
-                XCTAssertEqual(try dominantPixels(movie, time: 29.0 / 30, channel: 1), 0)
-                XCTAssertGreaterThan(try dominantPixels(movie, time: 1, channel: 1), 40000)
+                let frames = try decodedTimingFrames(result)
+                XCTAssertEqual(frames.count, 60)
+                for (index, frame) in frames.enumerated() { XCTAssertEqual(frame.time, Double(index) / 30, accuracy: 0.000001) }
+                print("P1.04 timing \(item.s("name")) \(movie.lastPathComponent): \(frames.filter { $0.time >= 0.95 && $0.time <= 1.1 })")
+                for index in [29, 30, 31] {
+                    let pixel = try XCTUnwrap(frames.indices.contains(index) ? frames[index].rgb : nil)
+                    let green = index >= 30
+                    XCTAssertGreaterThan(pixel[green ? 1 : 2], 200, "\(movie.lastPathComponent) frame \(index): \(pixel)")
+                    XCTAssertLessThan(pixel[green ? 2 : 1], 40, "\(movie.lastPathComponent) frame \(index): \(pixel)")
+                }
             }
             XCTAssertEqual(try redPixels(output, time: 14.0 / 30), 0)
             XCTAssertGreaterThan(try redPixels(output, time: 0.5), 1500)
@@ -48,6 +55,27 @@ import CryptoKit
             XCTAssertEqual(try redPixels(output, time: 1.5), 0)
             XCTAssertEqual(try BJJAssets.digest(store.asset(project.id, project.source.s("asset"))), item.s("sha256"))
         }
+    }
+    private func decodedTimingFrames(_ media: BJJMedia) throws -> [(time: Double, rgb: [Int])] {
+        let reader = try AVAssetReader(asset: media.asset)
+        let output = AVAssetReaderTrackOutput(track: media.video,
+            outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
+        output.alwaysCopiesSampleData = false
+        XCTAssertTrue(reader.canAdd(output)); reader.add(output)
+        XCTAssertTrue(reader.startReading())
+        var frames = [(time: Double, rgb: [Int])]()
+        while let sample = output.copyNextSampleBuffer() {
+            // AVAssetReader may also return marker buffers with no picture.
+            guard let image = CMSampleBufferGetImageBuffer(sample) else { continue }
+            XCTAssertEqual(CVPixelBufferLockBaseAddress(image, .readOnly), kCVReturnSuccess)
+            defer { CVPixelBufferUnlockBaseAddress(image, .readOnly) }
+            let bytes = try XCTUnwrap(CVPixelBufferGetBaseAddress(image)).assumingMemoryBound(to: UInt8.self)
+            let offset = 140 * CVPixelBufferGetBytesPerRow(image) + 280 * 4
+            frames.append((CMSampleBufferGetOutputPresentationTimeStamp(sample).seconds,
+                           [Int(bytes[offset + 2]), Int(bytes[offset + 1]), Int(bytes[offset])]))
+        }
+        XCTAssertEqual(reader.status, .completed)
+        return frames
     }
     func testPreviewCleanupRetainsReferencesGraceAndLeases() throws {
         let project = try project()
