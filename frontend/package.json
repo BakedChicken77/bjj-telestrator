@@ -19,8 +19,8 @@
     "test:mobile": "playwright test mobile.spec.ts"
   },
   "dependencies": {
-    "@capacitor/core": "8.5.1",
-    "@capacitor/ios": "8.5.1",
+    "@capacitor/core": "8.5.2",
+    "@capacitor/ios": "8.5.2",
     "konva": "10.3.3",
     "react": "19.2.8",
     "react-dom": "19.2.8",
@@ -29,7 +29,7 @@
     "zustand": "5.0.15"
   },
   "devDependencies": {
-    "@capacitor/cli": "8.5.1",
+    "@capacitor/cli": "8.5.2",
     "@eslint/js": "10.0.1",
     "@playwright/test": "1.63.0",
     "@types/node": "26.4.1",
