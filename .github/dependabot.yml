@@ -3,29 +3,40 @@ updates:
   - package-ecosystem: npm
     directory: /frontend
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+      interval: monthly
+    open-pull-requests-limit: 2
     ignore:
       - dependency-name: typescript
         update-types: [version-update:semver-major]
     groups:
-      capacitor:
-        patterns: ['@capacitor/*']
+      frontend-dependencies:
+        patterns: ['*']
+
   - package-ecosystem: pip
     directory: /backend
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-    groups:
-      pydantic:
-        patterns: ['pydantic', 'pydantic-core']
+      interval: monthly
+    open-pull-requests-limit: 2
     ignore:
       - dependency-name: pydantic-core
+    groups:
+      backend-dependencies:
+        patterns: ['*']
+
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
+    open-pull-requests-limit: 1
+    groups:
+      github-actions:
+        patterns: ['*']
+
   - package-ecosystem: docker
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
+    open-pull-requests-limit: 1
+    groups:
+      docker:
+        patterns: ['*']
