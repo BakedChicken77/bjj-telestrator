@@ -8,7 +8,17 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 jobs:
+  authorize:
+    name: Release authorization
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Require repository owner to initiate release
+        env:
+          EXPECTED_ACTOR: BakedChicken77
+        run: test "$GITHUB_ACTOR" = "$EXPECTED_ACTOR"
   validate:
+    needs: authorize
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
