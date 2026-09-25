@@ -8,6 +8,22 @@ on:
 permissions:
   contents: read
 jobs:
+  repository-guard:
+    name: Repository ownership guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Reject non-owner direct pushes to main
+        env:
+          EXPECTED_ACTOR: BakedChicken77
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          if [ "$EVENT_NAME" = "push" ] && [ "$REF_NAME" = "refs/heads/main" ] && [ "$ACTOR" != "$EXPECTED_ACTOR" ]; then
+            echo "::error::Direct push to main was made by unauthorized actor: $ACTOR"
+            exit 1
+          fi
   frontend:
     name: Frontend and repository quality
     runs-on: ubuntu-24.04
@@ -127,7 +143,7 @@ jobs:
   gate:
     name: CI gate
     if: always()
-    needs: [frontend, backend, browser, docker, ios]
+    needs: [repository-guard, frontend, backend, browser, docker, ios]
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     env:
