@@ -87,7 +87,7 @@ class SigningTests(unittest.TestCase):
         self.assertEqual(patched.count('CODE_SIGN_STYLE = "Manual";'), 2)
         self.assertEqual(patched.count('PROVISIONING_PROFILE_SPECIFIER ='), 2)
         self.assertEqual(source.count("CODE_SIGN_STYLE = Automatic;"), patched.count("CODE_SIGN_STYLE = Automatic;") + 2)
-        self.assertIn("PRODUCT_BUNDLE_IDENTIFIER = com.bjjtelestrator.app.tests", patched)
+        self.assertIn("PRODUCT_BUNDLE_IDENTIFIER = com.bakedchicken77.bjjtelestrator.tests", patched)
         with self.assertRaises(ValueError):
             patch_app_settings(source, "injection;", "com.example.app", self.profile()["UUID"], "A" * 40)
 

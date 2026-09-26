@@ -43,5 +43,15 @@
     "No signed installable iPhone binary was produced.",
     "Touch browser tests use the desktop backend, not the native Swift renderer.",
     "Long-video iPhone performance is not benchmarked."
-  ]
+  ],
+  "historicalReport": true,
+  "supersededNativeBuildEvidence": {
+    "checkedOn": "2026-09-26",
+    "commit": "e65fd6c7f83e6e32348e235690c5fa08d07fea88",
+    "run": "https://github.com/BakedChicken77/bjj-telestrator/actions/runs/36136892978",
+    "nativeXCTestAndUnsignedArchive": "passed",
+    "signedIPA": "pending",
+    "physicalIPhone": "pending",
+    "note": "Original measurements below retained as historical evidence, not current native build status."
+  }
 }
