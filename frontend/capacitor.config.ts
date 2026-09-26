@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.bjjtelestrator.app',
+  appId: 'com.bakedchicken77.bjjtelestrator',
   appName: 'BJJ Telestrator',
   webDir: 'dist',
   ios: {

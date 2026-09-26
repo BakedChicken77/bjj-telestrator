@@ -14,7 +14,7 @@ py scripts/setup_github.py --resume
 
 The script preserves the existing visibility. The fresh-private-repository instructions below are only for a new setup. Native builds, signing and release publication must be confirmed in Actions; source upload alone does not verify them.
 
-The existing Windows application remains intact. The iPhone source has not yet passed an Apple SDK build or physical-device acceptance. Native checks are mandatory CI gates, so an Apple build failure blocks a release instead of publishing an unverified archive.
+The existing Windows application remains intact. The baseline iPhone source passed native XCTest and an unsigned archive in [CI run 36136892978](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/36136892978) on 2026-09-25. Physical-device acceptance remains pending. See [current App Store release setup](APP_STORE_RELEASE.md). Native checks are mandatory CI gates, so an Apple build failure blocks a release instead of publishing an unverified archive.
 
 ## Windows 11 setup
 
@@ -44,7 +44,7 @@ Successful setup prints the actual repository and Actions URLs. `.ci-artifacts/s
 - Workflow tokens default to read-only. Only the gated publishing job has `contents: write`. PR workflows never receive Apple signing secrets.
 - Actions are pinned to full commit SHAs. Dependabot checks npm, pip, Docker, and workflow dependencies weekly. No automatic dependency merge is enabled.
 - Vulnerability alerts and automated security fixes are requested by setup. Secret scanning/advanced security availability should be reviewed in GitHub settings for your plan.
-- No open-source license has been assigned. Keep the repository private until you choose one. Existing third-party font licenses remain included.
+- No open-source license has been assigned. The repository is currently public; do not change its visibility as part of release setup. Existing third-party font licenses remain included.
 
 ## CI and automatic release behavior
 
@@ -127,7 +127,7 @@ GitHub installs Playwright Chromium and FFmpeg. Locally, see README for dependen
 - Workflow push denied: authorize the GitHub CLI for repo/workflow access using `gh auth refresh -h github.com -s repo,workflow`.
 - Protection rejected: inspect setup report and GitHub plan; CI still runs, but merge protection is not enforced until settings succeed.
 - CI queued: check Actions billing/limits. Cancel obsolete runs in the Actions UI.
-- Native compilation failure: inspect the actual Xcode log; this is an outstanding first-run gate, not evidence that the Linux browser tests verified native behavior.
+- Native compilation failure: inspect the actual Xcode log; inspect the failing run even if an earlier native build passed; Linux browser tests do not verify native behavior.
 - Test failures: browser traces and native `.xcresult` bundles are retained for 14 days. Download from the Actions run summary.
 - Signing skipped: absent `IOS_SIGNING_ENABLED` defaults to off. Signing failure blocks publication when enabled.
 - Apple upload accepted but app absent: wait for Apple's processing; check bundle/app record, agreements, role, and TestFlight group assignment.

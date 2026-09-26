@@ -2,7 +2,7 @@
 
 This repository now includes a standalone iOS application alongside the working Windows/Docker application. The iPhone app bundles the React annotation editor in Capacitor 8.5.1 and uses Swift, AVFoundation, Core Image, and Core Graphics for local files, microphone capture, and H.264/AAC MP4 rendering. It does not connect to the Windows computer or require Docker at runtime.
 
-**Release status:** the implementation and Xcode project are included. Frontend checks and touch-browser tests can run on Linux/Windows. The native Apple SDK build, simulator tests, signing, and physical iPhone acceptance must still be completed using an Apple build environment and the physical phone. GitHub-hosted Mac runners are configured for the build/tests. This archive is source code, not a signed IPA, App Store release, or TestFlight invitation. Native behavior must not be considered verified until those gates pass.
+**Release status (2026-09-26):** current `main` at `e65fd6c7f83e6e32348e235690c5fa08d07fea88` passed all seven jobs in [CI run 36136892978](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/36136892978), including native XCTest and the unsigned device archive on Xcode 26.6. Signing, TestFlight installation, and physical iPhone acceptance remain pending. The production identity is registered as `com.bakedchicken77.bjjtelestrator`; the first release targets iPhone on iOS 17 or later. See [App Store release status](docs/APP_STORE_RELEASE.md). These baseline results do not attest to subsequent release changes.
 
 ## Windows-only build and distribution route
 
@@ -22,14 +22,14 @@ You need a Mac capable of running Xcode 26 or newer, its iOS SDK/simulator compo
    npm run ios:open
    ```
 
-3. In Xcode, select the **App** project, then the **App** target → **Signing & Capabilities**. Enable automatic signing and choose your Apple Account's team. Replace `com.bjjtelestrator.app` with a unique identifier if Xcode says it is unavailable. Use the same identifier in `frontend/capacitor.config.ts`. For device tests, also set the AppTests target's team and a matching unique test bundle identifier.
+3. In Xcode, select the **App** project, then the **App** target → **Signing & Capabilities**. Enable automatic signing and choose your Apple Account's team. Use the registered production identifier `com.bakedchicken77.bjjtelestrator` and team `554YT3292A`. Keep the same identifier in `frontend/capacitor.config.ts`; do not change it for production updates. For device tests, also set the AppTests target's team and a matching unique test bundle identifier.
 4. Connect the unlocked iPhone to the Mac, accept its Trust prompt, and select the phone as Xcode's run destination. If requested, enable **Settings → Privacy & Security → Developer Mode**, restart, and confirm. Follow Xcode's device pairing/provisioning prompts. Apple's [device preparation guide](https://developer.apple.com/documentation/xcode/running-your-app-in-simulator-or-on-a-device) describes this flow.
 5. Run **Product → Test** first on an iPhone simulator and resolve any build/test failures before using real coaching projects. Then select the physical iPhone and press **Run**. Keep the original installation when updating so its project container is retained.
 6. Open **BJJ Telestrator** on the phone. It runs from its own app icon. Disconnecting the Windows computer has no effect on editing/export.
 
 A free Apple Account can use Xcode's Personal Team for personal device testing. Apple currently limits that provisioning to seven days, after which the app must be rebuilt/reinstalled. Paid Apple Developer Program membership is needed for TestFlight/App Store distribution. See Apple's [developer account overview](https://developer.apple.com/help/account/basics/about-your-developer-account). Do not delete the app merely to renew signing: deleting it deletes its local projects.
 
-If you only have Windows, follow [GitHub setup](docs/GITHUB_SETUP.md). The included workflows use GitHub-hosted macOS/Xcode machines, with optional signed IPA and TestFlight upload after Apple credentials are configured. You do not need to own a Mac for that route. Apple enrollment, credential provisioning, the first native build, and on-phone acceptance remain required; none has been claimed completed.
+If you only have Windows, follow [GitHub setup](docs/GITHUB_SETUP.md). The included workflows use GitHub-hosted macOS/Xcode machines, with optional signed IPA and TestFlight upload after Apple credentials are configured. You do not need to own a Mac for that route. Apple membership and the baseline native CI build are verified. Credential provisioning and on-phone acceptance remain required.
 
 ## On-phone workflow
 
@@ -82,7 +82,7 @@ python3 scripts/test_ios.py
 python3 scripts/test_ios.py --device <simulator-UDID>
 ```
 
-The runner invokes `xcodebuild test`, saves an `.xcresult` under `tests/generated/`, and fails clearly outside macOS. Alternatively use Product → Test in Xcode with the shared **App** scheme. The nine tests in `BJJNativeTests.swift` include native generated video/tone fixtures and actual MP4 rendering, half-open boundaries, dimensions/orientation, audio mixing/nudge, source preservation, atomic persistence/recovery, path safety, and job cancellation. **They were authored but not executed in the Linux implementation environment.**
+The runner invokes `xcodebuild test`, saves an `.xcresult` under `tests/generated/`, and fails clearly outside macOS. Alternatively use Product → Test in Xcode with the shared **App** scheme. The nine tests in `BJJNativeTests.swift` include native generated video/tone fixtures and actual MP4 rendering, half-open boundaries, dimensions/orientation, audio mixing/nudge, source preservation, atomic persistence/recovery, path safety, and job cancellation. **Native XCTest and the unsigned archive passed in the baseline GitHub macOS run linked above; physical-device acceptance remains separate.**
 
 When adding Swift source files, run `python3 scripts/configure_ios.py` to wire them into the Xcode app target. The app uses Swift Package Manager; CocoaPods is not required. Do not run `cap add ios` over the customized checked-in project.
 
@@ -116,6 +116,6 @@ Before treating this as a verified iPhone release:
 - **Microphone denied:** enable BJJ Telestrator under Settings → Privacy & Security → Microphone. Close other recording apps and retry. A failed take must restore editor controls.
 - **Video not available:** download the original from iCloud first, check free storage, and use a complete SDR H.264/HEVC MP4 or MOV. iOS supports fewer source codecs than the desktop FFmpeg build.
 - **Export stops when switching apps:** reopen BJJ Telestrator, start a new export, and leave it in the foreground. Completed exports remain in the project.
-- **Need diagnosis after a native error:** reproduce with a short non-sensitive test clip while connected to Xcode; inspect the `com.bjjtelestrator.app` media log. Do not overwrite or delete the original recording.
+- **Need diagnosis after a native error:** reproduce with a short non-sensitive test clip while connected to Xcode; inspect the `com.bakedchicken77.bjjtelestrator` media log. Do not overwrite or delete the original recording.
 
 Apple/Capacitor build and provisioning references were checked on 2026-09-10. Device acceptance is still required.
