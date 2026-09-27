@@ -124,6 +124,8 @@ function ProjectName({ project }: { project: Project }) {
 
 export default function App() {
   const nativeIOS = isNativeIOS();
+  const [expandedVideo, setExpandedVideo] = useState(false);
+  const [projectActions, setProjectActions] = useState(false);
   const project = useEditor((s) => s.project);
   const recording = useEditor((s) => s.recording);
   const editorError = useEditor((s) => s.error);
@@ -205,7 +207,7 @@ export default function App() {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
       if (
-        target.closest('input, textarea, select, [contenteditable="true"]') ||
+        target.closest('input, textarea, select, dialog, [contenteditable="true"]') ||
         browserOpen ||
         exportOpen
       )
@@ -246,6 +248,7 @@ export default function App() {
                 : state.project.settings.seekStepSec),
         );
       } else if (event.key === 'Escape') {
+        setExpandedVideo(false);
         state.select(null);
         state.setTool('select');
       }
@@ -311,7 +314,9 @@ export default function App() {
 
   const visibleError = error ?? saveError ?? editorError;
   return (
-    <div className={`app-shell mobile-${mobilePanel}`}>
+    <div
+      className={`app-shell mobile-${mobilePanel}${expandedVideo ? ' video-expanded' : ''}${projectActions ? ' project-actions-open' : ''}`}
+    >
       <header className="app-topbar">
         <div className="brand">
           <svg viewBox="0 0 32 32" aria-hidden="true">
@@ -343,6 +348,14 @@ export default function App() {
                 ? 'Saving…'
                 : 'Save failed'}
         </div>
+        <button
+          className="project-actions-toggle"
+          aria-label="Project actions"
+          aria-expanded={projectActions}
+          onClick={() => setProjectActions((value) => !value)}
+        >
+          •••
+        </button>
         <div className="topbar-actions">
           <button onClick={() => void showBrowser()} aria-label="Projects" disabled={recording}>
             Projects
@@ -385,7 +398,17 @@ export default function App() {
       )}
       {project ? (
         <>
-          <Toolbar />
+          <div className="editor-tools">
+            <Toolbar />
+            <button
+              className="expand-video"
+              aria-label={expandedVideo ? 'Exit expanded video' : 'Expand video'}
+              aria-pressed={expandedVideo}
+              onClick={() => setExpandedVideo((value) => !value)}
+            >
+              {expandedVideo ? '↙ Done' : '⛶ Expand'}
+            </button>
+          </div>
           <main className="workspace">
             <div className="editing-column">
               <VideoStage videoRef={videoRef} onSeek={seek} />

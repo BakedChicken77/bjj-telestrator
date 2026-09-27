@@ -97,6 +97,7 @@ test('phone touch drawing, trimming, undo, persistence and real MP4 export', asy
   const rotated = (await saved(page, project.projectId)).annotations[0];
   expect(rotated.geometry).toEqual(arrow.geometry);
   await page.setViewportSize({ width: 393, height: 852 });
+  await page.getByRole('button', { name: 'Project actions', exact: true }).tap();
   await page.getByRole('button', { name: 'Export video', exact: true }).tap();
   await page.getByRole('button', { name: 'Render MP4', exact: true }).tap();
   const link = page.getByRole('link', { name: /Download MP4/ }).first();
@@ -126,4 +127,80 @@ test('portrait footage stays inside the phone picture while drawing and resizing
   await noPageOverflow(page);
   await page.getByRole('button', { name: 'Properties & settings', exact: true }).tap();
   await expect(page.getByLabel('Stroke color', { exact: true })).toBeVisible();
+});
+
+async function reachable(page: Page, label: string) {
+  const button = page.getByRole('button', { name: label, exact: true });
+  await expect(button).toBeVisible();
+  expect(await button.evaluate(element => {
+    const r = element.getBoundingClientRect();
+    const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+    return r.width >= 44 && r.height >= 44 && r.top >= 0 && r.bottom <= innerHeight &&
+      r.left >= 0 && r.right <= innerWidth && !!hit && element.contains(hit);
+  })).toBe(true);
+  await button.click({ trial: true });
+}
+
+test('audio controls remain dismissible above editor chrome at reported and small phone sizes', async ({ page }) => {
+  const project = await openVideo(page, 'acceptance.mp4');
+  // Populate a real long list of stored recordings; no synthetic DOM layout.
+  const tone = execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-f', 'wav', 'pipe:1']);
+  for (let i = 0; i < 8; i++) {
+    const response = await page.request.post(`/api/projects/${project.projectId}/voiceovers`, {
+      multipart: { startSec: String(i), file: { name: 'take.wav', mimeType: 'audio/wav', buffer: tone } },
+    });
+    expect(response.ok(), await response.text()).toBeTruthy();
+    project.voiceovers.push(await response.json());
+  }
+  expect((await page.request.put(`/api/projects/${project.projectId}`, { data: project })).ok()).toBeTruthy();
+  await page.reload();
+  for (const size of [{ width: 402, height: 874 }, { width: 874, height: 402 }, { width: 375, height: 667 }]) {
+    await page.setViewportSize(size);
+    await page.getByRole('button', { name: 'Audio & voiceovers', exact: true }).tap();
+    const dialog = page.getByRole('dialog', { name: 'Audio & voiceovers', exact: true });
+    await expect(dialog).toBeVisible();
+    await reachable(page, 'Close audio controls');
+    await dialog.locator('.audio-drawer-body').evaluate(e => { e.scrollTop = e.scrollHeight; });
+    await expect(page.getByLabel('Voiceover 8 gain', { exact: true })).toBeInViewport();
+    await reachable(page, 'Close audio controls');
+    await page.getByRole('button', { name: 'Close audio controls', exact: true }).tap();
+    await expect(dialog).not.toBeVisible();
+    await expect(page.getByRole('button', { name: 'Audio & voiceovers', exact: true })).toBeFocused();
+    await noPageOverflow(page);
+  }
+  await page.getByRole('button', { name: 'Audio & voiceovers', exact: true }).tap();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: 'Audio & voiceovers', exact: true })).not.toBeVisible();
+  expect((await saved(page, project.projectId)).voiceovers).toHaveLength(8);
+});
+
+test('expanded video enlarges portrait footage and preserves canvas, playback position and undo through rotation', async ({ page }, info) => {
+  await page.setViewportSize({ width: 402, height: 874 });
+  const project = await openVideo(page, 'portrait.mp4');
+  await seek(page, .5);
+  await draw(page, 'Arrow');
+  await expect.poll(async () => (await saved(page, project.projectId)).annotations.length).toBe(1);
+  const before = (await saved(page, project.projectId)).annotations[0];
+  const video = await page.locator('video').elementHandle();
+  const small = await page.getByTestId('video-picture').boundingBox();
+  await page.getByRole('button', { name: 'Expand video', exact: true }).tap();
+  await expect.poll(async () => (await page.getByTestId('video-picture').boundingBox())!.height).toBeGreaterThan(small!.height * 1.4);
+  await reachable(page, 'Exit expanded video');
+  await page.screenshot({ path: info.outputPath('expanded-portrait.png') });
+  await draw(page, 'Ellipse');
+  await expect.poll(async () => (await saved(page, project.projectId)).annotations.length).toBe(2);
+  await page.setViewportSize({ width: 874, height: 402 });
+  await reachable(page, 'Exit expanded video');
+  await expect(page.getByRole('button', { name: 'Record voiceover', exact: true })).toBeInViewport();
+  await page.screenshot({ path: info.outputPath('expanded-landscape.png') });
+  await page.setViewportSize({ width: 402, height: 874 });
+  await page.getByRole('button', { name: 'Exit expanded video', exact: true }).tap();
+  expect(await video!.evaluate(v => v === document.querySelector('video'))).toBe(true);
+  expect(await page.locator('video').evaluate((v: HTMLVideoElement) => v.currentTime)).toBeCloseTo(.5, 2);
+  await page.getByRole('button', { name: 'Undo', exact: true }).tap();
+  await expect.poll(async () => (await saved(page, project.projectId)).annotations.length).toBe(1);
+  expect((await saved(page, project.projectId)).annotations[0].geometry).toEqual(before.geometry);
+  await page.getByRole('button', { name: 'Redo', exact: true }).tap();
+  await expect.poll(async () => (await saved(page, project.projectId)).annotations.length).toBe(2);
+  await noPageOverflow(page);
 });

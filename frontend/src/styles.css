@@ -71,25 +71,43 @@
   min-height: 26px;
   padding: 4px 6px;
 }
+/* A portaled modal dialog uses the browser top layer, outside editor clipping. */
 .audio-drawer {
-  position: absolute;
-  bottom: 100%;
-  left: 12px;
-  right: 12px;
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(760px, calc(100% - 32px));
+  height: min(620px, calc(100dvh - 32px));
+  max-width: none;
+  max-height: none;
   background: #16222c;
+  color: var(--text);
   border: 1px solid #3a4c5a;
-  border-radius: 8px;
-  box-shadow: 0 -12px 40px #0007;
-  padding: 14px;
-  max-height: 300px;
-  overflow: auto;
-  z-index: 5;
+  border-radius: 12px;
+  padding: 0;
+  overflow: hidden;
+}
+.audio-drawer[open] {
+  display: flex;
+  flex-direction: column;
+}
+.audio-drawer::backdrop {
+  background: #0009;
 }
 .audio-drawer-heading {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 14px;
-  margin-bottom: 12px;
+  padding: 8px 14px;
+  border-bottom: 1px solid #344450;
+}
+.audio-drawer-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px;
 }
 .audio-drawer-heading strong {
   font-size: 12px;
@@ -103,7 +121,8 @@
   border: 0;
   background: transparent;
   font-size: 18px;
-  min-height: 22px;
+  min-height: 44px;
+  min-width: 44px;
   padding: 0 4px;
 }
 .audio-drawer fieldset {

@@ -21,13 +21,14 @@ export interface BJJNativePlugin {
     clipId?: string;
   }): Promise<{ url: string }>;
   shareExport(options: { jobId: string }): Promise<{ completed: boolean }>;
-  prepareRecording(options: { projectId: string }): Promise<void>;
-  startRecording(options: { startSec: number }): Promise<{ elapsedSec: number }>;
-  stopRecording(options: { startSec?: number }): Promise<{ clip?: unknown }>;
+  prepareRecording(options: { projectId: string; sessionId: string }): Promise<void>;
+  startRecording(options: { startSec: number; sessionId: string }): Promise<{ elapsedSec: number }>;
+  stopRecording(options: { startSec?: number; sessionId: string }): Promise<{ clip?: unknown }>;
   addListener(
     event: 'recordingFinished',
     callback: (event: {
       projectId: string;
+      sessionId: string;
       clip?: unknown;
       reason: string;
       error?: string;
@@ -86,8 +87,8 @@ export const nativeAPI = {
   export: async (projectId: string) => (await nativeBridge.createExport({ projectId })).job,
   exportJob: async (jobId: string) => (await nativeBridge.getExport({ jobId })).job,
   cancelExport: async (jobId: string) => (await nativeBridge.cancelExport({ jobId })).job,
-  stopRecording: async (startSec?: number): Promise<Voiceover | null> => {
-    const result = await nativeBridge.stopRecording({ startSec });
+  stopRecording: async (sessionId: string, startSec?: number): Promise<Voiceover | null> => {
+    const result = await nativeBridge.stopRecording({ sessionId, startSec });
     return result.clip ? voiceoverSchema.parse(result.clip) : null;
   },
 };

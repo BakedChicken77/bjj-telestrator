@@ -36,6 +36,23 @@ import CryptoKit
              "annotations": [annotation()], "voiceovers": [BJJJSON]()])
         return try store.save(result, creating: true)
     }
+    func testRecordingLifecycleFencesCancelledPermissionAndStaleCalls() throws {
+        var state = BJJRecordingLifecycle()
+        try state.begin("first")
+        XCTAssertThrowsError(try state.begin("overlap"))
+        state.reset()
+        try state.begin("second")
+        XCTAssertThrowsError(try state.advance("first", from: .preparing, to: .prepared))
+        XCTAssertEqual(state.phase, .preparing)
+        try state.advance("second", from: .preparing, to: .prepared)
+        try state.advance("second", from: .prepared, to: .recording)
+        try state.advance("second", from: .recording, to: .stopping)
+        XCTAssertThrowsError(try state.advance("second", from: .recording, to: .stopping))
+        state.reset()
+        XCTAssertEqual(state.phase, .idle)
+        XCTAssertNil(state.sessionID)
+    }
+
     func testBridgeRegistersMediaHandlerOnFreshConfiguration() throws {
         let controller = BJJViewController()
         controller.loadViewIfNeeded()
