@@ -3,8 +3,8 @@ import UniformTypeIdentifiers
 
 struct BJJNativeHome: View {
     @StateObject private var library: BJJNativeLibrary
-    init(library: BJJNativeLibrary = BJJNativeLibrary()) {
-        _library = StateObject(wrappedValue: library)
+    init(library: BJJNativeLibrary? = nil) {
+        _library = StateObject(wrappedValue: library ?? BJJNativeLibrary())
     }
     @Environment(\.scenePhase) private var scenePhase
     @State private var search = ""
