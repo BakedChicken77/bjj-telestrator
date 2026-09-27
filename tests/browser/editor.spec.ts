@@ -674,6 +674,7 @@ test("real microphone clips persist, preview in sync, rerecord, and mix into AAC
   expect(Math.abs(saved.voiceovers[0].startSec - 2)).toBeLessThanOrEqual(0.1);
   expect(Math.abs(saved.voiceovers[1].startSec - 8)).toBeLessThanOrEqual(0.1);
   const deletedId = saved.voiceovers[1].id;
+  await page.getByRole("button", { name: "Audio & voiceovers", exact: true }).click();
   await page
     .getByRole("button", { name: "Delete voiceover 2", exact: true })
     .click();
@@ -683,6 +684,7 @@ test("real microphone clips persist, preview in sync, rerecord, and mix into AAC
         (await savedProject(page, project.projectId)).voiceovers.length,
     )
     .toBe(1);
+  await page.getByRole("button", { name: "Close audio controls", exact: true }).click();
   await page.getByRole("button", { name: "Undo", exact: true }).click();
   await expect
     .poll(
@@ -701,6 +703,7 @@ test("real microphone clips persist, preview in sync, rerecord, and mix into AAC
   saved = await savedProject(page, project.projectId);
   expect(saved.voiceovers[1].id).not.toBe(deletedId);
 
+  await page.getByRole("button", { name: "Audio & voiceovers", exact: true }).click();
   await field(page, "Original audio gain", "0.25");
   await page.getByLabel("Mute original audio", { exact: true }).check();
   await field(page, "Voiceover master gain", "1");

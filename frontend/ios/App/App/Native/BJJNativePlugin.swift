@@ -4,6 +4,26 @@ import AVFoundation
 import PhotosUI
 import UniformTypeIdentifiers
 import UIKit
+import OSLog
+
+// Value-only lifecycle: all plugin transitions run on MainActor. Tokens fence delayed
+// permission continuations, bridge calls and AVAudioRecorder delegate callbacks.
+struct BJJRecordingLifecycle {
+    enum Phase: String { case idle, preparing, prepared, recording, stopping }
+    private(set) var phase: Phase = .idle
+    private(set) var sessionID: String?
+    mutating func begin(_ id: String) throws {
+        guard phase == .idle else { throw BJJError.invalid("A recording is already active.") }
+        sessionID = id; phase = .preparing
+    }
+    mutating func advance(_ id: String, from: Phase, to: Phase) throws {
+        guard sessionID == id, phase == from else {
+            throw BJJError.invalid("Recording was interrupted. Tap Record voiceover to retry.")
+        }
+        phase = to
+    }
+    mutating func reset() { phase = .idle; sessionID = nil }
+}
 
 @objc(BJJNativePlugin)
 public class BJJNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDelegate, PHPickerViewControllerDelegate, AVAudioRecorderDelegate {
@@ -23,6 +43,12 @@ public class BJJNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDeleg
     private var recordingURL: URL?
     private var recordingStart: Double?
     private var lastClip: BJJJSON?
+    private var lastSessionID: String?
+    private var lifecycle = BJJRecordingLifecycle()
+    private let recordingLog = Logger(subsystem: "com.bakedchicken77.bjjtelestrator", category: "recording")
+    @MainActor private func traceRecording(_ action: String) {
+        recordingLog.info("\(action, privacy: .public) session=\(self.lifecycle.sessionID ?? "none", privacy: .public) state=\(self.lifecycle.phase.rawValue, privacy: .public)")
+    }
     private var observations: [NSObjectProtocol] = []
 
     override public func load() {
@@ -108,7 +134,7 @@ public class BJJNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDeleg
     }
     @objc func importVideo(_ call: CAPPluginCall) {
         DispatchQueue.main.async { [self] in
-            guard pickerCall == nil, recorder == nil, let host = bridge?.viewController else {
+            guard pickerCall == nil, lifecycle.phase == .idle, let host = bridge?.viewController else {
                 call.reject("Finish the current import or recording first."); return
             }
             pickerCall = call
@@ -171,54 +197,96 @@ public class BJJNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDeleg
     }
     @objc func prepareRecording(_ call: CAPPluginCall) {
         perform(call) { [self] service in
-            guard recorder == nil else { throw BJJError.invalid("A recording is already active.") }
+            let sessionID = try id(call, "sessionId")
             let projectId = try id(call)
             let project = try service.store.load(projectId)
             guard project.voiceovers.count < 200 else { throw BJJError.invalid("This project already has 200 voiceover clips.") }
-            let allowed = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
-                AVAudioSession.sharedInstance().requestRecordPermission { continuation.resume(returning: $0) }
+            try lifecycle.begin(sessionID)
+            recordingProject = projectId; lastClip = nil; lastSessionID = nil
+            traceRecording("permission requested")
+            do {
+                let allowed = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+                    AVAudioSession.sharedInstance().requestRecordPermission { continuation.resume(returning: $0) }
+                }
+                guard lifecycle.sessionID == sessionID else { throw BJJError.invalid("Recording was cancelled. Tap Record voiceover to retry.") }
+                guard allowed else { throw BJJError.invalid("Microphone access is denied. Allow BJJ Telestrator in iPhone Settings → Privacy & Security → Microphone.") }
+                try service.store.checkSpace(required: 100_000_000)
+                // Permission/storage only. WKWebView starts playback before we activate
+                // capture, so playback cannot invalidate a pre-created recorder.
+                try lifecycle.advance(sessionID, from: .preparing, to: .prepared)
+                traceRecording("prepared")
+                return [:]
+            } catch {
+                if lifecycle.sessionID == sessionID { clearRecording() }
+                throw error
             }
-            guard allowed else { throw BJJError.invalid("Microphone access is denied. Allow BJJ Telestrator in iPhone Settings → Privacy & Security → Microphone.") }
-            try service.store.checkSpace(required: 100_000_000)
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
-            try session.setPreferredSampleRate(48000); try session.setActive(true)
-            let clipId = UUID().uuidString.lowercased()
-            let url = try service.store.directory(projectId).appendingPathComponent("voiceover/\(clipId).wav")
-            let recorder = try AVAudioRecorder(url: url, settings: [AVFormatIDKey: kAudioFormatLinearPCM,
-                AVSampleRateKey: 48000, AVNumberOfChannelsKey: 1, AVLinearPCMBitDepthKey: 16,
-                AVLinearPCMIsFloatKey: false, AVLinearPCMIsBigEndianKey: false])
-            recorder.delegate = self
-            guard recorder.prepareToRecord() else { throw BJJError.invalid("The iPhone microphone could not be prepared.") }
-            self.recorder = recorder; recordingProject = projectId; recordingID = clipId; recordingURL = url
-            recordingStart = nil; lastClip = nil
-            return [:]
         }
     }
     @objc func startRecording(_ call: CAPPluginCall) {
         perform(call) { [self] service in
-            guard let recorder, let projectId = recordingProject else { throw BJJError.invalid("Prepare the microphone before recording.") }
-            let start = try BJJValidate.number(call.getDouble("startSec"), "recording start", 0...(service.store.load(projectId).duration - 0.05))
-            let remaining = try service.store.load(projectId).duration - start
-            guard !recorder.isRecording, recorder.record(forDuration: remaining) else { throw BJJError.invalid("The microphone could not start recording.") }
-            recordingStart = start
-            return ["elapsedSec": recorder.currentTime]
+            let sessionID = try id(call, "sessionId")
+            guard lifecycle.sessionID == sessionID, lifecycle.phase == .prepared,
+                  let projectId = recordingProject else {
+                throw BJJError.invalid("Recording was interrupted. Tap Record voiceover to retry.")
+            }
+            do {
+                let duration = try service.store.load(projectId).duration
+                let start = try BJJValidate.number(call.getDouble("startSec"), "recording start", 0...(duration - 0.05))
+                let session = AVAudioSession.sharedInstance()
+                traceRecording("activating capture after playback")
+                try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth, .mixWithOthers])
+                try session.setPreferredSampleRate(48000); try session.setActive(true)
+                let clipId = UUID().uuidString.lowercased()
+                let url = try service.store.directory(projectId).appendingPathComponent("voiceover/\(clipId).wav")
+                recordingID = clipId; recordingURL = url
+                let recorder = try AVAudioRecorder(url: url, settings: [AVFormatIDKey: kAudioFormatLinearPCM,
+                    AVSampleRateKey: 48000, AVNumberOfChannelsKey: 1, AVLinearPCMBitDepthKey: 16,
+                    AVLinearPCMIsFloatKey: false, AVLinearPCMIsBigEndianKey: false])
+                self.recorder = recorder; recorder.delegate = self
+                guard recorder.prepareToRecord(), recorder.record(forDuration: duration - start) else {
+                    throw BJJError.invalid("The microphone could not start recording. Tap Record voiceover to retry.")
+                }
+                recordingStart = start
+                try lifecycle.advance(sessionID, from: .prepared, to: .recording)
+                traceRecording("capture started")
+                return ["elapsedSec": recorder.currentTime]
+            } catch {
+                let failedURL = recordingURL
+                clearRecording()
+                if let failedURL { try? FileManager.default.removeItem(at: failedURL) }
+                throw error
+            }
         }
     }
     @objc func stopRecording(_ call: CAPPluginCall) {
         perform(call) { [self] _ in
+            let sessionID = try id(call, "sessionId")
+            guard lifecycle.sessionID == sessionID else {
+                return lastSessionID == sessionID ? (lastClip.map { ["clip": $0] } ?? [:]) : [:]
+            }
             let clip = try finishRecording(start: call.getDouble("startSec"))
             return clip.map { ["clip": $0] } ?? [:]
         }
     }
+    @MainActor private func clearRecording() {
+        recorder?.delegate = nil
+        recorder?.stop()
+        recorder = nil; recordingProject = nil; recordingID = nil; recordingURL = nil; recordingStart = nil
+        lifecycle.reset()
+        // Mix with the WebKit playback session instead of interrupting it on teardown.
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback, options: [.mixWithOthers])
+        try? AVAudioSession.sharedInstance().setActive(true)
+    }
     @MainActor private func finishRecording(start: Double? = nil) throws -> BJJJSON? {
-        guard let recorder, let projectId = recordingProject, let clipId = recordingID, let url = recordingURL, let service else { return lastClip }
+        guard let sessionID = lifecycle.sessionID else { return nil }
+        lastSessionID = sessionID
+        traceRecording("finishing")
+        defer { clearRecording() }
+        guard let recorder, let projectId = recordingProject, let clipId = recordingID,
+              let url = recordingURL, let service else { return nil }
+        try lifecycle.advance(sessionID, from: .recording, to: .stopping)
+        recorder.delegate = nil
         recorder.stop()
-        defer {
-            self.recorder = nil; recordingProject = nil; recordingID = nil; recordingURL = nil; recordingStart = nil
-            try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
-            try? AVAudioSession.sharedInstance().setActive(true)
-        }
         guard let recordingStart else { try? FileManager.default.removeItem(at: url); return nil }
         let project = try service.store.load(projectId)
         let actualStart = start ?? recordingStart
@@ -234,23 +302,30 @@ public class BJJNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDeleg
         lastClip = clip
         return clip
     }
-    private func interrupted(_ reason: String) {
+    private func interrupted(_ reason: String, source: AVAudioRecorder? = nil) {
+        // Capture the token before scheduling, so a queued old notification cannot
+        // finish a new session. NotificationCenter delivers these on the main queue.
+        let sessionID = lifecycle.sessionID
         Task { @MainActor in
-            guard let projectId = recordingProject else { return }
+            guard let sessionID, lifecycle.sessionID == sessionID,
+                  source == nil || source === recorder, let projectId = recordingProject else { return }
+            traceRecording("interrupted")
             do {
                 let clip = try finishRecording()
-                var event: BJJJSON = ["projectId": projectId, "reason": reason]
+                var event: BJJJSON = ["projectId": projectId, "sessionId": sessionID,
+                    "reason": clip == nil ? "Recording interrupted before a clip could be saved. Tap Record voiceover to retry." : reason]
                 if let clip { event["clip"] = clip }
-                notifyListeners("recordingFinished", data: event, retainUntilConsumed: true)
+                notifyListeners("recordingFinished", data: event)
             } catch {
-                notifyListeners("recordingFinished", data: ["projectId": projectId, "reason": reason, "error": error.localizedDescription], retainUntilConsumed: true)
+                notifyListeners("recordingFinished", data: ["projectId": projectId, "sessionId": sessionID,
+                    "reason": "Recording stopped. The clip could not be saved.", "error": error.localizedDescription])
             }
         }
     }
     public func audioRecorderDidFinishRecording(_ recorder: AVAudioRecorder, successfully flag: Bool) {
-        interrupted(flag ? "Recording saved at the end of the video." : "Recording stopped after a microphone error; any readable audio was saved.")
+        interrupted(flag ? "Recording saved at the end of the video." : "Recording stopped after a microphone error; readable audio was saved.", source: recorder)
     }
     public func audioRecorderEncodeErrorDidOccur(_ recorder: AVAudioRecorder, error: Error?) {
-        interrupted(error?.localizedDescription ?? "The microphone encountered a recording error; any readable audio was saved.")
+        interrupted("Recording stopped after a microphone error; readable audio was saved.", source: recorder)
     }
 }

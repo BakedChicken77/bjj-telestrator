@@ -276,20 +276,11 @@
     font-size: 11px;
   }
   .audio-drawer {
-    position: fixed;
-    top: max(16px, env(safe-area-inset-top));
-    bottom: max(16px, env(safe-area-inset-bottom));
-    left: max(8px, env(safe-area-inset-left));
-    right: max(8px, env(safe-area-inset-right));
-    max-height: none;
-    z-index: 150;
-  }
-  .audio-drawer-heading {
-    position: sticky;
-    top: -14px;
-    padding: 12px 0;
-    background: #16222c;
-    z-index: 1;
+    inset: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right))
+      max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+    width: auto;
+    height: auto;
+    margin: 0;
   }
   .audio-drawer-heading span {
     display: none;
@@ -400,5 +391,100 @@
     order: 0;
     flex: 1;
     width: auto;
+  }
+}
+
+.project-actions-toggle {
+  display: none;
+}
+.editor-tools {
+  display: flex;
+  flex-shrink: 0;
+  min-width: 0;
+  align-items: center;
+}
+.editor-tools .annotation-toolbar {
+  flex: 1;
+  min-width: 0;
+}
+.expand-video {
+  flex-shrink: 0;
+  min-height: 44px;
+  margin: 4px 8px 4px 0;
+}
+.video-expanded .app-topbar,
+.video-expanded .mobile-panel-tabs,
+.video-expanded .timeline-lock-region,
+.video-expanded .inspector-lock-region,
+.video-expanded .statusbar {
+  display: none;
+}
+.video-expanded .workspace {
+  display: flex;
+  overflow: hidden;
+}
+.video-expanded .editing-column {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  flex-direction: column;
+}
+.video-expanded .video-stage {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+  padding: 4px 8px 0;
+}
+.video-expanded .video-stage__viewport {
+  min-height: 0;
+}
+@media (max-width: 999px) {
+  .project-actions-toggle {
+    display: block;
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .topbar-actions {
+    display: none;
+  }
+  .project-actions-open .topbar-actions {
+    display: flex;
+  }
+  .app-topbar {
+    min-height: 52px;
+    padding: 2px 8px;
+  }
+  .video-stage__controls {
+    min-height: 84px;
+  }
+  .expand-video {
+    font-size: 11px;
+    padding: 6px;
+  }
+  .video-expanded .video-stage__volume {
+    display: none;
+  }
+}
+@media (max-width: 999px) and (orientation: landscape) {
+  .video-expanded .video-stage__controls {
+    min-height: 44px;
+    flex-wrap: nowrap;
+  }
+  .video-expanded .voiceover-bar {
+    flex-wrap: nowrap;
+    min-height: 44px;
+    padding: 0 8px;
+  }
+  .video-expanded .recording-status {
+    flex: 1;
+    order: 0;
+    padding: 0;
+  }
+  .video-expanded .annotation-toolbar {
+    height: 48px;
+  }
+  .video-expanded .tool-button {
+    height: 44px;
   }
 }
