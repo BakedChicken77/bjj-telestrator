@@ -60,6 +60,16 @@ import SwiftUI
         XCTAssertEqual(retried.project.voiceovers.count, 1)
         _ = try service.cancel(retry.jobId)
         XCTAssertThrowsError(try BJJExportOptions(start: 2, end: 1).validate(saved))
+        let editor = try BJJNativeEditorSession(project: store.load(saved.id), store: store, service: service, preferences: nil)
+        defer { editor.close() }
+        let pending = Task { await editor.export() }
+        while !editor.exporting { await Task.yield() }
+        editor.cancelExport()
+        await pending.value
+        XCTAssertNil(editor.exportURL)
+        XCTAssertFalse(editor.exporting)
+        XCTAssertNil(editor.error)
+
     }
     func testNativeTakeEditsHistoryAndReopenPreserveAssets() throws {
         let initial = try project(); _ = try clip(initial)

@@ -197,6 +197,7 @@ struct BJJNativeTransportState: Codable {
     private var seeking = false
     private let preferences: UserDefaults?
     private var service: BJJService?
+    private var exportCancelled = false
     private var jobID: String?
     private var closed = false
     private var seekGeneration = 0
@@ -411,7 +412,7 @@ struct BJJNativeTransportState: Codable {
     }
     func export(options: BJJExportOptions? = nil, retry: String? = nil) async {
         guard !exporting, !recording, !preparingAudio else { return }
-        cancelCueEdit(); pause(); exporting = true; exportProgress = 0
+        cancelCueEdit(); pause(); exporting = true; exportProgress = 0; exportCancelled = false
         defer { exporting = false; jobID = nil }
         do {
             if service == nil { service = try BJJService(store: store) }
@@ -421,6 +422,7 @@ struct BJJNativeTransportState: Codable {
             else { job = try await service.createExport(id, expectedRevision: project.revision, options: options) }
             retryExportID = job.jobId
             jobID = job.jobId
+            if exportCancelled || closed { _ = try service.cancel(job.jobId); return }
             while !Task.isCancelled, !closed {
                 let current = try service.job(job.jobId)
                 exportProgress = current.progress / 100
@@ -439,7 +441,7 @@ struct BJJNativeTransportState: Codable {
         if let completedExportID { service?.releaseExportFile(completedExportID) }
         completedExportID = nil; exportURL = nil; shareURL = nil
     }
-    func cancelExport() { if let jobID { _ = try? service?.cancel(jobID) } }
+    func cancelExport() { exportCancelled = true; if let jobID { _ = try? service?.cancel(jobID) } }
     func close() {
         guard !closed else { return }
         capture.stop(); closed = true; previewGeneration += 1; cancelCueEdit(); pause(); cancelExport(); releaseExport()
