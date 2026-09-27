@@ -47,6 +47,9 @@
 		7B0CF31F2A1C3570B74F9D7A = {isa = PBXBuildFile; fileRef = 1DFB0AFA0AA77066C87FF6F4;};
 		1C8275047CF66B18D8EE310E = {isa = PBXBuildFile; fileRef = F28654DED024100C9118034F;};
 		CFC64C6D4ED3AEE321DA6922 = {isa = PBXBuildFile; fileRef = A845FF77C49C4599B81EBFFC;};
+		5BAE3C5C353660CB7FE38A72 = {isa = PBXBuildFile; fileRef = AF7A1BF13FC4E6190F3CB0A1;};
+		609F74403921381E31ABE5B2 = {isa = PBXBuildFile; fileRef = 379EB574CF39B1120FE83A2D;};
+		2753839C98D16870DA32446D = {isa = PBXBuildFile; fileRef = 6065111AB0140BA0D6389275;};
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -92,6 +95,9 @@
 		1DFB0AFA0AA77066C87FF6F4 = {isa = PBXFileReference; lastKnownFileType = folder; path = NativeResources; sourceTree = "<group>";};
 		F28654DED024100C9118034F = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJCueEditing.swift"; sourceTree = "<group>";};
 		A845FF77C49C4599B81EBFFC = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJCueProperties.swift"; sourceTree = "<group>";};
+		AF7A1BF13FC4E6190F3CB0A1 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJAudioComposition.swift"; sourceTree = "<group>";};
+		379EB574CF39B1120FE83A2D = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJNativeAudioScreen.swift"; sourceTree = "<group>";};
+		6065111AB0140BA0D6389275 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJNativeRecording.swift"; sourceTree = "<group>";};
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -130,6 +136,9 @@
 		504EC3061FED79650016851F /* App */ = {
 			isa = PBXGroup;
 			children = (
+				6065111AB0140BA0D6389275,
+				379EB574CF39B1120FE83A2D,
+				AF7A1BF13FC4E6190F3CB0A1,
 				A845FF77C49C4599B81EBFFC,
 				F28654DED024100C9118034F,
 				1DFB0AFA0AA77066C87FF6F4,
@@ -266,6 +275,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2753839C98D16870DA32446D,
+				609F74403921381E31ABE5B2,
+				5BAE3C5C353660CB7FE38A72,
 				CFC64C6D4ED3AEE321DA6922,
 				1C8275047CF66B18D8EE310E,
 				F23B42DCBEFCC563E6529527,
@@ -438,7 +450,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.0.2;
+				MARKETING_VERSION = 2.0.3;
 				OTHER_SWIFT_FLAGS = "$(inherited) \"-D\" \"COCOAPODS\" \"-DDEBUG\"";
 				PRODUCT_BUNDLE_IDENTIFIER = com.bakedchicken77.bjjtelestrator;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -460,7 +472,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.0.2;
+				MARKETING_VERSION = 2.0.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.bakedchicken77.bjjtelestrator;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";

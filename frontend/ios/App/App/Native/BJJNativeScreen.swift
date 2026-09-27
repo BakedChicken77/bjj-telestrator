@@ -19,6 +19,9 @@ struct BJJNativeEditorScreen: View {
     @ObservedObject var session: BJJNativeEditorSession
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @State private var showAudio = false
+    @State private var showExport = false
+    @State private var confirmRecord = false
     @State private var showAnnotations = false
     @State private var showText = false
     @State private var showProperties = false
@@ -33,9 +36,9 @@ struct BJJNativeEditorScreen: View {
                         .background(.black)
                         .accessibilityLabel("Video and annotations")
                         .accessibilityHint("Choose Draw to add or select cues. Use Cues for accessible selection and properties.")
-                    if !landscape { filmstrip }
+                    if !landscape { filmstrip.disabled(session.recording || session.preparingAudio) }
                     if session.drawing && !landscape { cueStrip }
-                    transport
+                    transport.disabled(session.recording || session.preparingAudio)
                     controls
                 }.frame(width: geometry.size.width, height: geometry.size.height)
             }
@@ -44,14 +47,22 @@ struct BJJNativeEditorScreen: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Done") { session.close(); dismiss() }.disabled(session.exporting)
+                    Button("Done") { session.close(); dismiss() }.disabled(session.exporting || session.recording || session.preparingAudio)
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button("Cues", systemImage: "list.bullet") { session.pause(); showAnnotations = true }
-                    Button("Export", systemImage: "square.and.arrow.up") { Task { await session.export() } }
-                        .disabled(session.exporting)
+                    Button("Export", systemImage: "square.and.arrow.up") { session.pause(); showExport = true }
+                        .disabled(session.exporting || session.recording || session.preparingAudio)
                 }
             }
+            .sheet(isPresented: $showAudio) { BJJNativeAudioScreen(session: session) }
+            .sheet(isPresented: $showExport) { BJJNativeExportScreen(session: session) }
+            .sheet(isPresented: Binding(get: { session.exportURL != nil }, set: { if !$0 { session.releaseExport() } })) {
+                if let url = session.exportURL { BJJNativeExportPreview(url: url) }
+            }
+            .confirmationDialog("Record narration at 1×", isPresented: $confirmRecord, titleVisibility: .visible) {
+                Button("Start recording") { Task { await session.startRecording() } }
+            } message: { Text("Use headphones to avoid recording the speaker. Bluetooth can switch to its microphone audio quality. Playback begins before capture, and recording stops if the route changes.") }
             .sheet(isPresented: $showAnnotations) { annotationList }
             .sheet(isPresented: $showProperties) {
                 if let cue = session.selectedCue { BJJCueProperties(session: session, cue: cue) }
@@ -79,13 +90,14 @@ struct BJJNativeEditorScreen: View {
                     VStack(spacing: 16) {
                         Text("Exporting MP4").font(.headline)
                         ProgressView(value: session.exportProgress)
-                        Text("Keep the app open. Your saved copy is being rendered with its existing audio.").font(.footnote)
+                        Text("Keep the app open. Your saved review and audio mix are being rendered.").font(.footnote)
                         Button("Cancel export", role: .cancel) { session.cancelExport() }
                     }.padding(24).frame(maxWidth: 320).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
                 }
             }
-            .task { await session.prepareThumbnails() }
-            .onChange(of: scenePhase) { _, phase in if phase != .active { session.cancelCueEdit(); session.pause() } }
+            .task { await session.prepareThumbnails(); await session.prepareAudio() }
+            .onChange(of: scenePhase) { _, phase in if phase == .background { session.stopRecording(); session.cancelCueEdit(); session.pause() } else if phase != .active && !session.recording { session.cancelCueEdit(); session.pause() } }
+            .interactiveDismissDisabled(session.recording || session.exporting || session.preparingAudio)
             .onDisappear { session.close() }
         }
     }
@@ -117,16 +129,32 @@ struct BJJNativeEditorScreen: View {
     }
     private var controls: some View {
         VStack(spacing: 8) {
+            if session.recording {
+                HStack {
+                    Label("Recording at 1×", systemImage: "mic.fill").foregroundStyle(.red)
+                    ProgressView(value: Double(max(0, min(1, (session.recordingLevel + 60) / 60))))
+                    Button("Stop", systemImage: "stop.fill") { session.stopRecording() }.buttonStyle(.borderedProminent).tint(.red)
+                }
+                Text(session.audioRoute).font(.caption).foregroundStyle(.secondary)
+            } else {
+                HStack {
+                    Button("Record", systemImage: "mic.fill") { session.pause(); confirmRecord = true }
+                    Spacer()
+                    Button("Narration", systemImage: "waveform") { session.pause(); showAudio = true }
+                }.frame(minHeight: 44).disabled(session.preparingAudio || session.exporting)
+                if session.preparingAudio { ProgressView("Preparing audio preview…") }
+                if let notice = session.notice { Text(notice).font(.caption).foregroundStyle(.secondary) }
+            }
             HStack(spacing: 12) {
                 Picker("Editor mode", selection: $session.drawing) {
                     Text("Review").tag(false)
                     Text("Draw").tag(true)
-                }.pickerStyle(.segmented).frame(maxWidth: 240)
+                }.pickerStyle(.segmented).frame(maxWidth: 240).disabled(session.recording || session.preparingAudio)
                 Spacer(minLength: 0)
                 Button("Undo", systemImage: "arrow.uturn.backward") { session.history(redo: false) }
-                    .disabled(session.undoCount == 0).labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44)
+                    .disabled(session.undoCount == 0 || session.recording || session.preparingAudio).labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44)
                 Button("Redo", systemImage: "arrow.uturn.forward") { session.history(redo: true) }
-                    .disabled(session.redoCount == 0).labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44)
+                    .disabled(session.redoCount == 0 || session.recording || session.preparingAudio).labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44)
             }
             if session.drawing {
                 HStack {
@@ -161,7 +189,7 @@ struct BJJNativeEditorScreen: View {
                     }
                 }
             }
-            if !session.drawing {
+            if !session.drawing && !session.recording {
                 HStack {
                     Menu {
                         ForEach([Float(0.25), 0.5, 1, 2], id: \.self) { speed in
@@ -178,10 +206,7 @@ struct BJJNativeEditorScreen: View {
                     } label: { Label(session.loopEnabled ? "Loop on" : "Loop", systemImage: "repeat").frame(minHeight: 44) }
                 }
             }
-            if !session.project.voiceovers.isEmpty {
-                Text("Preview plays source audio. Existing narration is preserved in exports; native narration playback is the next milestone.")
-                    .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            }
+
         }.padding(.horizontal, 12).padding(.bottom, 8).background(.bar).disabled(session.exporting)
     }
     private var cueStrip: some View {

@@ -13,6 +13,77 @@ import SwiftUI
         store = try BJJStore(root: root)
     }
     override func tearDownWithError() throws { try? FileManager.default.removeItem(at: root) }
+    func testNativeNarrationPreviewRangeExportAndImmutableRetry() async throws {
+        executionTimeAllowance = 300
+        let service = try BJJService(store: store)
+        let imported = try await service.importFile(try await sourceVideo(audio: true), originalName: "narration.mp4")
+        _ = try clip(imported)
+        var document = try store.load(imported.id).json
+        var settings = imported.settings; settings["originalAudioMuted"] = true; settings["voiceoverMasterGain"] = 1.5
+        document["settings"] = settings
+        document["annotations"] = [annotation(start: 1.25, end: 1.75)]
+        let saved = try store.save(BJJProject(document))
+        let mixURL = root.appendingPathComponent("preview.caf")
+        let item = try await BJJAudioComposition.preview(project: saved, store: store, target: mixURL)
+        let itemDuration = try await item.asset.load(.duration)
+        XCTAssertEqual(itemDuration.seconds, 4, accuracy: 0.01)
+        let previewEnergy = try await audioEnergy(mixURL, from: 1.3, to: 1.7)
+        let previewSilence = try await audioEnergy(mixURL, from: 0.2, to: 0.6)
+        XCTAssertLessThan(previewSilence, 0.005); XCTAssertGreaterThan(previewEnergy, 0.1)
+        let options = BJJExportOptions(start: 1, end: 2, maximum: 720, crf: 18)
+        let job = try await service.createExport(saved.id, expectedRevision: saved.revision, options: options)
+        let plan = try BJJRenderPlan.read(store, job)
+        XCTAssertEqual(plan.options?.start, 1); XCTAssertEqual(plan.options?.maximum, 720)
+        var invalid = plan.json; var intent = invalid["output"] as! BJJJSON; intent["startSec"] = 0; invalid["output"] = intent
+        XCTAssertThrowsError(try BJJRenderPlan(invalid, projectId: saved.id, revision: saved.revision))
+        for _ in 0..<900 {
+            if !["queued", "running"].contains(try service.job(job.jobId).status) { break }
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        let completed = try service.job(job.jobId)
+        XCTAssertEqual(completed.status, "completed", completed.error ?? "")
+        let output = try service.acquireExportFile(job.jobId)
+        let probe = try await BJJMedia.inspect(output, reference: "exports/test.mp4", originalName: "test.mp4")
+        XCTAssertEqual(probe.orientedSize, CGSize(width: 320, height: 180))
+        XCTAssertEqual(probe.videoRange.duration.seconds, 1, accuracy: 0.05)
+        let exportedEnergy = try await audioEnergy(output, from: 0.3, to: 0.7)
+        XCTAssertEqual(exportedEnergy, previewEnergy, accuracy: 0.025)
+        XCTAssertGreaterThan(try redPixels(output, time: 0.4), 500)
+        XCTAssertEqual(try redPixels(output, time: 0.9), 0)
+        XCTAssertThrowsError(try service.removeExportFile(job.jobId))
+        service.releaseExportFile(job.jobId)
+        var changed = saved.json; changed["annotations"] = [BJJJSON](); changed["voiceovers"] = [BJJJSON]()
+        _ = try store.save(BJJProject(changed))
+        let retry = try service.retryExport(job.jobId)
+        let retried = try BJJRenderPlan.read(store, retry)
+        XCTAssertEqual(retried.options?.start, 1); XCTAssertEqual(retried.project.revision, saved.revision)
+        XCTAssertEqual(retried.project.voiceovers.count, 1)
+        _ = try service.cancel(retry.jobId)
+        XCTAssertThrowsError(try BJJExportOptions(start: 2, end: 1).validate(saved))
+    }
+    func testNativeTakeEditsHistoryAndReopenPreserveAssets() throws {
+        let initial = try project(); _ = try clip(initial)
+        let saved = try store.loadRecoveringRecordings(initial.id)
+        let editor = try BJJNativeEditorSession(project: saved, store: store, preferences: nil)
+        defer { editor.close() }
+        var take = saved.voiceovers[0]; take["gain"] = 1.5; take["muted"] = true; take["timingOffsetMs"] = 175.0
+        editor.updateAudio(clip: take)
+        XCTAssertNil(editor.error)
+        XCTAssertEqual(editor.project.voiceovers[0].n("gain"), 1.5)
+        editor.updateAudio(removing: take.s("id"))
+        XCTAssertTrue(editor.project.voiceovers.isEmpty)
+        editor.history(redo: false)
+        XCTAssertEqual(editor.project.voiceovers[0].n("gain"), 1.5)
+        editor.history(redo: false)
+        XCTAssertEqual(editor.project.voiceovers[0].n("timingOffsetMs"), 125)
+        let reopened = try store.load(saved.id)
+        XCTAssertEqual(reopened.voiceovers.count, 1)
+        XCTAssertNoThrow(try store.validateRecordings(reopened))
+        take["timingOffsetMs"] = -5000.0
+        editor.updateAudio(clip: take)
+        XCTAssertNotNil(editor.error)
+        XCTAssertEqual(try store.load(saved.id).voiceovers[0].n("timingOffsetMs"), 125)
+    }
     func testNativeCueGeometryAllToolsPreservesFieldsAndBounds() throws {
         let initial = try project(), size = CGSize(width: 1920, height: 1080)
         for tool in BJJNativeTool.allCases {
@@ -93,7 +164,7 @@ import SwiftUI
         XCTAssertNil(overlay.image(at: 0)); XCTAssertNotNil(overlay.image(at: 1)); XCTAssertNil(overlay.image(at: 3))
         await editor.export()
         XCTAssertNil(editor.error)
-        let exported = try XCTUnwrap(editor.shareURL)
+        let exported = try XCTUnwrap(editor.exportURL)
         XCTAssertGreaterThan(try exported.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0, 1000)
         let asset = AVURLAsset(url: exported)
         let duration = try await asset.load(.duration)
