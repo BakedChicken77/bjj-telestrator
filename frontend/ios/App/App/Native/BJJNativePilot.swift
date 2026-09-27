@@ -225,6 +225,10 @@ struct BJJNativeTransportState: Codable {
                 if self.loopEnabled { self.seek(self.loopStart, resume: true) } else { self.pause() }
             }
         }
+        if let service {
+            let exports = (try? service.listExports(id)) ?? []
+            retryExportID = exports.first { ["failed", "cancelled"].contains($0["status"] as? String ?? "") }?["jobId"] as? String
+        }
         capture.finished = { [weak self] clip, failure, reason in
             guard let self else { return }
             self.recording = false; self.playing = false
@@ -346,7 +350,7 @@ struct BJJNativeTransportState: Codable {
             let path = try store.safeURL(id, "temp/mix-\(UUID().uuidString).caf")
             previewFiles.append(path)
             let item = try await BJJAudioComposition.preview(project: project, store: store, target: path)
-            guard !closed, generation == previewGeneration else { return }
+            guard !closed, generation == previewGeneration else { try? FileManager.default.removeItem(at: path); return }
             player.replaceCurrentItem(with: item); player.volume = 1; player.isMuted = false
             seek(position)
             // The previous item is no longer using these files.

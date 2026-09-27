@@ -17,7 +17,7 @@ struct BJJNativeAudioScreen: View {
                 }
                 Section("Saved takes") {
                     if session.project.voiceovers.isEmpty { Text("Position the video, then tap Record to narrate at 1×.").foregroundStyle(.secondary) }
-                    ForEach(Array(session.project.voiceovers.enumerated()), id: \.element.selfID) { index, clip in
+                    ForEach(Array(session.project.voiceovers.enumerated()), id: \.offset) { index, clip in
                         NavigationLink {
                             BJJNativeTakeScreen(session: session, clip: clip, number: index + 1)
                         } label: {

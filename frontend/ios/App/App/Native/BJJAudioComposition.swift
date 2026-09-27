@@ -61,7 +61,7 @@ struct BJJAudioComposition {
 
     /// Decode the same normalized mix and limiter used by export. Stream into PCM
     /// with bounded memory; a silent bed preserves gaps and the project clock.
-    static func preview(project: BJJProject, store: BJJStore, target: URL) async throws -> AVPlayerItem {
+    @MainActor static func preview(project: BJJProject, store: BJJStore, target: URL) async throws -> AVPlayerItem {
         let media = try await BJJMedia.inspect(store.asset(project.id, project.source.s("asset")),
                                               reference: project.source.s("asset"), originalName: project.name)
         let composition = AVMutableComposition()

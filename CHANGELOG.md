@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.0.3] - 2026-09-27
+
+### Native narration and export candidate
+- Record at 1× with microphone metering, playback-clock anchoring, and interruption/route handling.
+- Preview the saved mix; adjust take volume, mute, timing, and deletion with undo/redo.
+- Share one audio mixing policy between native preview and export.
+- Export the full video or a selected range at aspect-correct sizes without upscaling.
+- Preview MP4s, save to Photos or Files, and retry immutable export inputs.
+- Real-device recording, route, and A/V alignment acceptance remains required before retiring the original editor.
+
 ## [2.0.2] - 2026-09-27
 
 ### Native cue editing candidate

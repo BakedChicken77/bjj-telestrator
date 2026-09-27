@@ -50,7 +50,7 @@ struct BJJNativeEditorScreen: View {
                     Button("Done") { session.close(); dismiss() }.disabled(session.exporting || session.recording || session.preparingAudio)
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button("Cues", systemImage: "list.bullet") { session.pause(); showAnnotations = true }
+                    Button("Cues", systemImage: "list.bullet") { session.pause(); showAnnotations = true }.disabled(session.recording || session.preparingAudio)
                     Button("Export", systemImage: "square.and.arrow.up") { session.pause(); showExport = true }
                         .disabled(session.exporting || session.recording || session.preparingAudio)
                 }

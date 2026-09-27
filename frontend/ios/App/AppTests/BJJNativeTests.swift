@@ -313,6 +313,24 @@ import SwiftUI
             host.willMove(toParent: nil); host.view.removeFromSuperview(); host.removeFromParent()
         }
     }
+    func testNativeNarrationAndExportCompactLayouts() async throws {
+        let initial = try project(), editor = try BJJNativeEditorSession(project: initial, store: store)
+        defer { editor.close() }
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = scene.windows.first { $0.isKeyWindow }, container = UIViewController()
+        let window = UIWindow(windowScene: scene); window.rootViewController = container; window.makeKeyAndVisible()
+        defer { window.isHidden = true; previous?.makeKeyAndVisible() }
+        for (name, view) in [("narration", AnyView(BJJNativeAudioScreen(session: editor))), ("export", AnyView(BJJNativeExportScreen(session: editor)))] {
+            let host = UIHostingController(rootView: view.environment(\.dynamicTypeSize, .accessibility1))
+            container.addChild(host); container.view.addSubview(host.view); host.didMove(toParent: container)
+            let size = CGSize(width: 375, height: 667)
+            host.view.frame = CGRect(origin: .zero, size: size)
+            try await Task.sleep(nanoseconds: 750_000_000); host.view.layoutIfNeeded()
+            let attachment = XCTAttachment(image: UIGraphicsImageRenderer(size: size).image { _ in host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true) })
+            attachment.name = "native-\(name)-compact"; attachment.lifetime = .keepAlways; add(attachment)
+            host.willMove(toParent: nil); host.view.removeFromSuperview(); host.removeFromParent()
+        }
+    }
     func testNativePilotScreenSnapshots() async throws {
         let source = root.appendingPathComponent("native-pilot.mp4")
         try await silentVideo(source)
