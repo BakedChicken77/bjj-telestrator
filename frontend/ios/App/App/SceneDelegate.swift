@@ -1,5 +1,6 @@
 import UIKit
 import Capacitor
+import SwiftUI
 
 class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
@@ -8,13 +9,16 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         guard let windowScene = scene as? UIWindowScene else { return }
 
         window = UIWindow(windowScene: windowScene)
-        window?.rootViewController = BJJViewController()
+        window?.rootViewController = UIHostingController(rootView: BJJNativeHome())
         window?.makeKeyAndVisible()
+
+        if let url = connectionOptions.urlContexts.first?.url { BJJPackageInbox.receive(url) }
 
         SceneDelegateProxy.shared.scene(scene, willConnectTo: session, options: connectionOptions)
     }
 
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+        if let url = URLContexts.first?.url { BJJPackageInbox.receive(url) }
         SceneDelegateProxy.shared.scene(scene, openURLContexts: URLContexts)
     }
 

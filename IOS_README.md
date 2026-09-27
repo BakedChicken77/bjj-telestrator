@@ -34,13 +34,29 @@ If you only have Windows, follow [GitHub setup](docs/GITHUB_SETUP.md). The inclu
 ## On-phone workflow
 
 1. In Projects, select **Photos** or **Files**. Choose an SDR MP4/MOV recording. The system Photos picker grants access only to the selected item; the app does not scan the photo library. If an original exists only in iCloud, the system may need to download it first.
-2. Leave the app open while it copies the original and generates an editing proxy. The imported original is preserved byte-for-byte. A proxy may take time for long footage.
-3. Scrub to a moment, choose a tool, then drag one finger on the video picture. The toolbar scrolls sideways to expose all tools, undo, redo, and delete. A second touch does not take over a drawing gesture.
-4. Use **Timeline** for selection, time shifting, edge trimming, and zoom. Use **Properties & settings** for precise time values, text, colors, width, opacity, layer order, and project defaults. Portrait and landscape layouts share the same normalized geometry.
+2. Follow Copying, Inspecting, Preparing preview and Validating. **Cancel preparation** stops copying or encoding and removes incomplete staging. Leave the app open while preparing long footage. The selected original is preserved byte-for-byte; Photos may first need to retrieve its file.
+3. Scrub to a moment, choose a tool, then drag one finger on the video picture. The toolbar wraps to keep tools, undo, redo and delete reachable. A second touch does not take over a drawing gesture.
+4. Use **Timeline** for selection, time shifting, edge trimming, and zoom. Use **Properties & settings** for the semantic annotation list, creation without dragging, percentage coordinates/endpoints/freehand points, precise times, style, layer order and project defaults. Portrait and landscape layouts share the same normalized geometry.
 5. Wait for **Saved** before closing the app. Projects reopen from the Projects button. Undo/redo history is local to the current editing session.
 6. Press **Record voiceover**, allow microphone permission, and speak as the video advances. Press Stop to save. A pause, seek attempt, buffering, backgrounding, or audio interruption ends the take to preserve its linear timeline. Reposition and record again for another take. Headphones reduce speaker feedback into the recording.
 7. Open **Audio & voiceovers** to adjust original audio, clip/master gain, mute, clip position, or timing nudge. Delete/rerecord as needed. Deleted clips remain available for undo until the project is deleted.
 8. **Export MP4 → Render MP4** renders on the phone. Keep BJJ Telestrator in the foreground and allow storage/CPU time. Progress, cancellation, and errors are shown. After completion, **Save or share MP4** opens the iOS share sheet; choose Save to Files, Save Video if offered, AirDrop, or another installed recipient app. Sharing occurs only when you choose it. Play the resulting MP4 outside BJJ Telestrator to confirm the burned-in annotations and audio.
+
+For a missing or damaged editing video, use **Projects → Repair preview**. This
+saves pending edits, prepares and validates a replacement from the same original,
+then reopens the review at a new revision. Drawings and narration are preserved;
+undo starts a new session. Old previews remain retained. If the app was closed
+mid-preparation, check its recorded outcome after reopening and start again when
+requested. Preparation retries start from the beginning.
+
+The Photos selection determines the imported asset. An original high-speed file
+can have different timing from a Photos-rendered slow-motion edit. The app keeps
+the selected asset's timeline and does not recreate Photos speed ramps. A preview
+at up to 30 fps cannot expose every original high-speed frame; exact source-frame
+navigation remains a later transport feature. Shared 120 fps/VFR fixtures test
+time mapping; actual phone media still needs acceptance. Native HDR conversion
+passes the shared synthetic fixtures; actual phone footage/display checks remain
+pending, and no broad HDR support is advertised.
 
 The exported recipient needs only the MP4. No project file or special player is required.
 
@@ -99,19 +115,19 @@ Before treating this as a verified iPhone release:
 
 ## Local data and limits
 
-- Native projects are stored in the app's Application Support container under `BJJTelestrator/projects/<uuid>/`. The directory contains project JSON, original/proxy media, recordings, export metadata/MP4s, and temporary files. It survives normal restarts and same-identity app updates. Removing the app removes its container. There is no portable editable-project backup/restore interface yet; share completed MP4s to Files and retain original camera recordings. Windows projects and iPhone projects are separate; there is no automatic sync or project migration UI.
-- Native import is capped at **4 GiB**, **4096 pixels on the long edge**, and 24 hours by validation; those are input bounds, not a performance promise. Typical 1080p coaching clips are the target. Proxy long edge is at most 1920; final dimensions default to source display dimensions, rounded to even pixels. Exports support up to 60 fps.
-- Native HDR PQ/HLG footage is rejected with instructions to provide an SDR copy. Common iPhones record HDR by default; turn off **HDR Video** in Camera recording settings for new test clips or first export a genuine SDR copy using an editor. SDR HEVC is supported by the implementation. Non-right-angle rotation is rejected. Dolby Vision/HDR color correctness is not claimed.
+- Native projects are stored in the app's Application Support container under `BJJTelestrator/projects/<uuid>/`. The directory contains project JSON, original/proxy media, recordings, export metadata/MP4s, and temporary files. It survives normal restarts and same-identity app updates. Removing the app removes its container. Portable `.bjjproj` backup/restore passes native shared-fixture and real export tests; physical Files interchange is pending. It creates independent editable copies across devices. There is no automatic sync.
+- Native import is capped at **4 GiB**, **4096 pixels on the long edge**, and 24 hours by validation; those are input bounds, not a performance promise. Typical 1080p coaching clips are the target. Proxy long edge is at most 1920 and preview rate is at most 30 fps; final dimensions default to source display dimensions, rounded to even pixels. Exports support up to 60 fps.
+- The candidate implements SDR conversion before compositing for PQ/HLG with valid Rec.2020 metadata. Shared native/FFmpeg fixtures pass; actual phone color checks remain pending and no broad HDR support is advertised. All Dolby Vision variants and non-right-angle rotation are rejected. Use a genuine SDR copy for the supported fallback. See the documented [SDR delivery policy](docs/decisions/002-sdr-delivery.md).
 - Native encoding uses Apple's H.264 encoder, not FFmpeg/libx264. The shared quality field maps to a bounded bitrate; encoding-speed presets are hidden on iPhone. Audio is mixed at 48 kHz stereo and encoded as AAC. Native mixing clamps peaks to 0.98 after gain, which can distort heavily overloaded mixes; reduce gains. Desktop export retains its look-ahead limiter. Output is ordinary H.264/AAC MP4, but native encoder profiles/chroma/audio priming must be checked on the target device.
 - Rendering is foreground work. iOS can suspend apps and stop extended background encoding. The app keeps the display awake during import/export; background expiry cancels safely, and interrupted jobs are marked failed after relaunch. There is no background-render guarantee.
-- Media files are streamed in bounded chunks; native rendering holds one overlay state and encoder buffers. Web Audio still decodes each active narration take completely. Prefer short takes on memory-constrained phones. Text uses bundled DejaVu Sans; Core Text and Canvas antialiasing/metrics can differ slightly.
+- Media files are streamed in bounded chunks; native rendering holds one overlay state and encoder buffers. Shared Web Audio preview now reads 5-second PCM windows through the existing bounded native byte-range route. It retains every active overlap, and pauses with an error if the audible window set exceeds 64 MiB. Actual WKWebView playback, seams, seeks and memory must be checked on hardware. Text uses bundled DejaVu Sans; Core Text and Canvas antialiasing/metrics can differ slightly.
 - No app analytics, tracking, cloud backend, account system, watermark, or remote media-upload service is added. The system Photos/Files picker may access locations you explicitly choose. An iOS privacy manifest and microphone/Photos-save purpose strings are included; review the final archive's privacy report before distribution.
 
 ## Troubleshooting
 
 - **Xcode command-line tools missing:** open Xcode Settings → Locations and select Xcode's command-line tools; install the iOS components. `xcodebuild -version` should report Xcode 26 or newer.
-- **Swift packages will not resolve:** the first build needs Internet access to fetch Capacitor's pinned Swift package. In Xcode, use File → Packages → Resolve Package Versions. The completed app does not need that connection.
-- **Signing/bundle identifier error:** select your own team and a unique identifier. Keep it stable across updates. Free Personal Team signing expires; re-run from Xcode when needed.
+- **Swift packages will not resolve:** the first build needs Internet access to fetch Capacitor and ZIPFoundation's pinned Swift packages. In Xcode, use File → Packages → Resolve Package Versions. The completed app does not need that connection.
+- **Signing/bundle identifier error:** select the team and identifier associated with the installed app. For a first installation, select your own team and a unique identifier, then keep them stable across updates. Free Personal Team signing expires; re-run from Xcode when needed.
 - **Blank editor or missing DejaVu font:** run `npm ci` and `npm run ios:sync` from `frontend`, then rebuild App. The required bundled `public/` folder is generated by that command.
 - **Microphone denied:** enable BJJ Telestrator under Settings → Privacy & Security → Microphone. Close other recording apps and retry. A failed take must restore editor controls.
 - **Video not available:** download the original from iCloud first, check free storage, and use a complete SDR H.264/HEVC MP4 or MOV. iOS supports fewer source codecs than the desktop FFmpeg build.
@@ -119,3 +135,76 @@ Before treating this as a verified iPhone release:
 - **Need diagnosis after a native error:** reproduce with a short non-sensitive test clip while connected to Xcode; inspect the `com.bakedchicken77.bjjtelestrator` media log. Do not overwrite or delete the original recording.
 
 Apple/Capacitor build and provisioning references were checked on 2026-09-10. Device acceptance is still required.
+
+## Save recovery and candidate evidence
+
+Schema-1 JSON is retained as `project.pre-migration-v1.json` before migration.
+Pending edit drafts are stored in the native application container, separately
+from project JSON, throughout editing. Before suspension the bridge requests a
+flush while execution is available; a final lifecycle callback is not guaranteed.
+Recording recovery has its own asset journal and commits a revision when reopened.
+Use **Recover draft as a copy** to preserve both the saved review and pending edits.
+A completed copy has independent media files and object IDs. Keep the app open
+while large media is copied. Copying and checksums run off the main actor; there is
+no separate copy-cancel control yet. The editor shows an indeterminate working state.
+
+Use [DEVICE_ACCEPTANCE.md](docs/DEVICE_ACCEPTANCE.md) for the exact signed-build
+checklist and result fields. Retain the same bundle identity when installing an
+update over projects. Never uninstall as a routine rollback step.
+
+### Storage and export recovery (P1.06 work package)
+
+The export panel now shows local storage breakdown and estimated additional export
+space. After a restart, **Retry revision … from start** renders the original saved
+review; **Render MP4** renders current confirmed edits. Keep the app open as before.
+First-export inventory preparation hashes large originals off the main thread;
+queued/running jobs remain cancellable, while initial inventory preparation has
+no separate cancel control yet. Integrity checks are incremental and never pass
+large media through JavaScript.
+
+**Remove MP4** reclaims a completed output and retains its retry input and all source
+and recording assets. An active share sheet protects that file until dismissed.
+Old jobs without saved inputs cannot retry their old edits. Whole-project deletion
+now retains the project in **Recently deleted**. Files `.bjjproj` transfer is
+automatically tested in this candidate and awaits physical-device acceptance. Simulator/CI verification does not establish physical
+low-space, share-sheet, thermal or 20-minute performance acceptance.
+
+
+### Local project versions
+
+In **Projects**, expand **Checkpoints and copies** for the current review. Save a
+named checkpoint, restore a previous one, or duplicate the saved project. Restore
+first preserves the current revision as a checkpoint; source and recording files
+stay immutable. A duplicate has fresh IDs and copied media, with no shared hard links.
+
+Deleted projects remain in **Recently deleted** with all their recordings,
+checkpoints and exports until separate permanent deletion. Restore retains the
+original ID when available; a collision creates a new review and leaves the full
+deleted project intact. These local copies do not protect against uninstall or
+phone loss. Keep the same bundle identity for updates and never uninstall as a
+routine rollback. Physical suspension, large copies, VoiceOver and low-space
+behavior still require the candidate-specific device checklist.
+
+
+### Files backup, restore and appearance — candidate workflow
+
+Open **Projects → Editable project backups**. Back up the confirmed revision, with
+optional preview inclusion, then **Save backup to Files or share**. The package includes
+its original and referenced narration. Completed MP4s, deleted takes, checkpoints
+and undo history are excluded. Keep a complete container backup if those versions
+must also be retained. Restore from Files, or open a `.bjjproj` document in Files
+and explicitly choose restore. Progress/cancellation stays in the editor; copying
+uses native file handles and never passes a large archive through JavaScript.
+
+Restore checks structure, actual expanded byte limits, SHA-256, schema and media,
+then installs a new independent review. **Open restored project** saves the current
+review before switching. Closing a share sheet without choosing a destination is
+cancellation. Package preparation needs foreground time and staging space; an
+interruption records a recoverable failure rather than a finished project. Remove
+temporary package files after keeping an external copy. See README for size limits.
+
+**Export → Project storage** can reclaim obsolete previews after 24 hours, while
+retained references and active operations pin assets. Sources and recording files
+remain untouched. **Projects → Appearance and keyboard help** offers system/light/
+dark and larger text; iPhone VoiceOver, rotation and all real Files transfers need
+the candidate-specific [device checklist](docs/DEVICE_ACCEPTANCE.md).

@@ -1,0 +1,207 @@
+{
+  "version": 1,
+  "date": "2026-09-13",
+  "phase": 1,
+  "status": "device/staging verification pending",
+  "accepted": false,
+  "repository": "BakedChicken77/bjj-telestrator",
+  "pullRequest": 12,
+  "basePullRequest": 11,
+  "startingCommit": "dadeee523f8a933c53333c2b298a8058b9f8e604",
+  "verifiedCodeCommit": "b5c7ba292d48e08e820c01a75c9c9f2f2b678f59",
+  "verifiedCodeTree": "d4098c97dad7734d937ed964a665b570375ae856",
+  "applicationVersion": "1.1.0",
+  "schemaVersion": 2,
+  "unsignedBuild": "33.1",
+  "ci": {
+    "runId": 34767642230,
+    "url": "https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34767642230",
+    "conclusion": "success",
+    "jobs": [
+      {
+        "id": 103751366738,
+        "name": "Frontend and repository quality",
+        "conclusion": "success"
+      },
+      {
+        "id": 103751366759,
+        "name": "Native iOS tests and archive",
+        "conclusion": "success"
+      },
+      {
+        "id": 103751366773,
+        "name": "Production Docker build and startup",
+        "conclusion": "success"
+      },
+      {
+        "id": 103751366781,
+        "name": "Browser import, editing, voiceover, and export",
+        "conclusion": "success"
+      },
+      {
+        "id": 103751366891,
+        "name": "Backend and real FFmpeg exports",
+        "conclusion": "success"
+      },
+      {
+        "id": 103752790041,
+        "name": "CI gate",
+        "conclusion": "success"
+      }
+    ],
+    "artifacts": [
+      {
+        "id": 10320849396,
+        "name": "ios-unsigned",
+        "bytes": 14625556,
+        "digest": "sha256:44f838850667e31fe8584e7c6ba74e15dfe09305f17b8a66493c22bf9ae233de",
+        "expiresAt": "2026-09-27T16:17:58Z"
+      },
+      {
+        "id": 10320759799,
+        "name": "ios-test-results",
+        "bytes": 60303601,
+        "digest": "sha256:605a7038de9171894c347298f4e3544fee1b717aeb8f9b3e472c263de7b1d526",
+        "expiresAt": "2026-09-27T16:18:00Z"
+      },
+      {
+        "id": 10320363336,
+        "name": "browser-results",
+        "bytes": 1451334,
+        "digest": "sha256:d5be3819e05956310fedf07ad6cc201f076fe28e9c38b24a5d1b2275b5a5bafc",
+        "expiresAt": "2026-09-27T16:11:12Z"
+      }
+    ]
+  },
+  "tests": {
+    "backend": {
+      "passed": 216,
+      "seconds": 45.81
+    },
+    "frontend": {
+      "passed": 104
+    },
+    "repository": {
+      "passed": 12
+    },
+    "browser": {
+      "passed": 19,
+      "reportedDuration": "2.2 minutes"
+    },
+    "native": {
+      "passed": 32,
+      "failed": 0,
+      "seconds": 76.551,
+      "xcode": "26.6",
+      "xcodeBuild": "17F113",
+      "simulator": "iPhone 17 Pro",
+      "runtime": "iOS 26.4.1",
+      "sdk": "26.5"
+    }
+  },
+  "nativeExports": {
+    "portableRestore": {
+      "videoCodec": "H.264",
+      "audioCodec": "AAC",
+      "width": 320,
+      "height": 180,
+      "durationSec": 2,
+      "bytes": 7815,
+      "sourceSHA256": "8c5d74003882b99cd975e7df63da7da7a6df543ed429918284149fbbdef833e4",
+      "sourceUnchanged": true
+    },
+    "pq": {
+      "videoCodec": "H.264",
+      "audioCodec": null,
+      "color": "Rec.709 SDR",
+      "width": 320,
+      "height": 180,
+      "durationSec": 2,
+      "bytes": 6438,
+      "previewAndExportGrayLevels": [
+        0,
+        30,
+        79,
+        147,
+        201,
+        242,
+        252,
+        254
+      ],
+      "sourceSHA256": "d18a31f34be0a1d8b20570d09f1a8b74c8946d9551e0e64e2f221d6bdbfefa68",
+      "sourceUnchanged": true
+    },
+    "hlg": {
+      "videoCodec": "H.264",
+      "audioCodec": null,
+      "color": "Rec.709 SDR",
+      "width": 320,
+      "height": 180,
+      "durationSec": 2,
+      "bytes": 6013,
+      "previewAndExportGrayLevels": [
+        0,
+        38,
+        82,
+        111,
+        127,
+        155,
+        191,
+        238
+      ],
+      "sourceSHA256": "8506c98ef56bb91f778eb7d4cb5ef3a0d8b0d9826f5ca900e154d810ee4a0fea",
+      "sourceUnchanged": true
+    },
+    "timing": {
+      "originalFrameCounts": [
+        240,
+        91
+      ],
+      "outputFps": 30,
+      "outputFrames": 60,
+      "durationSec": 2,
+      "sceneChangeSec": 1,
+      "allSourceAndOutputPTSVerified": true,
+      "blueRGB": [
+        38,
+        46,
+        254
+      ],
+      "greenRGB": [
+        71,
+        251,
+        0
+      ],
+      "opposingChannelCeiling": 64,
+      "dominantChannelFloor": 200,
+      "timestampToleranceSec": 0.000001
+    }
+  },
+  "priorRuns": [
+    {
+      "runId": 34766382957,
+      "commit": "162c32916490242810afd0fb8fe693b3d72c205c",
+      "conclusion": "failure",
+      "reason": "New native timing test counted compressed control buffers and media PTS, assumed an unselected 30 fps export and used a color threshold incompatible with the measured native conversion."
+    },
+    {
+      "runId": 34767065154,
+      "commit": "3c94cf30419991a4d4b275000420ae5c785b9ed5",
+      "conclusion": "failure",
+      "reason": "All source/output PTS and exact scene transitions passed. Four opposing-channel assertions measured 46 against a 40-level ceiling; corrected to 64 with >200 dominant-channel checks retained."
+    }
+  ],
+  "remainingGates": [
+    "Signed installation and same-identity update over populated projects",
+    "Physical iPhone Photos/Files import, recording, export and sharing",
+    "iPhone to Windows to iPhone portable transfer and multigigabyte ZIP64",
+    "Actual phone HDR footage/display color review; Dolby Vision unsupported",
+    "VoiceOver, large text, orientation and adjacent touch targets",
+    "Physical low-space, suspension, force-close and lease behavior",
+    "Realistic 20-minute 1080p workload and lower-resource device memory/thermal/audio review",
+    "Fresh Windows 11 Docker-host startup/export/restart-persistence"
+  ],
+  "optionalPhase5": "not selected",
+  "releasePublished": false,
+  "signedDistributionPerformed": false
+}

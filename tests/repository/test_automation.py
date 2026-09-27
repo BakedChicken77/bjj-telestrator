@@ -8,13 +8,25 @@ import zipfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from scripts.ci.release import checksums, safe_member, validate_version, zip_files
+from scripts.ci.release import checksums, device_accepted, safe_member, validate_version, zip_files
 from scripts.ci.sign_ios import patch_app_settings, validate_profile
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_device_evidence_must_match_candidate_version_and_build(self):
+        sha = 'a' * 40
+        evidence = {'IOS_DEVICE_ACCEPTED': 'true', 'IOS_DEVICE_ACCEPTED_SHA': sha,
+                    'IOS_DEVICE_ACCEPTED_VERSION': '1.2.0', 'IOS_DEVICE_ACCEPTED_BUILD': '7.2',
+                    'IOS_DEVICE_EVIDENCE_URL': 'https://example.test/evidence',
+                    'GITHUB_RUN_NUMBER': '7', 'GITHUB_RUN_ATTEMPT': '2'}
+        self.assertTrue(device_accepted(evidence, sha, '1.2.0'))
+        for field in ['IOS_DEVICE_ACCEPTED_SHA', 'IOS_DEVICE_ACCEPTED_VERSION',
+                      'IOS_DEVICE_ACCEPTED_BUILD', 'IOS_DEVICE_EVIDENCE_URL']:
+            self.assertFalse(device_accepted(evidence | {field: ''}, sha, '1.2.0'))
+        self.assertFalse(device_accepted({'IOS_DEVICE_ACCEPTED': 'true'}, sha, '1.2.0'))
+
     def test_private_and_unsafe_paths_rejected(self):
         for name in ["../secret", "/etc/passwd", "C:/secrets", "a\\b", "", "x\0y", ".env",
                      "a/.env.local", "x.p12", "x.key", "tests/generated/video.mp4", "data/project.json", ".git/config"]:

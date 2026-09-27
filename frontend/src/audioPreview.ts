@@ -120,12 +120,15 @@ export class VoiceoverTransport {
       this.stop();
       this.anchor = { mediaTime, contextTime: now, playbackRate };
     }
+    const anchoredTime = this.anchor
+      ? this.anchor.mediaTime + (now - this.anchor.contextTime) * playbackRate
+      : mediaTime;
     for (const [id, entry] of this.playing) {
       const clip = clips.find((item) => item.id === id);
       if (
         !clip ||
         clip.muted ||
-        clip.startSec + clip.timingOffsetMs / 1000 + clip.durationSec <= mediaTime
+        clip.startSec + clip.timingOffsetMs / 1000 + clip.durationSec <= anchoredTime
       ) {
         this.stopClip(id);
       } else {
@@ -137,7 +140,9 @@ export class VoiceoverTransport {
         continue;
       const buffer = buffers.get(clip.id);
       if (!buffer) continue;
-      const plan = clipPlaybackPlan(clip, mediaTime, now, buffer.duration, playbackRate);
+      // All scheduled fragments use one anchor, including those decoded later.
+      // Sampling the video again for each window would introduce seam jitter.
+      const plan = clipPlaybackPlan(clip, anchoredTime, now, buffer.duration, playbackRate);
       if (!plan) continue;
       const source = this.context.createBufferSource();
       const gain = this.context.createGain();

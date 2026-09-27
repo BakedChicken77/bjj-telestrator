@@ -1,4 +1,4 @@
-import { api } from './api';
+import { flushActiveSave } from './project/saveSession';
 import { nativeAPI, nativeBridge } from './native';
 import { useEditor } from './store';
 import { voiceoverSchema, type Voiceover } from './model';
@@ -30,7 +30,7 @@ async function retainClip(projectId: string, clip: Voiceover) {
       project.voiceovers.push(clip);
     });
   const current = useEditor.getState().project;
-  if (current?.projectId === projectId) await api.save(current);
+  if (current?.projectId === projectId) await flushActiveSave();
 }
 /** Each asynchronous continuation and event belongs to one capture attempt. */
 export class NativeRecordingSession {
@@ -82,7 +82,7 @@ export class NativeRecordingSession {
       };
       document.addEventListener('visibilitychange', hidden);
       attempt.removeEvents = () => document.removeEventListener('visibilitychange', hidden);
-      await api.save(project);
+      await flushActiveSave();
       if (!this.current(attempt)) return;
       await nativeBridge.prepareRecording({ projectId: project.projectId, sessionId: attempt.id });
       if (!this.current(attempt)) return;

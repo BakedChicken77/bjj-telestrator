@@ -18,7 +18,9 @@ export function fixture(): Project {
     avgFrameRate: 30,
   };
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    revision: 1,
+    requiredCapabilities: ['project.revisions.v1'],
     projectId: '11111111-1111-4111-8111-111111111111',
     projectName: 'Round one',
     createdAt: '2026-09-05T12:00:00Z',
