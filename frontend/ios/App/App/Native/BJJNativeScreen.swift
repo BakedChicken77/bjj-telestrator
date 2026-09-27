@@ -120,7 +120,7 @@ struct BJJNativeEditorScreen: View {
                     if !landscape { filmstrip }
                     transport
                     controls
-                }
+                }.frame(width: geometry.size.width, height: geometry.size.height)
             }
             .background(Color(uiColor: .systemBackground))
             .navigationTitle("Preview copy")
@@ -170,11 +170,16 @@ struct BJJNativeEditorScreen: View {
         }
     }
     private var filmstrip: some View {
-        HStack(spacing: 2) {
-            ForEach(Array(session.thumbnails.enumerated()), id: \.offset) { index, image in
-                Button { session.seek(session.project.duration * Double(index) / 8) } label: {
-                    Image(uiImage: image).resizable().scaledToFill().frame(maxWidth: .infinity).frame(height: 44).clipped()
-                }.accessibilityLabel("Seek to \(Int(session.project.duration * Double(index) / 8)) seconds")
+        GeometryReader { geometry in
+            let count = max(1, session.thumbnails.count)
+            let width = max(1, (geometry.size.width - CGFloat(count - 1) * 2) / CGFloat(count))
+            HStack(spacing: 2) {
+                ForEach(Array(session.thumbnails.enumerated()), id: \.offset) { index, image in
+                    Button { session.seek(session.project.duration * Double(index) / 8) } label: {
+                        Image(uiImage: image).resizable().scaledToFill().frame(width: width, height: 44).clipped()
+                    }.buttonStyle(.plain)
+                        .accessibilityLabel("Seek to \(Int(session.project.duration * Double(index) / 8)) seconds")
+                }
             }
         }.frame(height: session.thumbnails.isEmpty ? 0 : 44).clipped().padding(.horizontal, 12)
     }

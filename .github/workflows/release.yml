@@ -7,7 +7,7 @@ permissions:
   contents: read
 concurrency:
   group: release-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.ref_type == 'branch' }}
 jobs:
   authorize:
     name: Release authorization

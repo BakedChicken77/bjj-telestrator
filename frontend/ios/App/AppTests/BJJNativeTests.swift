@@ -17,20 +17,35 @@ import SwiftUI
         let source = root.appendingPathComponent("native-pilot.mp4")
         try await silentVideo(source)
         let imported = try await BJJService(store: store).importFile(source, originalName: "Native pilot.mp4")
-        let editor = try BJJNativeEditorSession(project: imported, store: store)
-        defer { editor.close() }
-        editor.add([CGPoint(x: 0.2, y: 0.2), CGPoint(x: 0.7, y: 0.65)])
-        editor.drawing = true
         for (name, size) in [("portrait", CGSize(width: 402, height: 874)), ("landscape", CGSize(width: 874, height: 402))] {
-            let host = UIHostingController(rootView: BJJNativeEditorScreen(session: editor))
-            let window = UIWindow(frame: CGRect(origin: .zero, size: size))
-            window.rootViewController = host; window.isHidden = false
-            host.view.frame = window.bounds; host.view.setNeedsLayout(); host.view.layoutIfNeeded()
-            try await Task.sleep(nanoseconds: 500_000_000)
+            let editor = try BJJNativeEditorSession(project: imported, store: store)
+            defer { editor.close() }
+            if name == "portrait" { editor.add([CGPoint(x: 0.2, y: 0.2), CGPoint(x: 0.7, y: 0.65)]) }
+            editor.drawing = true
+            let host = UIHostingController(rootView: BJJNativeEditorScreen(session: editor).frame(width: size.width, height: size.height))
+            let container = UIViewController()
+            let window = UIWindow(frame: UIScreen.main.bounds)
+            window.rootViewController = container; window.isHidden = false
+            container.addChild(host); container.view.addSubview(host.view)
+            host.view.frame = CGRect(origin: .zero, size: size)
+            host.didMove(toParent: container)
+            host.view.setNeedsLayout(); host.view.layoutIfNeeded()
+            try await Task.sleep(nanoseconds: 750_000_000)
+            host.view.layoutIfNeeded()
+            func canvas(in view: UIView) -> BJJNativeCanvas? {
+                if let result = view as? BJJNativeCanvas { return result }
+                return view.subviews.compactMap { canvas(in: $0) }.first
+            }
+            let stage = try XCTUnwrap(canvas(in: host.view))
+            let stageFrame = stage.convert(stage.bounds, to: host.view)
+            XCTAssertGreaterThan(stageFrame.height, 80)
+            XCTAssertGreaterThanOrEqual(stageFrame.minX, -1)
+            XCTAssertLessThanOrEqual(stageFrame.maxX, size.width + 1)
+            XCTAssertEqual(host.view.bounds.size, size)
             let image = UIGraphicsImageRenderer(size: size).image { _ in host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true) }
-            XCTAssertEqual(image.size, size)
             let attachment = XCTAttachment(image: image)
             attachment.name = "native-pilot-\(name)"; attachment.lifetime = .keepAlways; add(attachment)
+            host.willMove(toParent: nil); host.view.removeFromSuperview(); host.removeFromParent()
             window.isHidden = true
         }
     }
