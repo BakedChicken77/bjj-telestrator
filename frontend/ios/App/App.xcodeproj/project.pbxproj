@@ -45,6 +45,8 @@
 		0BD9BAF27141E8AEFECE844D = {isa = PBXBuildFile; fileRef = BC9EA9A049D7A4CCB60304B7;};
 		F23B42DCBEFCC563E6529527 = {isa = PBXBuildFile; fileRef = 4A212DC21150595D7D75FD7F;};
 		7B0CF31F2A1C3570B74F9D7A = {isa = PBXBuildFile; fileRef = 1DFB0AFA0AA77066C87FF6F4;};
+		1C8275047CF66B18D8EE310E = {isa = PBXBuildFile; fileRef = F28654DED024100C9118034F;};
+		CFC64C6D4ED3AEE321DA6922 = {isa = PBXBuildFile; fileRef = A845FF77C49C4599B81EBFFC;};
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -88,6 +90,8 @@
 		BC9EA9A049D7A4CCB60304B7 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJNativeLibrary.swift"; sourceTree = "<group>";};
 		4A212DC21150595D7D75FD7F = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJNativeLibraryScreen.swift"; sourceTree = "<group>";};
 		1DFB0AFA0AA77066C87FF6F4 = {isa = PBXFileReference; lastKnownFileType = folder; path = NativeResources; sourceTree = "<group>";};
+		F28654DED024100C9118034F = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJCueEditing.swift"; sourceTree = "<group>";};
+		A845FF77C49C4599B81EBFFC = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJCueProperties.swift"; sourceTree = "<group>";};
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -126,6 +130,8 @@
 		504EC3061FED79650016851F /* App */ = {
 			isa = PBXGroup;
 			children = (
+				A845FF77C49C4599B81EBFFC,
+				F28654DED024100C9118034F,
 				1DFB0AFA0AA77066C87FF6F4,
 				4A212DC21150595D7D75FD7F,
 				BC9EA9A049D7A4CCB60304B7,
@@ -260,6 +266,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CFC64C6D4ED3AEE321DA6922,
+				1C8275047CF66B18D8EE310E,
 				F23B42DCBEFCC563E6529527,
 				0BD9BAF27141E8AEFECE844D,
 				EA818F39D15161682D8CE3A6,
@@ -430,7 +438,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.0.1;
+				MARKETING_VERSION = 2.0.2;
 				OTHER_SWIFT_FLAGS = "$(inherited) \"-D\" \"COCOAPODS\" \"-DDEBUG\"";
 				PRODUCT_BUNDLE_IDENTIFIER = com.bakedchicken77.bjjtelestrator;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -452,7 +460,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.0.1;
+				MARKETING_VERSION = 2.0.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.bakedchicken77.bjjtelestrator;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";

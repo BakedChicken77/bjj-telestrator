@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.0.2] - 2026-09-27
+
+### Native cue editing candidate
+- Select overlapping cues, move and resize shapes, and adjust arrow/line endpoints.
+- Edit text, colors, opacity, geometry, and precise start/end times in native properties.
+- Reorder layers, browse a timed cue strip, and use accessible numeric/nudge controls.
+- Stage gestures and property forms until commit; cancel safely and undo/redo complete edits.
+- Preserve native copies and unknown project fields. Native narration remains the next milestone.
+
 ## [2.0.1] - 2026-09-27
 
 ### Native library and review candidate
