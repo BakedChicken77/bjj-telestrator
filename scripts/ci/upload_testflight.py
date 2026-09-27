@@ -1,9 +1,11 @@
 """Opt-in upload of a signed App Store IPA; does not submit a production App Store release."""
 
 import base64
+import json
 import os
 import re
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -28,7 +30,13 @@ def main() -> None:
         key.chmod(0o600)
         subprocess.run(["xcrun", "altool", "--upload-app", "-f", str(ipas[0]), "-t", "ios",
                         "--apiKey", key_id, "--apiIssuer", issuer], cwd=folder, check=True)
-    print("Upload accepted. Wait for Apple processing, then add the build to your TestFlight tester group.")
+    version = json.loads((ROOT / "frontend/package.json").read_text())["version"].split("-")[0]
+    build = f"{os.environ.get('GITHUB_RUN_NUMBER', '1')}.{os.environ.get('GITHUB_RUN_ATTEMPT', '1')}"
+    receipt = ROOT / ".ci-artifacts/testflight-upload.json"
+    receipt.write_text(json.dumps({"version": version, "build": build, "uploadAccepted": True}) + "\n")
+    print("Upload accepted. Verifying Apple processing and existing tester-group access.", flush=True)
+    subprocess.run([sys.executable, str(ROOT / "scripts/ci/distribute_testflight.py"),
+                    "--version", version, "--build", build], check=True)
 
 
 if __name__ == "__main__":
