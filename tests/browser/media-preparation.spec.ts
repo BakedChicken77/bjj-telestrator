@@ -1,3 +1,4 @@
+import { clickProjectAction } from './project-actions';
 import playwright from '../../frontend/node_modules/@playwright/test/index.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -33,7 +34,7 @@ for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 844 
     await page.mouse.down();
     await page.mouse.move(picture!.x + picture!.width * .6, picture!.y + picture!.height * .6, { steps: 6 });
     await page.mouse.up();
-    await page.getByRole('button', { name: 'Projects', exact: true }).click();
+    await clickProjectAction(page, 'Projects');
     const before = await (await page.request.get(`/api/projects/${project.projectId}`)).json();
     expect(before.annotations).toHaveLength(1);
     const repair = page.waitForResponse((r) => r.url().endsWith(`/api/projects/${project.projectId}/proxy-jobs`));
@@ -53,7 +54,7 @@ for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 844 
     await page.reload();
     await expect(page.locator('video')).toBeVisible();
     await expect.poll(() => page.locator('video').evaluate((v: HTMLVideoElement) => v.readyState)).toBeGreaterThanOrEqual(2);
-    await page.getByRole('button', { name: 'Export video', exact: true }).click();
+    await clickProjectAction(page, 'Export video');
     await page.getByRole('button', { name: 'Render MP4', exact: true }).click();
     const link = page.getByRole('link', { name: 'Download MP4 ↓', exact: true });
     await expect(link).toBeVisible();

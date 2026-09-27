@@ -152,7 +152,12 @@ test('audio controls remain dismissible above editor chrome at reported and smal
     expect(response.ok(), await response.text()).toBeTruthy();
     project.voiceovers.push(await response.json());
   }
-  expect((await page.request.put(`/api/projects/${project.projectId}`, { data: project })).ok()).toBeTruthy();
+  const latest = await saved(page, project.projectId);
+  const update = await page.request.put(`/api/projects/${project.projectId}`, {
+    headers: { 'If-Match': `"${latest.revision}"` },
+    data: { ...latest, voiceovers: project.voiceovers },
+  });
+  expect(update.ok(), await update.text()).toBeTruthy();
   await page.reload();
   for (const size of [{ width: 402, height: 874 }, { width: 874, height: 402 }, { width: 375, height: 667 }]) {
     await page.setViewportSize(size);

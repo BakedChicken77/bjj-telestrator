@@ -48,7 +48,7 @@ A positive interaction result unlocks the detailed N1–N4 native screens. N5 re
 
 ## Internal release and repeatable tester access
 
-`native-preview.yml` runs only on owner-initiated pushes to `preview/native-iphone`, runs the existing full CI workflow, and uses the existing protected `ios-release` environment. It does not publish a public App Store release. PR #25 remains a draft until the pilot direction is accepted.
+`release.yml` accepts owner-initiated pushes to `preview/native-iphone` as internal candidates, runs the existing full CI workflow, and uses the existing protected `ios-release` environment. Preview and tagged releases share one build-number counter, preventing collisions. Preview branch runs do not publish a public App Store release or GitHub release. PR #25 remains a draft until the pilot direction is accepted.
 
 Both preview and normal release uploads now wait for Apple's exact app/version/build, reject failed or expired builds, verify the existing internal group's app and owner tester, assign the build if needed, and read back membership plus `IN_BETA_TESTING`. Receipts are uploaded as Actions artifacts. Apple's `hasAccessToAllBuilds` value is recorded; distribution does not depend on an undocumented setting mutation.
 

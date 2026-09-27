@@ -1,3 +1,4 @@
+import { clickProjectAction } from './project-actions';
 import playwright from '../../frontend/node_modules/@playwright/test/index.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -23,7 +24,7 @@ for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 844 
     await page.mouse.down();
     await page.mouse.move(picture!.x + picture!.width * .6, picture!.y + picture!.height * .6, { steps: 6 });
     await page.mouse.up();
-    await page.getByRole('button', { name: 'Projects', exact: true }).click();
+    await clickProjectAction(page, 'Projects');
     const region = page.getByRole('region', { name: 'Project recovery', exact: true });
     await region.getByText('Checkpoints and copies', { exact: false }).click();
     await region.getByLabel('Checkpoint label').fill('Antes da revisão');
@@ -34,7 +35,7 @@ for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 844 
     await page.getByRole('button', { name: 'Close projects', exact: true }).click();
     await page.getByLabel('Project name', { exact: true }).fill('Later edits');
     await page.getByLabel('Project name', { exact: true }).press('Tab');
-    await page.getByRole('button', { name: 'Projects', exact: true }).click();
+    await clickProjectAction(page, 'Projects');
     await region.getByText('Checkpoints and copies', { exact: false }).click();
     page.once('dialog', (dialog) => dialog.accept());
     await region.getByRole('button', { name: 'Restore checkpoint Antes da revisão', exact: true }).click();
@@ -44,7 +45,7 @@ for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 844 
     const restored = await (await page.request.get(`/api/projects/${project.projectId}`)).json();
     expect(restored.annotations).toEqual(original.annotations);
     expect(restored.revision).toBeGreaterThan(original.revision);
-    await page.getByRole('button', { name: 'Projects', exact: true }).click();
+    await clickProjectAction(page, 'Projects');
     await region.getByText('Checkpoints and copies', { exact: false }).click();
     await expect(region.getByRole('button', { name: 'Restore checkpoint Before restoring Antes da revisão', exact: true })).toBeVisible();
     const copyResponse = page.waitForResponse((r) => r.url().endsWith(`/api/projects/${project.projectId}/duplicate`));
@@ -54,7 +55,7 @@ for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 844 
     expect(copy.annotations[0].id).not.toBe(original.annotations[0].id);
     expect(copy.annotations[0].geometry).toEqual(original.annotations[0].geometry);
     await expect(page.getByLabel('Project name', { exact: true })).toHaveValue(copyName);
-    await page.getByRole('button', { name: 'Projects', exact: true }).click();
+    await clickProjectAction(page, 'Projects');
     page.once('dialog', (dialog) => dialog.accept());
     await page.getByRole('button', { name: `Delete project ${copyName}`, exact: true }).click();
     await region.getByText('Recently deleted', { exact: false }).first().click();
@@ -63,11 +64,11 @@ for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 844 
     await expect(page.getByLabel('Project name', { exact: true })).toHaveValue(copyName);
     const after = await (await page.request.get(`/api/projects/${copy.projectId}`)).json();
     expect(after.annotations).toEqual(copy.annotations);
-    await page.getByRole('button', { name: 'Export video', exact: true }).click();
+    await clickProjectAction(page, 'Export video');
     await page.getByRole('button', { name: 'Render MP4', exact: true }).click();
     await expect(page.getByRole('link', { name: 'Download MP4' })).toBeVisible({ timeout: 30000 });
     await page.getByRole('button', { name: 'Close exports', exact: true }).click();
-    await page.getByRole('button', { name: 'Projects', exact: true }).click();
+    await clickProjectAction(page, 'Projects');
     page.once('dialog', (dialog) => dialog.accept());
     await page.getByRole('button', { name: `Delete project ${copyName}`, exact: true }).click();
     await region.getByText('Recently deleted', { exact: false }).first().click();

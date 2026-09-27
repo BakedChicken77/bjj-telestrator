@@ -2,6 +2,7 @@ name: Release
 on:
   push:
     tags: ['v*']
+    branches: [preview/native-iphone]
 permissions:
   contents: read
 concurrency:
@@ -26,14 +27,19 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - run: python3 scripts/ci/release.py validate
+      - if: github.ref_type == 'tag'
+        run: python3 scripts/ci/release.py validate
         env:
           RELEASE_TAG: ${{ github.ref_name }}
+      - name: Validate internal preview version
+        if: github.ref_type == 'branch'
+        run: python3 -c 'import json; from scripts.ci.release import validate_version; validate_version("v" + json.load(open("frontend/package.json"))["version"])'
   checks:
     needs: validate
     uses: ./.github/workflows/ci.yml
   package:
     needs: checks
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -110,7 +116,7 @@ jobs:
           retention-days: 7
   publish:
     needs: [checks, package, sign]
-    if: always() && needs.checks.result == 'success' && needs.package.result == 'success' && (needs.sign.result == 'success' || needs.sign.result == 'skipped')
+    if: always() && github.ref_type == 'tag' && needs.checks.result == 'success' && needs.package.result == 'success' && (needs.sign.result == 'success' || needs.sign.result == 'skipped')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:

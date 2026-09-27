@@ -1,3 +1,4 @@
+import { clickProjectAction } from './project-actions';
 import playwright from '../../frontend/node_modules/@playwright/test/index.mjs';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -11,7 +12,7 @@ test('a lost backup acknowledgement recovers the same durable request without du
   await page.goto('/');
   await page.getByLabel('Import video', { exact: true }).setInputFiles(path.join(root, 'tests/generated/silent.mp4'));
   await expect(page.locator('video')).toBeVisible();
-  await page.getByRole('button', { name: 'Projects', exact: true }).click();
+  await clickProjectAction(page, 'Projects');
   let created = '', creates = 0, connected = false;
   await page.route('**/api/package-jobs', async (route) => {
     if (route.request().method() !== 'POST') return route.continue();
@@ -82,7 +83,7 @@ for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 844 
     await expect(page.getByRole('button', { name: 'Close audio controls', exact: true })).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(page.getByRole('button', { name: 'Audio & voiceovers', exact: true })).toBeFocused();
-    await page.getByRole('button', { name: 'Projects', exact: true }).click();
+    await clickProjectAction(page, 'Projects');
     await expect(page.locator('dialog:modal')).toBeVisible();
     await page.keyboard.press('Tab');
     expect(await page.evaluate(() => document.querySelector('dialog:modal')?.contains(document.activeElement))).toBe(true);
@@ -106,7 +107,7 @@ for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 844 
     await page.getByLabel('Larger editor text', { exact: true }).uncheck();
     await page.keyboard.press('Escape');
     await expect(page.getByRole('button', { name: 'Projects', exact: true })).toBeFocused();
-    await page.getByRole('button', { name: 'Projects', exact: true }).click();
+    await clickProjectAction(page, 'Projects');
     const saved = await (await page.request.get(`/api/projects/${project.projectId}`)).json();
     const cue = saved.annotations[0];
     expect(saved.annotations.map((item: { type: string }) => item.type)).toEqual(['rectangle', 'line', 'arrow', 'ellipse', 'freehand', 'text']);
@@ -136,7 +137,7 @@ for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 844 
     expect(restored.annotations.map((item: { geometry: unknown }) => item.geometry)).toEqual(saved.annotations.map((item: { geometry: unknown }) => item.geometry));
     const source = fs.readFileSync(path.join(process.env.BJJ_E2E_DATA_DIR ?? path.join(root, 'tests/generated/e2e-data'), 'projects', restoredId!, restored.source.asset));
     expect(createHash('sha256').update(source).digest('hex')).toBe(sourceHash);
-    await page.getByRole('button', { name: 'Export video', exact: true }).click();
+    await clickProjectAction(page, 'Export video');
     await page.getByRole('button', { name: 'Render MP4', exact: true }).click();
     const mp4 = page.getByRole('link', { name: 'Download MP4' });
     await expect(mp4).toBeVisible({ timeout: 30000 });
