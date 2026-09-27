@@ -781,6 +781,7 @@ test("real microphone clips persist, preview in sync, rerecord, and mix into AAC
     contentType: "image/png",
   });
 
+  await page.getByRole("button", { name: "Close audio controls", exact: true }).click();
   const output = testInfo.outputPath("voiceover-annotated.mp4");
   await exportVideo(page, output);
   const metadata = probe(output);

@@ -17,8 +17,8 @@ Apple documents that playAndRecord is nonmixable by default and that mixWithOthe
 
 ## Validation
 
-- Local frontend tests: 67 passed, including seven new native-session controller tests. TypeScript, ESLint and production build passed.
-- Browser download failed in the Linux workspace; the new browser regressions and existing full suite must pass in GitHub CI. Native compilation/XCTest and Docker validation also remain CI gates.
+- Local frontend tests: 67 passed, including seven new native-session controller tests; 74 backend tests and 11 repository tests passed. TypeScript, ESLint, Ruff, formatting, production build and Capacitor sync passed.
+- Browser download failed in the Linux workspace. In initial CI 36338676915, all four phone tests passed, including the new overlay and expanded-editor regressions; the desktop recording test required an explicit modal dismissal before Export. The test was updated to follow the new interaction. The full suite and native/archive checks remain required before merge. Frontend, backend and Docker CI jobs passed.
 - New native lifecycle XCTest fences cancelled permission and stale transitions.
 - New browser cases exercise exact 402 × 874 and 874 × 402 viewports plus 375 × 667, long audio lists, close-button hit testing, Escape/focus restoration, larger portrait video, rotation, stable video identity, normalized annotations and undo/redo. Existing tests continue to cover real recording, persistence and MP4 output.
 
