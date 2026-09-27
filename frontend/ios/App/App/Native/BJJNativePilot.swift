@@ -178,14 +178,26 @@ struct BJJNativeTransportState: Codable {
     @Published var shareURL: URL?
     @Published private(set) var undoCount = 0
     @Published private(set) var redoCount = 0
-    private var undoStack: [[BJJJSON]] = []
-    private var redoStack: [[BJJJSON]] = []
+    @Published var recording = false
+    @Published var preparingAudio = false
+    @Published var recordingLevel: Float = -160
+    @Published var audioRoute = ""
+    @Published var notice: String?
+    @Published var completedExportID: String?
+    @Published var retryExportID: String?
+    @Published var exportURL: URL?
+    private let capture = BJJNativeRecording()
+    private var previewFiles: [URL] = []
+    private var previewGeneration = 0
+    private var undoStack: [BJJJSON] = []
+    private var redoStack: [BJJJSON] = []
     private var observer: Any?
     private var endObserver: NSObjectProtocol?
     private var seekTask: Task<Void, Never>?
     private var seeking = false
     private let preferences: UserDefaults?
     private var service: BJJService?
+    private var exportCancelled = false
     private var jobID: String?
     private var closed = false
     private var seekGeneration = 0
@@ -197,6 +209,7 @@ struct BJJNativeTransportState: Codable {
         observer = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 1.0 / 30, preferredTimescale: 600), queue: .main) { [weak self] value in
             Task { @MainActor in
                 guard let self, !self.closed, !self.seeking else { return }
+                if self.recording { self.recordingLevel = self.capture.level; self.capture.checkClock() }
                 let seconds = value.seconds
                 if seconds.isFinite { self.time = min(self.project.duration, max(0, seconds)) }
                 self.playing = self.player.rate != 0
@@ -205,11 +218,30 @@ struct BJJNativeTransportState: Codable {
                 }
             }
         }
-        endObserver = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: player.currentItem, queue: .main) { [weak self] _ in
+        endObserver = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: nil, queue: .main) { [weak self] note in
             Task { @MainActor in
                 guard let self, !self.closed, !self.seeking else { return }
+                guard let item = note.object as? AVPlayerItem, item === self.player.currentItem else { return }
+                if self.recording { self.capture.stop(); return }
                 if self.loopEnabled { self.seek(self.loopStart, resume: true) } else { self.pause() }
             }
+        }
+        if let service {
+            let exports = (try? service.listExports(id)) ?? []
+            retryExportID = exports.first { ["failed", "cancelled"].contains($0["status"] as? String ?? "") }?["jobId"] as? String
+        }
+        capture.finished = { [weak self] clip, failure, reason in
+            guard let self else { return }
+            self.recording = false; self.playing = false
+            if let failure { self.error = failure.localizedDescription; return }
+            if let clip {
+                do {
+                    var json = self.project.json
+                    json["voiceovers"] = self.project.voiceovers + [clip]
+                    try self.commitDocument(json)
+                    self.notice = reason ?? "Take saved. Play it back to check the timing."
+                } catch { self.error = "The audio was preserved, but the review could not save. Reopen it to recover the take. \(error.localizedDescription)" }
+            } else { self.notice = reason }
         }
         if let data = preferences?.data(forKey: "native-review.\(id)"),
            let saved = try? JSONDecoder().decode(BJJNativeTransportState.self, from: data) {
@@ -226,6 +258,7 @@ struct BJJNativeTransportState: Codable {
         savePosition()
     }
     func togglePlayback() {
+        guard !recording, !preparingAudio else { return }
         if playing { pause(); return }
         drawing = false
         let target: Double
@@ -234,7 +267,7 @@ struct BJJNativeTransportState: Codable {
         seek(target, resume: true)
     }
     func seek(_ seconds: Double, resume: Bool = false) {
-        guard seconds.isFinite, !closed else { return }
+        guard seconds.isFinite, !closed, !recording else { return }
         pause(); seekGeneration += 1
         let generation = seekGeneration
         let target = min(project.duration, max(0, seconds))
@@ -258,7 +291,7 @@ struct BJJNativeTransportState: Codable {
         }
     }
     func setSpeed(_ value: Float) {
-        guard [Float(0.25), 0.5, 1, 2].contains(value) else { return }
+        guard !recording, [Float(0.25), 0.5, 1, 2].contains(value) else { return }
         speed = value
         if playing { player.rate = value }
         savePosition()
@@ -281,16 +314,65 @@ struct BJJNativeTransportState: Codable {
         let state = BJJNativeTransportState(time: time, speed: speed, loopStart: loopStart, loopEnd: loopEnd, loopEnabled: loopEnabled)
         if let data = try? JSONEncoder().encode(state) { preferences?.set(data, forKey: "native-review.\(id)") }
     }
-    func commit(_ annotations: [BJJJSON]) throws {
-        guard !exporting else { throw BJJError.invalid("Wait for export to finish before editing.") }
+    private var documentState: BJJJSON {
+        ["annotations": project.annotations, "voiceovers": project.voiceovers, "settings": project.settings]
+    }
+    func commitDocument(_ json: BJJJSON) throws {
+        guard !exporting, !recording, !preparingAudio else { throw BJJError.invalid("Finish the current operation before editing.") }
         cancelCueEdit()
-        var json = project.json; json["annotations"] = annotations
-        let previous = project.annotations
+        let previous = documentState
         let saved = try store.save(BJJProject(json))
+        let audioChanged = !NSDictionary(dictionary: ["voiceovers": project.voiceovers, "settings": project.settings]).isEqual(to: ["voiceovers": saved.voiceovers, "settings": saved.settings])
         undoStack.append(previous); if undoStack.count > 50 { undoStack.removeFirst() }
         redoStack.removeAll(); project = saved; syncHistory()
+        if audioChanged { Task { await self.prepareAudio() } }
+    }
+    func commit(_ annotations: [BJJJSON]) throws {
+        var json = project.json; json["annotations"] = annotations
+        try commitDocument(json)
         if !annotations.contains(where: { $0.s("id") == selectedID }) { selectedID = nil }
     }
+    func updateAudio(clip: BJJJSON? = nil, removing: String? = nil, settings: BJJJSON? = nil) {
+        do {
+            var json = project.json
+            if let settings { json["settings"] = settings }
+            if let clip { json["voiceovers"] = project.voiceovers.map { $0.s("id") == clip.s("id") ? clip : $0 } }
+            if let removing { json["voiceovers"] = project.voiceovers.filter { $0.s("id") != removing } }
+            try commitDocument(json)
+        } catch { self.error = error.localizedDescription }
+    }
+    func prepareAudio() async {
+        guard !closed, !recording, !preparingAudio else { return }
+        pause(); preparingAudio = true; previewGeneration += 1
+        let generation = previewGeneration, position = time
+        player.isMuted = true
+        defer { preparingAudio = false }
+        do {
+            let path = try store.safeURL(id, "temp/mix-\(UUID().uuidString).caf")
+            previewFiles.append(path)
+            let item = try await BJJAudioComposition.preview(project: project, store: store, target: path)
+            guard !closed, generation == previewGeneration else { try? FileManager.default.removeItem(at: path); return }
+            player.replaceCurrentItem(with: item); player.volume = 1; player.isMuted = false
+            seek(position)
+            // The previous item is no longer using these files.
+            for old in previewFiles where old != path { try? FileManager.default.removeItem(at: old) }
+            previewFiles = [path]
+        } catch { self.error = "Audio preview could not be prepared. \(error.localizedDescription)" }
+    }
+    func startRecording() async {
+        guard !closed, !recording, !preparingAudio, !exporting else { return }
+        cancelCueEdit(); pause(); drawing = false; speed = 1; loopEnabled = false
+        recording = true
+        do {
+            try await capture.begin(project: project, store: store, player: player)
+            guard !closed, recording else { capture.stop(); return }
+            audioRoute = capture.route; playing = true
+        } catch {
+            recording = false; pause()
+            if !(error is CancellationError), (error as? BJJError)?.code != "CANCELLED" { self.error = error.localizedDescription }
+        }
+    }
+    func stopRecording() { capture.stop() }
     func add(_ points: [CGPoint]) {
         do { try commit(project.annotations + [try BJJNativeGeometry.annotation(tool: tool, points: points, time: time, project: project, color: color, text: text)]) }
         catch BJJError.cancelled { }
@@ -301,14 +383,17 @@ struct BJJNativeTransportState: Codable {
         catch { self.error = error.localizedDescription }
     }
     func history(redo: Bool) {
-        guard !exporting else { return }; cancelCueEdit()
-        guard let annotations = redo ? redoStack.last : undoStack.last else { return }
+        guard !exporting, !recording, !preparingAudio else { return }; cancelCueEdit()
+        guard let state = redo ? redoStack.last : undoStack.last else { return }
         do {
-            var json = project.json; json["annotations"] = annotations
+            var json = project.json
+            for (key, value) in state { json[key] = value }
+            let previous = documentState
             let saved = try store.save(BJJProject(json))
-            if redo { redoStack.removeLast(); undoStack.append(project.annotations) }
-            else { undoStack.removeLast(); redoStack.append(project.annotations) }
+            if redo { redoStack.removeLast(); undoStack.append(previous) }
+            else { undoStack.removeLast(); redoStack.append(previous) }
             project = saved; syncHistory()
+            Task { await self.prepareAudio() }
         } catch { self.error = error.localizedDescription }
     }
     private func syncHistory() { undoCount = undoStack.count; redoCount = redoStack.count }
@@ -325,19 +410,26 @@ struct BJJNativeTransportState: Codable {
             }
         } catch { /* The player remains usable when thumbnails cannot decode. */ }
     }
-    func export() async {
-        guard !exporting else { return }
-        cancelCueEdit(); pause(); exporting = true; exportProgress = 0
+    func export(options: BJJExportOptions? = nil, retry: String? = nil) async {
+        guard !exporting, !recording, !preparingAudio else { return }
+        cancelCueEdit(); pause(); exporting = true; exportProgress = 0; exportCancelled = false
         defer { exporting = false; jobID = nil }
         do {
             if service == nil { service = try BJJService(store: store) }
             guard let service else { return }
-            let job = try await service.createExport(id, expectedRevision: project.revision)
+            let job: BJJExportJob
+            if let retry { job = try service.retryExport(retry) }
+            else { job = try await service.createExport(id, expectedRevision: project.revision, options: options) }
+            retryExportID = job.jobId
             jobID = job.jobId
+            if exportCancelled || closed { _ = try service.cancel(job.jobId); return }
             while !Task.isCancelled, !closed {
                 let current = try service.job(job.jobId)
                 exportProgress = current.progress / 100
-                if current.status == "completed" { shareURL = try service.exportedFile(job.jobId); return }
+                if current.status == "completed" {
+                    releaseExport(); exportURL = try service.acquireExportFile(job.jobId)
+                    completedExportID = job.jobId; retryExportID = nil; return
+                }
                 if current.status == "cancelled" { return }
                 if current.status == "failed" { throw BJJError.invalid(current.error ?? "Export failed.") }
                 try await Task.sleep(nanoseconds: 250_000_000)
@@ -345,12 +437,17 @@ struct BJJNativeTransportState: Codable {
             _ = try service.cancel(job.jobId)
         } catch { self.error = error.localizedDescription }
     }
-    func cancelExport() { if let jobID { _ = try? service?.cancel(jobID) } }
+    func releaseExport() {
+        if let completedExportID { service?.releaseExportFile(completedExportID) }
+        completedExportID = nil; exportURL = nil; shareURL = nil
+    }
+    func cancelExport() { exportCancelled = true; if let jobID { _ = try? service?.cancel(jobID) } }
     func close() {
         guard !closed else { return }
-        closed = true; cancelCueEdit(); pause(); cancelExport()
+        capture.stop(); closed = true; previewGeneration += 1; cancelCueEdit(); pause(); cancelExport(); releaseExport()
         if let observer { player.removeTimeObserver(observer); self.observer = nil }
         if let endObserver { NotificationCenter.default.removeObserver(endObserver); self.endObserver = nil }
         player.replaceCurrentItem(with: nil)
+        for file in previewFiles { try? FileManager.default.removeItem(at: file) }
     }
 }

@@ -290,53 +290,27 @@ final class BJJRenderer {
                       height: max(2, (source.height * scale / 2).rounded(.toNearestOrEven) * 2))
     }
     func render(media: BJJMedia, project: BJJProject?, store: BJJStore, output: URL,
-                proxy: Bool = false, progress: @escaping (Double) -> Void) async throws {
-        let duration = media.videoRange.duration
+                proxy: Bool = false, options: BJJExportOptions? = nil, progress: @escaping (Double) -> Void) async throws {
+        if let options, let project { try options.validate(project) }
+        let start = options?.start ?? 0
+        let duration = CMTime(seconds: (options?.end ?? media.videoRange.duration.seconds) - start, preferredTimescale: 60000)
         let fps = min(60, project?.exportSettings.n("fps") ?? min(30, media.fps))
-        let size = Self.outputSize(media.orientedSize, maximum: proxy ? 1920 : nil)
+        let size = Self.outputSize(media.orientedSize, maximum: proxy ? 1920 : options.map { CGFloat($0.maximum) })
         let composition = AVMutableComposition()
         guard let video = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) else {
             throw BJJError.invalid("Unable to prepare a video track.")
         }
         try video.insertTimeRange(media.videoRange, of: media.video, at: .zero)
-        var audioTracks: [AVCompositionTrack] = []
-        var audioParameters: [AVAudioMixInputParameters] = []
-        let muted = project.map { $0.settings["originalAudioMuted"] as! Bool } ?? false
-        let originalGain: Float = muted ? 0 : Float(project?.settings.n("originalAudioGain") ?? 1)
-        // AVAudioMix volume is documented in [0, 1]. Normalize there, then apply
-        // the common gain to decoded float PCM before AAC encoding.
-        let totalVoiceGain = project.map { p in p.voiceovers.filter { !($0["muted"] as! Bool) }.map { $0.n("gain") * p.settings.n("voiceoverMasterGain") }.reduce(0, +) } ?? 0
-        let mixScale = max(1, Double(originalGain) + totalVoiceGain)
-        let originalTracks = try await media.asset.loadTracks(withMediaType: .audio)
-        for sourceAudio in originalTracks.prefix(1) {
-            let range = try await sourceAudio.load(.timeRange)
-            let shared = CMTimeRangeGetIntersection(range, otherRange: media.videoRange)
-            guard shared.isValid, shared.duration.seconds > 0,
-                  let track = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else { continue }
-            try track.insertTimeRange(shared, of: sourceAudio, at: CMTimeSubtract(shared.start, media.videoRange.start))
-            let parameters = AVMutableAudioMixInputParameters(track: track)
-            parameters.setVolume(originalGain / Float(mixScale), at: .zero)
-            audioParameters.append(parameters); audioTracks.append(track)
-        }
-        if let project {
-            for clip in project.voiceovers where !(clip["muted"] as! Bool) && clip.n("gain") * project.settings.n("voiceoverMasterGain") > 0 {
-                let url = try store.asset(project.id, clip.s("asset"))
-                let asset = AVURLAsset(url: url)
-                guard let source = try await asset.loadTracks(withMediaType: .audio).first,
-                      let track = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else {
-                    throw BJJError.invalid("A voiceover cannot be decoded.")
-                }
-                let sourceRange = try await source.load(.timeRange)
-                let start = clip.n("startSec") + clip.n("timingOffsetMs") / 1000
-                let length = min(clip.n("durationSec"), min(sourceRange.duration.seconds, max(0, duration.seconds - start)))
-                guard length > 0 else { continue }
-                let range = CMTimeRange(start: sourceRange.start, duration: CMTime(seconds: length, preferredTimescale: 48000))
-                try track.insertTimeRange(range, of: source, at: CMTime(seconds: start, preferredTimescale: 48000))
-                let parameters = AVMutableAudioMixInputParameters(track: track)
-                parameters.setVolume(Float(clip.n("gain") * project.settings.n("voiceoverMasterGain") / mixScale), at: .zero)
-                audioParameters.append(parameters); audioTracks.append(track)
+        var audioProject = project
+        if let project, let options {
+            var document = project.json
+            document["voiceovers"] = project.voiceovers.filter {
+                $0.n("startSec") + $0.n("timingOffsetMs") / 1000 < options.end && $0.n("endSec") + $0.n("timingOffsetMs") / 1000 > options.start
             }
+            audioProject = try BJJProject(document)
         }
+        let audio = try await BJJAudioComposition.build(media: media, project: audioProject, store: store, composition: composition)
+        let mixScale = audio.scale
         let videoComposition = AVMutableVideoComposition()
         // AVFoundation converts HDR inputs to these SDR properties BEFORE its
         // compositor. Do not apply a second Core Image tone-map to these pixels.
@@ -346,34 +320,27 @@ final class BJJRenderer {
         videoComposition.renderSize = size
         videoComposition.frameDuration = CMTime(seconds: 1 / fps, preferredTimescale: 60000)
         let instruction = AVMutableVideoCompositionInstruction()
-        instruction.timeRange = CMTimeRange(start: .zero, duration: duration)
+        instruction.timeRange = CMTimeRange(start: .zero, duration: media.videoRange.duration)
         let layer = AVMutableVideoCompositionLayerInstruction(assetTrack: video)
         layer.setTransform(media.transform.concatenating(CGAffineTransform(scaleX: size.width / media.orientedSize.width,
                                                                           y: size.height / media.orientedSize.height)), at: .zero)
         instruction.layerInstructions = [layer]
         videoComposition.instructions = [instruction]
         let reader = try AVAssetReader(asset: composition)
-        reader.timeRange = CMTimeRange(start: .zero, duration: duration)
+        reader.timeRange = CMTimeRange(start: CMTime(seconds: start, preferredTimescale: 60000), duration: duration)
         let videoOutput = AVAssetReaderVideoCompositionOutput(videoTracks: [video], videoSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
         videoOutput.videoComposition = videoComposition
         videoOutput.alwaysCopiesSampleData = false
         guard reader.canAdd(videoOutput) else { throw BJJError.invalid("This video cannot be prepared for rendering.") }
         reader.add(videoOutput)
-        var audioOutput: AVAssetReaderAudioMixOutput?
-        if !audioTracks.isEmpty {
-            let output = AVAssetReaderAudioMixOutput(audioTracks: audioTracks, audioSettings: [
-                AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: 48000, AVNumberOfChannelsKey: 2,
-                AVLinearPCMBitDepthKey: 32, AVLinearPCMIsFloatKey: true, AVLinearPCMIsBigEndianKey: false,
-                AVLinearPCMIsNonInterleaved: false
-            ])
-            let mix = AVMutableAudioMix(); mix.inputParameters = audioParameters; output.audioMix = mix
-            output.alwaysCopiesSampleData = false
-            guard reader.canAdd(output) else { throw BJJError.invalid("The audio mix could not be prepared.") }
-            reader.add(output); audioOutput = output
+        let audioOutput = audio.output
+        if let audioOutput {
+            guard reader.canAdd(audioOutput) else { throw BJJError.invalid("The audio mix could not be prepared.") }
+            reader.add(audioOutput)
         }
         let writer = try AVAssetWriter(outputURL: output, fileType: .mp4)
         writer.shouldOptimizeForNetworkUse = true
-        let quality = project?.exportSettings.n("crf") ?? 23
+        let quality = options?.crf ?? project?.exportSettings.n("crf") ?? 23
         let bitrate = Int(min(60_000_000, max(1_000_000, Double(size.width * size.height) * fps * 0.12 * pow(2, (23 - quality) / 6))))
         let videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: [
             AVVideoCodecKey: AVVideoCodecType.h264, AVVideoWidthKey: Int(size.width), AVVideoHeightKey: Int(size.height),
@@ -446,10 +413,10 @@ final class BJJRenderer {
                         var image = CIImage(cvPixelBuffer: source)
                         if let overlayImage = overlay.image(at: pts.seconds) { image = overlayImage.composited(over: image) }
                         context.render(image, to: destination, bounds: CGRect(origin: .zero, size: size), colorSpace: deliverySpace)
-                        guard adaptor.append(destination, withPresentationTime: pts) else {
+                        guard adaptor.append(destination, withPresentationTime: CMTimeSubtract(pts, CMTime(seconds: start, preferredTimescale: 60000))) else {
                             complete(.failure(writer.error ?? BJJError.invalid("Unable to encode a video frame."))); return
                         }
-                        if pts.seconds - lastProgress >= 0.2 { lastProgress = pts.seconds; progress(pts.seconds) }
+                        if pts.seconds - lastProgress >= 0.2 { lastProgress = pts.seconds; progress(max(0, pts.seconds - start)) }
                     }
                 }
             }
@@ -465,7 +432,7 @@ final class BJJRenderer {
                                 return
                             }
                             do {
-                                let scaled = try BJJAudio.scale(sample, gain: Float(mixScale))
+                                let scaled = try BJJAudio.scale(sample, gain: Float(mixScale), offset: start)
                                 if !audioInput.append(scaled) { complete(.failure(writer.error ?? BJJError.invalid("Unable to encode the audio mix."))) }
                             } catch { complete(.failure(error)) }
                         }
@@ -478,7 +445,7 @@ final class BJJRenderer {
 }
 
 enum BJJAudio {
-    static func scale(_ sample: CMSampleBuffer, gain: Float) throws -> CMSampleBuffer {
+    static func scale(_ sample: CMSampleBuffer, gain: Float, offset: Double = 0) throws -> CMSampleBuffer {
         guard let source = CMSampleBufferGetDataBuffer(sample), let format = CMSampleBufferGetFormatDescription(sample) else {
             throw BJJError.invalid("An audio sample could not be decoded.")
         }
@@ -499,7 +466,7 @@ enum BJJAudio {
         var result: CMSampleBuffer?
         let status = CMAudioSampleBufferCreateReadyWithPacketDescriptions(allocator: kCFAllocatorDefault,
             dataBuffer: block, formatDescription: format, sampleCount: CMSampleBufferGetNumSamples(sample),
-            presentationTimeStamp: CMSampleBufferGetPresentationTimeStamp(sample), packetDescriptions: nil, sampleBufferOut: &result)
+            presentationTimeStamp: CMTimeSubtract(CMSampleBufferGetPresentationTimeStamp(sample), CMTime(seconds: offset, preferredTimescale: 48000)), packetDescriptions: nil, sampleBufferOut: &result)
         guard status == noErr, let result else { throw BJJError.invalid("Unable to encode a mixed audio sample.") }
         return result
     }

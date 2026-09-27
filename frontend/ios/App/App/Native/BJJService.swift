@@ -110,14 +110,14 @@ struct BJJExportJob: Codable {
         guard let job = jobs[id] else { throw BJJError.invalid("This export does not exist.") }
         return job
     }
-    func createExport(_ projectId: String, expectedRevision: Int? = nil) async throws -> BJJExportJob {
+    func createExport(_ projectId: String, expectedRevision: Int? = nil, options: BJJExportOptions? = nil) async throws -> BJJExportJob {
         let project = try store.load(projectId)
         if let expectedRevision, project.revision != expectedRevision {
             throw BJJError.domain("PROJECT_CONFLICT", "The saved project changed. Reopen it before exporting.")
         }
         try store.acquireLease(projectId)
         do {
-            let plan = try await BJJAssets.offMain { [store] in try BJJRenderPlan(store: store, project: project) }
+            let plan = try await BJJAssets.offMain { [store] in try BJJRenderPlan(store: store, project: project, options: options) }
             return try enqueue(plan)
         } catch { store.releaseLease(projectId); throw error }
     }
@@ -235,27 +235,28 @@ struct BJJExportJob: Codable {
                 try store.checkSpace(required: (BJJAssets.exportEstimate(project)["requiredBytes"] as! NSNumber).int64Value)
                 try await BJJAssets.offMain { [store] in try plan.verify(store, cancellation: cancellation) }
                 try cancellation.check()
+                let duration = (plan.options?.end ?? project.duration) - (plan.options?.start ?? 0)
                 let source = try store.asset(project.id, project.source.s("asset"))
                 let media = try await BJJMedia.inspect(source, reference: project.source.s("asset"), originalName: project.source.s("originalFilename"))
                 let staging = try store.safeURL(project.id, "temp/\(id).mp4")
                 temporary = staging
                 logger.info("Export started: \(id, privacy: .public)")
-                try await worker.render(media: media, project: project, store: store, output: staging) { [weak self] seconds in
+                try await worker.render(media: media, project: project, store: store, output: staging, options: plan.options) { [weak self] seconds in
                     Task { @MainActor in
                         guard let self, self.jobs[id]?.status == "running" else { return }
                         self.jobs[id]?.renderedSec = seconds
-                        self.jobs[id]?.progress = min(99, seconds / project.duration * 100)
+                        self.jobs[id]?.progress = min(99, seconds / duration * 100)
                     }
                 }
                 if jobs[id]?.status == "cancelled" { return }
                 let probe = try await BJJMedia.inspect(staging, reference: "exports/output.mp4", originalName: "output.mp4")
                 let tolerance = max(0.1, 1 / project.exportSettings.n("fps"))
                 let expectedAudio = (media.json["hasAudio"] as! Bool) || project.voiceovers.contains {
-                    !($0["muted"] as! Bool) && $0.n("gain") * project.settings.n("voiceoverMasterGain") > 0
+                    !($0["muted"] as! Bool) && $0.n("gain") * project.settings.n("voiceoverMasterGain") > 0 && $0.n("startSec") + $0.n("timingOffsetMs") / 1000 < (plan.options?.end ?? project.duration) && $0.n("endSec") + $0.n("timingOffsetMs") / 1000 > (plan.options?.start ?? 0)
                 }
                 guard !BJJColor.isHDR(probe.json), probe.json.s("transferFunction") == "bt709", probe.json.s("colorPrimaries") == "bt709",
-                      probe.json.s("colorMatrix") == "bt709", probe.json.s("codec") == "avc1", abs(probe.videoRange.duration.seconds - project.duration) <= tolerance,
-                      probe.orientedSize == BJJRenderer.outputSize(CGSize(width: project.source.n("displayWidth"), height: project.source.n("displayHeight"))),
+                      probe.json.s("colorMatrix") == "bt709", probe.json.s("codec") == "avc1", abs(probe.videoRange.duration.seconds - duration) <= tolerance,
+                      probe.orientedSize == BJJRenderer.outputSize(CGSize(width: project.source.n("displayWidth"), height: project.source.n("displayHeight")), maximum: plan.options.map { CGFloat($0.maximum) }),
                       (probe.json["hasAudio"] as? Bool) == expectedAudio,
                       !expectedAudio || probe.json["audioCodec"] as? String == "aac" else {
                     logger.error("Export validation: video=\(probe.json.s("codec"), privacy: .public), audio=\(String(describing: probe.json["audioCodec"]), privacy: .public), duration=\(probe.videoRange.duration.seconds), expected=\(project.duration), width=\(probe.orientedSize.width), height=\(probe.orientedSize.height)")
@@ -265,7 +266,7 @@ struct BJJExportJob: Codable {
                 try cancellation.check()
                 let target = try store.safeURL(project.id, "exports/\(jobs[id]!.filename!)")
                 try FileManager.default.moveItem(at: staging, to: target)
-                jobs[id]?.status = "completed"; jobs[id]?.progress = 100; jobs[id]?.renderedSec = project.duration; jobs[id]?.outputAvailable = true
+                jobs[id]?.status = "completed"; jobs[id]?.progress = 100; jobs[id]?.renderedSec = duration; jobs[id]?.outputAvailable = true
                 do { try persist(jobs[id]!) }
                 catch { try? FileManager.default.removeItem(at: target); throw error }
                 logger.info("Export completed: \(id, privacy: .public)")
