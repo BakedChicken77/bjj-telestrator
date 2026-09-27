@@ -9,7 +9,7 @@ struct BJJNativeAudioScreen: View {
         NavigationStack {
             Form {
                 Section("Mix") {
-                    Toggle("Mute original audio", isOn: Binding(get: { session.project.settings["originalAudioMuted"] as? Bool ?? false }, set: { value in
+                    Toggle("Mute original", isOn: Binding(get: { session.project.settings["originalAudioMuted"] as? Bool ?? false }, set: { value in
                         var settings = session.project.settings; settings["originalAudioMuted"] = value; session.updateAudio(settings: settings)
                     }))
                     gain("Original volume", key: "originalAudioGain")
@@ -95,8 +95,8 @@ struct BJJNativeExportScreen: View {
                 Section("Range") {
                     Toggle("Selected range", isOn: $selectedRange)
                     if selectedRange {
-                        TextField("Start in seconds", value: $start, format: .number).keyboardType(.decimalPad)
-                        TextField("End in seconds", value: $end, format: .number).keyboardType(.decimalPad)
+                        LabeledContent("Start (seconds)") { TextField("Start", value: $start, format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing).accessibilityLabel("Range start in seconds") }
+                        LabeledContent("End (seconds)") { TextField("End", value: $end, format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing).accessibilityLabel("Range end in seconds") }
                         Button("Use loop range") { start = session.loopStart; end = session.loopEnd }
                     } else { Text("Full video · \(session.project.duration, specifier: "%.1f") seconds") }
                 }
