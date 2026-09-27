@@ -81,6 +81,20 @@ import SwiftUI
         XCTAssertFalse(editor.playing)
         XCTAssertEqual(try store.load(initial.id).revision, initial.revision)
         XCTAssertEqual(editor.undoCount, 0)
+        editor.togglePlayback()
+        var previous = editor.time, wrapped = false
+        for _ in 0..<60 {
+            try await Task.sleep(nanoseconds: 50_000_000)
+            if editor.time < previous - 0.1 { wrapped = true; break }
+            previous = editor.time
+        }
+        XCTAssertTrue(wrapped, "Playback must actually wrap at the chosen loop boundary")
+        editor.pause()
+        editor.seek(0.6)
+        for _ in 0..<50 {
+            if abs(editor.player.currentTime().seconds - 0.6) < 0.02 { break }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
         editor.close()
         let reopened = try BJJNativeEditorSession(project: initial, store: store, preferences: defaults)
         defer { reopened.close() }
@@ -95,6 +109,33 @@ import SwiftUI
         let unsafe = BJJNativeTransportState(time: .infinity, speed: 10, loopStart: -1, loopEnd: 500, loopEnabled: true).validated(duration: 1)
         XCTAssertEqual(unsafe.time, 0); XCTAssertEqual(unsafe.speed, 1)
         XCTAssertEqual(unsafe.loopStart, 0); XCTAssertEqual(unsafe.loopEnd, 1)
+    }
+    func testNativeLibraryCompactAndLargeTextLayouts() async throws {
+        let source = root.appendingPathComponent("library-layout.mp4")
+        try await silentVideo(source)
+        let library = BJJNativeLibrary(root: root.appendingPathComponent("native"), originalRoot: root.appendingPathComponent("original"))
+        await library.importFile(source)
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = scene.windows.first { $0.isKeyWindow }
+        let container = UIViewController()
+        let window = UIWindow(windowScene: scene); window.rootViewController = container
+        window.overrideUserInterfaceStyle = .light; window.makeKeyAndVisible()
+        defer { window.isHidden = true; previous?.makeKeyAndVisible() }
+        // Bounded UIKit hosts exercise compact and large-text layout independently
+        // of the CI simulator's physical dimensions. Real rotation is tested separately.
+        for (name, size, text) in [("compact", CGSize(width: 375, height: 667), DynamicTypeSize.large),
+                                    ("large-text", CGSize(width: 402, height: 874), DynamicTypeSize.accessibility2)] {
+            let host = UIHostingController(rootView: BJJNativeHome(library: library).environment(\.dynamicTypeSize, text))
+            container.addChild(host); container.view.addSubview(host.view); host.didMove(toParent: container)
+            host.view.frame = CGRect(origin: .zero, size: size)
+            try await Task.sleep(nanoseconds: 750_000_000)
+            host.view.layoutIfNeeded()
+            XCTAssertEqual(host.view.bounds.width, size.width, accuracy: 1)
+            let image = UIGraphicsImageRenderer(size: size).image { _ in host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true) }
+            let attachment = XCTAttachment(image: image); attachment.name = "native-library-\(name)"
+            attachment.lifetime = .keepAlways; add(attachment)
+            host.willMove(toParent: nil); host.view.removeFromSuperview(); host.removeFromParent()
+        }
     }
     func testNativePilotScreenSnapshots() async throws {
         let source = root.appendingPathComponent("native-pilot.mp4")

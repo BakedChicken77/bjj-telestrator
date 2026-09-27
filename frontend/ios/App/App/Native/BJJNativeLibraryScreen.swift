@@ -2,7 +2,10 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct BJJNativeHome: View {
-    @StateObject private var library = BJJNativeLibrary()
+    @StateObject private var library: BJJNativeLibrary
+    init(library: BJJNativeLibrary = BJJNativeLibrary()) {
+        _library = StateObject(wrappedValue: library)
+    }
     @Environment(\.scenePhase) private var scenePhase
     @State private var search = ""
     @State private var photos = false
