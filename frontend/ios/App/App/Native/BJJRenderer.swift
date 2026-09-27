@@ -144,7 +144,7 @@ final class BJJOverlay {
             CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
         }
         guard UIFont(name: "DejaVuSans", size: 14) != nil else {
-            throw BJJError.invalid("The annotation font is missing from this app installation. Update or reinstall only after backing up your reviews.")
+            throw BJJError.invalid("The annotation font is missing from this app installation. Update the app and try again. Your reviews are unchanged.")
         }
         self.fontName = "DejaVuSans"
     }

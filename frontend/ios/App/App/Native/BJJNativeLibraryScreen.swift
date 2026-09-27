@@ -123,11 +123,10 @@ struct BJJNativeHome: View {
         NavigationStack {
             List {
                 if library.deleted.isEmpty { Text("No deleted native reviews.").foregroundStyle(.secondary) }
-                ForEach(library.deleted.indices, id: \.self) { index in
-                    let item = library.deleted[index]
+                ForEach(library.deleted) { item in
                     VStack(alignment: .leading) {
-                        Text(item.s("projectName")).font(.headline)
-                        Button("Restore", systemImage: "arrow.uturn.backward") { Task { await library.restore(item.s("trashId")) } }.frame(minHeight: 44)
+                        Text(item.name).font(.headline)
+                        Button("Restore", systemImage: "arrow.uturn.backward") { Task { await library.restore(item.id) } }.frame(minHeight: 44)
                     }
                 }
             }.disabled(library.busy)

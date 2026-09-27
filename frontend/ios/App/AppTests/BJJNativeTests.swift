@@ -35,7 +35,7 @@ import SwiftUI
         XCTAssertEqual(library.reviews.filter { $0.preview }.count, 2)
         await library.change(review, action: "Move to Recently Deleted")
         XCTAssertEqual(library.deleted.count, 1)
-        await library.restore(try XCTUnwrap(library.deleted.first).s("trashId"))
+        await library.restore(try XCTUnwrap(library.deleted.first).id)
         XCTAssertTrue(library.deleted.isEmpty)
         XCTAssertEqual(library.reviews.filter { $0.preview }.count, 2)
         await library.importFile(retained, backup: true)

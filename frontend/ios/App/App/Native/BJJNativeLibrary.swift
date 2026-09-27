@@ -4,11 +4,17 @@ import AVFoundation
 import PhotosUI
 import UniformTypeIdentifiers
 
+struct BJJNativeDeletedReview: Identifiable {
+    let id: String
+    let name: String
+    init(_ json: BJJJSON) { id = json.s("trashId"); name = json.s("projectName") }
+}
+
 /// The native workspace owns one service and one active operation. Legacy reviews
 /// are only read and copied until native editing parity is accepted.
 @MainActor final class BJJNativeLibrary: ObservableObject {
     @Published var reviews: [BJJNativeReview] = []
-    @Published var deleted: [BJJJSON] = []
+    @Published var deleted: [BJJNativeDeletedReview] = []
     @Published var busy = false
     @Published var activity = ""
     @Published var progress: Double?
@@ -43,7 +49,7 @@ import UniformTypeIdentifiers
             let result = try await BJJAssets.offMain {
                 let native = try BJJNativePilot.reviews(store, preview: true)
                 let original = try originalRoot.map { try BJJNativePilot.reviews(BJJStore(root: $0), preview: false) } ?? []
-                return (native + original, try BJJProjectVersions(store: store).deleted())
+                return (native + original, try BJJProjectVersions(store: store).deleted().map(BJJNativeDeletedReview.init))
             }
             guard generation == refreshGeneration else { return }
             reviews = result.0; deleted = result.1
