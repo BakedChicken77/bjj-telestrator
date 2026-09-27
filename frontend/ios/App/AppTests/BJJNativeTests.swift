@@ -13,6 +13,89 @@ import SwiftUI
         store = try BJJStore(root: root)
     }
     override func tearDownWithError() throws { try? FileManager.default.removeItem(at: root) }
+    func testNativeLibraryImportsManagesAndRestoresWithoutChangingSource() async throws {
+        let source = root.appendingPathComponent("library-source.mp4")
+        try await silentVideo(source)
+        let hash = try BJJAssets.digest(source)
+        let library = BJJNativeLibrary(root: root.appendingPathComponent("native"), originalRoot: root.appendingPathComponent("original"))
+        await library.importFile(source)
+        XCTAssertNil(library.error); XCTAssertFalse(library.busy)
+        var review = try XCTUnwrap(library.reviews.first { $0.preview })
+        let thumbnail = await library.thumbnail(review)
+        XCTAssertNotNil(thumbnail)
+        await library.change(review, action: "Rename", name: "Training review")
+        review = try XCTUnwrap(library.reviews.first { $0.id == review.id })
+        XCTAssertEqual(review.name, "Training review")
+        await library.change(review, action: "Back up")
+        let backup = try XCTUnwrap(library.shareURL)
+        let retained = root.appendingPathComponent("retained.bjjproj")
+        try FileManager.default.copyItem(at: backup, to: retained)
+        library.endShare()
+        await library.change(review, action: "Duplicate")
+        XCTAssertEqual(library.reviews.filter { $0.preview }.count, 2)
+        await library.change(review, action: "Move to Recently Deleted")
+        XCTAssertEqual(library.deleted.count, 1)
+        await library.restore(try XCTUnwrap(library.deleted.first).s("trashId"))
+        XCTAssertTrue(library.deleted.isEmpty)
+        XCTAssertEqual(library.reviews.filter { $0.preview }.count, 2)
+        await library.importFile(retained, backup: true)
+        XCTAssertNil(library.error)
+        XCTAssertEqual(library.reviews.filter { $0.preview }.count, 3)
+        XCTAssertEqual(try BJJAssets.digest(source), hash)
+        for review in library.reviews where review.preview {
+            let store = try library.services().store
+            let project = try store.load(review.id)
+            XCTAssertEqual(try BJJAssets.digest(store.asset(project.id, project.source.s("asset"))), hash)
+        }
+    }
+    func testNativeLibraryShowsUnsupportedOriginalWithoutMutatingIt() async throws {
+        let project = try project()
+        let path = try store.directory(project.id).appendingPathComponent("project.json")
+        var document = project.json; document["requiredCapabilities"] = ["future-feature"]
+        try store.writeJSON(document, to: path)
+        let original = try Data(contentsOf: path)
+        let library = BJJNativeLibrary(root: root.appendingPathComponent("native"), originalRoot: root)
+        await library.refresh()
+        let review = try XCTUnwrap(library.reviews.first { !$0.preview })
+        XCTAssertNotNil(review.problem)
+        await library.open(review)
+        XCTAssertNil(library.session)
+        XCTAssertEqual(try Data(contentsOf: path), original)
+    }
+    func testNativeTransportLatestSeekAndLoopPreferencesDoNotEditDocument() async throws {
+        let source = root.appendingPathComponent("transport.mp4")
+        try await silentVideo(source)
+        let initial = try await BJJService(store: store).importFile(source, originalName: "Transport.mp4")
+        let suiteName = "bjj-test-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let editor = try BJJNativeEditorSession(project: initial, store: store, preferences: defaults)
+        editor.setSpeed(0.5)
+        try editor.setLoop(start: 0.2, end: 0.8, enabled: true)
+        for position in [0.1, 0.7, 0.3, 0.6] { editor.seek(position) }
+        for _ in 0..<50 {
+            if abs(editor.player.currentTime().seconds - 0.6) < 0.02 { break }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        XCTAssertEqual(editor.player.currentTime().seconds, 0.6, accuracy: 0.02)
+        XCTAssertFalse(editor.playing)
+        XCTAssertEqual(try store.load(initial.id).revision, initial.revision)
+        XCTAssertEqual(editor.undoCount, 0)
+        editor.close()
+        let reopened = try BJJNativeEditorSession(project: initial, store: store, preferences: defaults)
+        defer { reopened.close() }
+        XCTAssertEqual(reopened.time, 0.6, accuracy: 0.02)
+        XCTAssertEqual(reopened.speed, 0.5)
+        XCTAssertTrue(reopened.loopEnabled)
+        XCTAssertThrowsError(try reopened.setLoop(start: 0.8, end: 0.2, enabled: true))
+        reopened.togglePlayback()
+        reopened.pause() // a cancelled resume-seek must never restart playback later
+        try await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertEqual(reopened.player.rate, 0)
+        let unsafe = BJJNativeTransportState(time: .infinity, speed: 10, loopStart: -1, loopEnd: 500, loopEnabled: true).validated(duration: 1)
+        XCTAssertEqual(unsafe.time, 0); XCTAssertEqual(unsafe.speed, 1)
+        XCTAssertEqual(unsafe.loopStart, 0); XCTAssertEqual(unsafe.loopEnd, 1)
+    }
     func testNativePilotScreenSnapshots() async throws {
         let source = root.appendingPathComponent("native-pilot.mp4")
         try await silentVideo(source)

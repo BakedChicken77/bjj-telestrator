@@ -58,6 +58,14 @@ def main() -> None:
         section("PBXBuildFile", build, f"isa = PBXBuildFile; fileRef = {ref};")
         child(APP_GROUP, "children", ref)
         child(SOURCES, "files", build)
+    fonts, fonts_build = uid("native-resources"), uid("native-resources-build")
+    section(
+        "PBXFileReference", fonts,
+        'isa = PBXFileReference; lastKnownFileType = folder; path = NativeResources; sourceTree = "<group>";',
+    )
+    section("PBXBuildFile", fonts_build, f"isa = PBXBuildFile; fileRef = {fonts};")
+    child(APP_GROUP, "children", fonts)
+    child(RESOURCES, "files", fonts_build)
     privacy, privacy_build = uid("privacy"), uid("privacy-build")
     section(
         "PBXFileReference",

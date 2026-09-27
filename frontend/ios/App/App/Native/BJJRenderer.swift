@@ -140,11 +140,11 @@ final class BJJOverlay {
         }.map { $0.element }
         self.size = size
         self.fps = fps
-        if let url = Bundle.main.url(forResource: "DejaVuSans", withExtension: "ttf", subdirectory: "public/fonts") {
+        if let url = Bundle.main.url(forResource: "DejaVuSans", withExtension: "ttf", subdirectory: "NativeResources") {
             CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
         }
         guard UIFont(name: "DejaVuSans", size: 14) != nil else {
-            throw BJJError.invalid("The bundled DejaVu Sans font is missing. Rebuild the app with npm run ios:sync.")
+            throw BJJError.invalid("The annotation font is missing from this app installation. Update or reinstall only after backing up your reviews.")
         }
         self.fontName = "DejaVuSans"
     }

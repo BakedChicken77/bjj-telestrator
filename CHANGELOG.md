@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.0.1] - 2026-09-27
+
+### Native library and review candidate
+- Import videos directly from Photos or Files with progress and cancellation.
+- Search thumbnail reviews; rename, duplicate, back up, restore, and recover recently deleted native reviews.
+- Review at 0.25×, 0.5×, 1×, or 2×; set an A/B loop and restore the playhead on reopening.
+- Coalesce scrubbing and fence cancelled resume-seeks; preserve original reviews and document revisions during playback.
+- Bundle annotation fonts independently of the web editor and retain their license.
+- Retain TestFlight receipts from the CI artifact directory.
+
+Native narration and advanced annotation editing remain later milestones. Original reviews are copied before native editing.
+
 ## [2.0.0]
 
 - Internal native iPhone pilot: SwiftUI library and controls, AVPlayer playback, filmstrip scrubbing, native drawing/undo, and MP4 share.

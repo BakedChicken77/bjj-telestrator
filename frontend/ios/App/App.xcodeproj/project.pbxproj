@@ -42,6 +42,9 @@
 		B6B1128AA01C77E2EA35AA06 = {isa = PBXBuildFile; fileRef = C115D7A3EB2A3DD49BEF79F4;};
 		533D94A9197C64ACA88F54CC = {isa = PBXBuildFile; fileRef = 331E2CFAED1F74342380639E;};
 		962E7B85A0C366DFC910BA33 = {isa = PBXBuildFile; fileRef = CBB94261F7B6E641E6BD32E7;};
+		0BD9BAF27141E8AEFECE844D = {isa = PBXBuildFile; fileRef = BC9EA9A049D7A4CCB60304B7;};
+		F23B42DCBEFCC563E6529527 = {isa = PBXBuildFile; fileRef = 4A212DC21150595D7D75FD7F;};
+		7B0CF31F2A1C3570B74F9D7A = {isa = PBXBuildFile; fileRef = 1DFB0AFA0AA77066C87FF6F4;};
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -82,6 +85,9 @@
 		C115D7A3EB2A3DD49BEF79F4 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJProjectPackage.swift"; sourceTree = "<group>";};
 		331E2CFAED1F74342380639E = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJNativePilot.swift"; sourceTree = "<group>";};
 		CBB94261F7B6E641E6BD32E7 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJNativeScreen.swift"; sourceTree = "<group>";};
+		BC9EA9A049D7A4CCB60304B7 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJNativeLibrary.swift"; sourceTree = "<group>";};
+		4A212DC21150595D7D75FD7F = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJNativeLibraryScreen.swift"; sourceTree = "<group>";};
+		1DFB0AFA0AA77066C87FF6F4 = {isa = PBXFileReference; lastKnownFileType = folder; path = NativeResources; sourceTree = "<group>";};
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -120,6 +126,9 @@
 		504EC3061FED79650016851F /* App */ = {
 			isa = PBXGroup;
 			children = (
+				1DFB0AFA0AA77066C87FF6F4,
+				4A212DC21150595D7D75FD7F,
+				BC9EA9A049D7A4CCB60304B7,
 				953EEBC42CDDB61A535324AE,
 				CBB94261F7B6E641E6BD32E7,
 				331E2CFAED1F74342380639E,
@@ -231,6 +240,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7B0CF31F2A1C3570B74F9D7A,
 				346B4AB9E398D0FB0992D2B0,
 				504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */,
 				50B271D11FEDC1A000F3C39B /* public in Resources */,
@@ -250,6 +260,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F23B42DCBEFCC563E6529527,
+				0BD9BAF27141E8AEFECE844D,
 				EA818F39D15161682D8CE3A6,
 				962E7B85A0C366DFC910BA33,
 				533D94A9197C64ACA88F54CC,
@@ -418,7 +430,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.0.0;
+				MARKETING_VERSION = 2.0.1;
 				OTHER_SWIFT_FLAGS = "$(inherited) \"-D\" \"COCOAPODS\" \"-DDEBUG\"";
 				PRODUCT_BUNDLE_IDENTIFIER = com.bakedchicken77.bjjtelestrator;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -440,7 +452,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.0.0;
+				MARKETING_VERSION = 2.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.bakedchicken77.bjjtelestrator;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";

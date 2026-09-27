@@ -1,6 +1,6 @@
 # Native iPhone migration: N0 pilot
 
-Status: implementation under validation, September 27, 2026. This is the first real-device interaction gate, not the completed native product.
+Status: N0 delivered as TestFlight 2.0.0 (6.2). Steve approved its native feel on September 27, 2026: “It feels good. Proceed.” This clears the interaction-direction gate, not the complete audio/recovery/performance acceptance matrix.
 
 ## Baseline reconciliation
 
@@ -53,3 +53,15 @@ A positive interaction result unlocks the detailed N1–N4 native screens. N5 re
 Both preview and normal release uploads now wait for Apple's exact app/version/build, reject failed or expired builds, verify the existing internal group's app and owner tester, assign the build if needed, and read back membership plus `IN_BETA_TESTING`. Receipts are uploaded as Actions artifacts. Apple's `hasAccessToAllBuilds` value is recorded; distribution does not depend on an undocumented setting mutation.
 
 A processing timeout is a visible incomplete distribution, not an upload failure. The `testflight-upload.json` receipt identifies an already uploaded build. Retry `scripts/ci/distribute_testflight.py --version VERSION --build BUILD` with the protected environment credentials; do not re-upload the same version/build. API access or Apple processing failures may still require diagnosis. No workflow can guarantee Apple's availability.
+
+## N1/N2 follow-on candidate: 2.0.1
+
+Steve's September 27 “It feels good. Proceed” approves the N0 interaction direction. It does not attest to the full N5 test matrix or authorize setting physical release acceptance automatically.
+
+This vertical candidate adds Photos/Files video import with streamed owned-file staging, native backup/restore, thumbnail/search library, rename, independent duplicate, reversible trash/restore, persisted view-only playhead/speed/loop preferences, and coalesced latest-seek handling. Unsupported projects stay visible with an explanation and are not rewritten. The native font/license is now an app-owned resource. The existing native workspace retains all 2.0.0 preview edits; legacy projects remain copied before editing.
+
+Native library commands are serialized by one UI operation and existing store revision/lease checks. Import copying/hashing and duplicate/backup/recovery work run away from the UI actor. Thumbnail cache is limited to 100 images / 20 MiB. Photos provider files are copied inside their lifetime callback; Files access remains security-scoped during a coordinated copy. Backgrounding cancels active imports; committed projects remain recoverable. Uncommitted imports are reconciled by the persisted media-job service at relaunch.
+
+The shipping editor still uses existing annotation-only command history. Recording coordinator extraction, audio-mix preview, full-document history, checkpoint/recovery inspection UI, direct geometry manipulation, precise cue timing, and native narration are not claimed complete. They continue under N1/N3/N4. Desktop/runtime retirement still waits for N5/N6 acceptance.
+
+Next device check: import a real video from Photos and Files, cancel a second import, search/rename/reopen the native review, scrub rapidly at each speed, set a short loop, rotate, and confirm no unexpected drawing. Back up to Files, restore as an independent review, and recover a review from Recently Deleted. Verify your existing 2.0.0 native copies and original 1.1.1 reviews remain available.

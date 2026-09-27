@@ -3,93 +3,7 @@ import UIKit
 import AVFoundation
 import CoreImage
 
-struct BJJNativeHome: View {
-    @State private var reviews: [BJJNativeReview] = []
-    @State private var session: BJJNativeEditorSession?
-    @State private var originalEditor = false
-    @State private var busy = false
-    @State private var error: String?
-    var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Label("A new way to review", systemImage: "hand.draw")
-                            .font(.title2.bold())
-                        Text("Try native playback and drawing on a separate copy of a saved review. Your original stays unchanged.")
-                        Text("This first preview focuses on the feel of the editor. Import, narration playback/recording, and advanced editing remain in the original editor.")
-                            .font(.footnote).foregroundStyle(.secondary)
-                        Button("Open original editor", systemImage: "square.stack") { originalEditor = true }
-                            .buttonStyle(.bordered).frame(minHeight: 44)
-                    }.padding(.vertical, 8)
-                }
-                if reviews.isEmpty && !busy {
-                    ContentUnavailableView("No saved reviews", systemImage: "film", description: Text("Import a video in the original editor, then come back to try a native copy."))
-                }
-                ForEach([true, false], id: \.self) { preview in
-                    let items = reviews.filter { $0.preview == preview }
-                    if !items.isEmpty {
-                        Section(preview ? "Continue a preview copy" : "Create a preview copy") {
-                            ForEach(items) { review in
-                                Button { open(review) } label: {
-                                    HStack(spacing: 14) {
-                                        Image(systemName: preview ? "play.rectangle.fill" : "film.stack")
-                                            .font(.title2).frame(width: 40).foregroundStyle(.tint)
-                                        VStack(alignment: .leading, spacing: 4) {
-                                            Text(review.name).font(.headline).foregroundStyle(.primary).lineLimit(2)
-                                            Text("\(Int(review.duration / 60))m \(Int(review.duration) % 60)s · \(preview ? "Saved copy" : "Original preserved")")
-                                                .font(.caption).foregroundStyle(.secondary)
-                                        }
-                                        Spacer()
-                                        Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
-                                    }.padding(.vertical, 8).frame(minHeight: 60)
-                                }.disabled(busy)
-                            }
-                        }
-                    }
-                }
-            }
-            .navigationTitle("Your reviews")
-            .overlay { if busy { ProgressView("Preparing safe copy…").padding(24).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18)) } }
-            .task { await refresh() }
-            .refreshable { await refresh() }
-            .fullScreenCover(isPresented: $originalEditor, onDismiss: { Task { await refresh() } }) {
-                BJJOriginalEditor()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("BJJReturnToNative"))) { _ in originalEditor = false }
-            .fullScreenCover(item: $session, onDismiss: { Task { await refresh() } }) { editor in
-                BJJNativeEditorScreen(session: editor)
-            }
-            .alert("Unable to open review", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
-                Button("OK") { error = nil }
-            } message: { Text(error ?? "") }
-        }
-    }
-    @MainActor private func refresh() async {
-        do {
-            reviews = try await BJJAssets.offMain {
-                try BJJNativePilot.reviews(BJJStore(root: BJJNativePilot.previewRoot()), preview: true)
-                + BJJNativePilot.reviews(BJJStore(), preview: false)
-            }
-        } catch { self.error = error.localizedDescription }
-    }
-    private func open(_ review: BJJNativeReview) {
-        busy = true
-        Task { @MainActor in
-            defer { busy = false }
-            do {
-                let previewStore = try BJJStore(root: BJJNativePilot.previewRoot())
-                let project = try await BJJAssets.offMain {
-                    if review.preview { return try previewStore.loadRecoveringRecordings(review.id) }
-                    return try BJJNativePilot.copy(review.id, from: BJJStore(), to: previewStore)
-                }
-                session = try BJJNativeEditorSession(project: project, store: previewStore)
-            } catch { self.error = error.localizedDescription }
-        }
-    }
-}
-
-private struct BJJOriginalEditor: UIViewControllerRepresentable {
+struct BJJOriginalEditor: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UINavigationController {
         let editor = BJJViewController()
         editor.navigationItem.title = "Original editor"
@@ -123,7 +37,7 @@ struct BJJNativeEditorScreen: View {
                 }.frame(width: geometry.size.width, height: geometry.size.height)
             }
             .background(Color(uiColor: .systemBackground))
-            .navigationTitle("Preview copy")
+            .navigationTitle(session.project.name)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -232,6 +146,23 @@ struct BJJNativeEditorScreen: View {
                     }
                 }
             }
+            if !session.drawing {
+                HStack {
+                    Menu {
+                        ForEach([Float(0.25), 0.5, 1, 2], id: \.self) { speed in
+                            Button("\(String(format: "%g", speed))×") { session.setSpeed(speed) }
+                        }
+                    } label: { Text("\(String(format: "%g", session.speed))×").monospacedDigit().frame(minWidth: 44, minHeight: 44) }
+                        .accessibilityLabel("Playback speed")
+                    Spacer()
+                    Menu {
+                        Button("Start here") { session.markLoop(start: true) }
+                        Button("End here") { session.markLoop(start: false) }
+                        Button(session.loopEnabled ? "Turn loop off" : "Turn loop on") { session.toggleLoop() }
+                        Text(String(format: "%.1f – %.1f seconds", session.loopStart, session.loopEnd))
+                    } label: { Label(session.loopEnabled ? "Loop on" : "Loop", systemImage: "repeat").frame(minHeight: 44) }
+                }
+            }
             if !session.project.voiceovers.isEmpty {
                 Text("Preview plays source audio. Existing narration is preserved in exports; native narration playback is the next milestone.")
                     .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -271,7 +202,7 @@ private extension Dictionary where Key == String, Value == Any {
     var selfID: String { self["id"] as! String }
 }
 
-private struct BJJNativeShare: UIViewControllerRepresentable {
+struct BJJNativeShare: UIViewControllerRepresentable {
     let url: URL
     func makeUIViewController(context: Context) -> UIActivityViewController {
         UIActivityViewController(activityItems: [url], applicationActivities: nil)
