@@ -22,6 +22,7 @@ struct BJJNativeEditorScreen: View {
     @State private var showAnnotations = false
     @State private var showText = false
     @State private var showProperties = false
+    @State private var listCueID: String?
     @State private var zoomReset = 0
     var body: some View {
         NavigationStack {
@@ -220,12 +221,16 @@ struct BJJNativeEditorScreen: View {
                             }.frame(minHeight: 44)
                         }
                         Spacer()
-                        NavigationLink { BJJCueProperties(session: session, cue: cue) } label: { Image(systemName: "slider.horizontal.3").frame(width: 44, height: 44) }
+                        Button { listCueID = cue.s("id") } label: { Image(systemName: "slider.horizontal.3").frame(width: 44, height: 44) }
                             .accessibilityLabel("Edit \(cue.s("type")) properties")
                         Button("Delete cue", systemImage: "trash", role: .destructive) { session.remove(cue.s("id")) }
                             .labelStyle(.iconOnly).frame(width: 44, height: 44)
                     }
                 }
+            }
+            .buttonStyle(.borderless)
+            .sheet(isPresented: Binding(get: { listCueID != nil }, set: { if !$0 { listCueID = nil } })) {
+                if let cue = session.project.annotations.first(where: { $0.s("id") == listCueID }) { BJJCueProperties(session: session, cue: cue) }
             }
             .navigationTitle("Cues").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showAnnotations = false } } }
