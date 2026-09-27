@@ -2,11 +2,12 @@ name: Release
 on:
   push:
     tags: ['v*']
+    branches: [preview/native-iphone]
 permissions:
   contents: read
 concurrency:
   group: release-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.ref_type == 'branch' }}
 jobs:
   authorize:
     name: Release authorization
@@ -26,14 +27,19 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - run: python3 scripts/ci/release.py validate
+      - if: github.ref_type == 'tag'
+        run: python3 scripts/ci/release.py validate
         env:
           RELEASE_TAG: ${{ github.ref_name }}
+      - name: Validate internal preview version
+        if: github.ref_type == 'branch'
+        run: python3 -c 'import json; from scripts.ci.release import validate_version; validate_version("v" + json.load(open("frontend/package.json"))["version"])'
   checks:
     needs: validate
     uses: ./.github/workflows/ci.yml
   package:
     needs: checks
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -62,7 +68,7 @@ jobs:
     needs: checks
     if: vars.IOS_SIGNING_ENABLED == 'true'
     runs-on: macos-26
-    timeout-minutes: 35
+    timeout-minutes: 65
     environment: ios-release
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
@@ -95,6 +101,14 @@ jobs:
           ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
           ASC_API_KEY_P8_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: testflight-receipt
+          path: .ci-artifacts/testflight-*.json
+          if-no-files-found: ignore
+          retention-days: 30
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
         with:
           name: ios-signed
           path: .ci-artifacts/signed/*.ipa
@@ -102,7 +116,7 @@ jobs:
           retention-days: 7
   publish:
     needs: [checks, package, sign]
-    if: always() && needs.checks.result == 'success' && needs.package.result == 'success' && (needs.sign.result == 'success' || needs.sign.result == 'skipped')
+    if: always() && github.ref_type == 'tag' && needs.checks.result == 'success' && needs.package.result == 'success' && (needs.sign.result == 'success' || needs.sign.result == 'skipped')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -125,3 +139,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
           IOS_DEVICE_ACCEPTED: ${{ vars.IOS_DEVICE_ACCEPTED }}
+          IOS_DEVICE_ACCEPTED_SHA: ${{ vars.IOS_DEVICE_ACCEPTED_SHA }}
+          IOS_DEVICE_ACCEPTED_VERSION: ${{ vars.IOS_DEVICE_ACCEPTED_VERSION }}
+          IOS_DEVICE_ACCEPTED_BUILD: ${{ vars.IOS_DEVICE_ACCEPTED_BUILD }}
+          IOS_DEVICE_EVIDENCE_URL: ${{ vars.IOS_DEVICE_EVIDENCE_URL }}
