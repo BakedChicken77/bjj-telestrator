@@ -1,0 +1,16 @@
+{
+  "platform": "Linux-6.18.44-x86_64-with-glibc2.39",
+  "python": "3.12.14",
+  "libraryRecords": 200,
+  "annotationsPerRecord": 100,
+  "complexPathsPerRecord": 20,
+  "pointsPerPath": 2000,
+  "libraryListSeconds": [
+    92.51918993900108,
+    0.0632436490013788,
+    0.05785405099959462
+  ],
+  "pythonPeakBytes": 97816576,
+  "childProcessPeakBytes": 97816576,
+  "limitations": "Generated static grid/tones; excludes real-roll complexity, human audio review, signed iPhone memory/thermal behavior and Windows-host acceptance."
+}

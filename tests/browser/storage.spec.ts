@@ -1,0 +1,51 @@
+import playwright from '../../frontend/node_modules/@playwright/test/index.mjs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+const { test, expect } = playwright;
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+
+test('storage cleanup and retry preserve an earlier real MP4 revision after reopening', async ({ page }) => {
+  await page.goto('/');
+  const imported = page.waitForResponse((r) => r.url().endsWith('/api/projects/import') && r.request().method() === 'POST');
+  await page.getByLabel('Import video', { exact: true }).setInputFiles(path.join(root, 'tests/generated/silent.mp4'));
+  const project = await (await imported).json();
+  await expect(page.locator('video')).toBeVisible();
+  await page.getByRole('button', { name: 'Export video', exact: true }).click();
+  await page.getByText('Project storage', { exact: false }).first().click();
+  await expect(page.getByRole('table')).toContainText('Original video');
+  await expect(page.getByRole('table')).toContainText('Recordings (including removed takes)');
+  const response = page.waitForResponse((r) => r.url().endsWith(`/api/projects/${project.projectId}/exports`) && r.request().method() === 'POST');
+  await page.getByRole('button', { name: 'Render MP4', exact: true }).click();
+  const job = await (await response).json();
+  const article = page.locator('.export-job').filter({ hasText: job.filename });
+  await expect(article.getByRole('link', { name: 'Download MP4' })).toBeVisible({ timeout: 30000 });
+  const download = await page.request.get(`/api/exports/${job.jobId}/download`);
+  expect(download.ok()).toBeTruthy();
+  const originalBytes = await download.body();
+  expect(originalBytes.length).toBeGreaterThan(1000);
+  await page.getByRole('button', { name: 'Close exports' }).click();
+  await page.getByLabel('Project name', { exact: true }).fill('New saved review after first export');
+  await page.getByLabel('Project name', { exact: true }).press('Tab');
+  await expect(page.getByTestId('save-status')).toHaveText('Saved');
+  await page.reload();
+  await page.getByRole('button', { name: 'Export video', exact: true }).click();
+  await expect(article).toContainText('Earlier than current edits');
+  page.once('dialog', (dialog) => dialog.accept());
+  await article.getByRole('button', { name: 'Remove MP4', exact: true }).click();
+  await expect(article).toContainText('MP4 removed');
+  await expect(article.getByRole('link', { name: 'Download MP4' })).toHaveCount(0);
+  expect((await page.request.get(`/api/exports/${job.jobId}/download`)).status()).toBe(409);
+  const retryResponse = page.waitForResponse((r) => r.url().endsWith(`/api/exports/${job.jobId}/retry`));
+  await article.getByRole('button', { name: `Retry revision ${job.projectRevision} from start`, exact: true }).click();
+  const retry = await (await retryResponse).json();
+  expect(retry.retryOf).toBe(job.jobId);
+  expect(retry.projectRevision).toBe(job.projectRevision);
+  const retried = page.locator('.export-job').filter({ hasText: 'Retried from the beginning' });
+  await expect(retried.getByRole('link', { name: 'Download MP4' })).toBeVisible({ timeout: 30000 });
+  expect((await (await page.request.get(`/api/projects/${project.projectId}`)).json()).projectName).toBe('New saved review after first export');
+  const bytes = await (await page.request.get(`/api/exports/${retry.jobId}/download`)).body();
+  expect(bytes.length).toBeGreaterThan(1000);
+  // Actual completed media, independently probed by both export jobs.
+  // Encoded byte identity is deliberately not a cross-renderer requirement.
+  expect(bytes.subarray(4, 8).toString()).toBe('ftyp');
+});

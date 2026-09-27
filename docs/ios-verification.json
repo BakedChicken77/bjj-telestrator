@@ -1,0 +1,69 @@
+{
+  "applicationVersion": "1.1.0",
+  "checkedOn": "2026-09-12",
+  "desktopWindows": {
+    "status": "user_reported_pass",
+    "platform": "Windows 11 / Docker Desktop"
+  },
+  "backend": {
+    "passed": 74,
+    "runner": "Pytest, including actual FFmpeg exports"
+  },
+  "frontend": {
+    "passed": 60,
+    "files": 8,
+    "runner": "Vitest; bridge mocks limited to contract/unit tests"
+  },
+  "browser": {
+    "passed": 9,
+    "engine": "Chromium 149 / Playwright 1.63.0",
+    "media": "actual FFmpeg/MediaRecorder/Web Audio",
+    "nativeIOS": false
+  },
+  "quality": [
+    "Ruff",
+    "ESLint",
+    "strict TypeScript",
+    "Prettier",
+    "Vite production build",
+    "Capacitor iOS sync"
+  ],
+  "nativeProject": {
+    "swiftFilesSyntaxParsed": 11,
+    "openStepObjects": 65,
+    "plistAndSchemeChecks": "passed",
+    "sdkCompilation": "not_run_no_macOS_Xcode",
+    "xctestMethodsAuthored": 9,
+    "xctestResult": "not_run",
+    "signedIPA": false,
+    "physicalIPhone": "not_run",
+    "baselineCI": {
+      "commit": "f5323b3b270e3836d7df10309d1684cf8d98e9ca",
+      "runURL": "https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34532184666",
+      "xctestPassed": 11,
+      "unsignedArchive": "passed"
+    },
+    "candidateSDKCompilation": "passed: Xcode 26.6",
+    "candidateXCTestMethodsAuthored": 15,
+    "candidateXCTestPassed": 15,
+    "candidateUnsignedArchive": "passed",
+    "candidateCommit": "06ca668eeadce6ce383d98c4c107e3998bd1434a",
+    "candidateCI": "https://github.com/BakedChicken77/bjj-telestrator/actions/runs/34718055711"
+  },
+  "limits": [
+    "Baseline and fresh candidate native SDK/XCTest/archive passed in GitHub CI. Signed installation, physical hardware acceptance and a fresh Windows 11 run remain pending.",
+    "No signed installable iPhone binary was produced.",
+    "Touch browser tests use the desktop backend, not the native Swift renderer.",
+    "Long-video iPhone performance is not benchmarked."
+  ],
+  "historicalReport": true,
+  "supersededNativeBuildEvidence": {
+    "checkedOn": "2026-09-26",
+    "commit": "e65fd6c7f83e6e32348e235690c5fa08d07fea88",
+    "run": "https://github.com/BakedChicken77/bjj-telestrator/actions/runs/36136892978",
+    "nativeXCTestAndUnsignedArchive": "passed",
+    "signedIPA": "pending",
+    "physicalIPhone": "pending",
+    "note": "Original measurements below retained as historical evidence, not current native build status."
+  }
+}

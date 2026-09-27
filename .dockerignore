@@ -1,0 +1,15 @@
+.git
+**/node_modules
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+data
+tests/generated
+test-results
+playwright-report
+frontend/dist
+frontend/ios
+**/*.tsbuildinfo
+.env
+*.zip
