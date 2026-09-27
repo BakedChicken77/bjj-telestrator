@@ -13,6 +13,93 @@ import SwiftUI
         store = try BJJStore(root: root)
     }
     override func tearDownWithError() throws { try? FileManager.default.removeItem(at: root) }
+    func testNativeCueGeometryAllToolsPreservesFieldsAndBounds() throws {
+        let initial = try project(), size = CGSize(width: 1920, height: 1080)
+        for tool in BJJNativeTool.allCases {
+            var cue = try BJJNativeGeometry.annotation(tool: tool, points: [CGPoint(x: 0.2, y: 0.3), CGPoint(x: 0.6, y: 0.7)], time: 0, project: initial, color: "#FF453A", text: "Cue")
+            cue["futureField"] = "preserve"
+            let moved = BJJCueGeometry.move(cue, delta: CGPoint(x: 2, y: -2), size: size)
+            let b = BJJCueGeometry.bounds(moved, size: size)
+            XCTAssertEqual(b.minY, 0, accuracy: 0.00001)
+            XCTAssertLessThanOrEqual(b.maxX, 1.00001)
+            XCTAssertEqual(moved.s("futureField"), "preserve")
+            let resized = BJJCueGeometry.resize(cue, corner: 3, to: CGPoint(x: 0.75, y: 0.8), size: size)
+            for changed in [moved, resized] {
+                var doc = initial.json; doc["annotations"] = [changed]
+                XCTAssertNoThrow(try BJJProject(doc), tool.rawValue)
+                XCTAssertEqual(changed.s("id"), cue.s("id"))
+            }
+        }
+        let arrow = try BJJNativeGeometry.annotation(tool: .arrow, points: [CGPoint(x: 0.2, y: 0.3), CGPoint(x: 0.6, y: 0.7)], time: 0, project: initial, color: "#FF453A", text: "")
+        let endpoint = BJJCueGeometry.endpoint(arrow, index: 1, to: CGPoint(x: 2, y: -1))["geometry"] as! BJJJSON
+        XCTAssertEqual(endpoint.n("x2"), 1); XCTAssertEqual(endpoint.n("y2"), 0)
+        XCTAssertEqual(endpoint.n("x1"), 0.2); XCTAssertEqual(endpoint.n("arrowheadSize"), 0.035)
+        XCTAssertTrue(BJJCueGeometry.hit(arrow, point: CGPoint(x: 0.4, y: 0.5), size: size, tolerance: 22))
+        XCTAssertFalse(BJJCueGeometry.hit(arrow, point: CGPoint(x: 0.4, y: 0.8), size: size, tolerance: 22))
+        var points = [CGPoint.zero]
+        for i in 0..<10000 { points = BJJCueGeometry.sample(points, CGPoint(x: CGFloat(i % 100) / 100, y: CGFloat(i % 70) / 70), size: size) }
+        points = BJJCueGeometry.sample(points, CGPoint(x: 1, y: 1), size: size, force: true)
+        XCTAssertLessThanOrEqual(points.count, 4000); XCTAssertEqual(points.last, CGPoint(x: 1, y: 1))
+    }
+    func testNativeCueTransactionsCancelUndoTimingLayersAndStaleEdits() throws {
+        let initial = try project(), editor = try BJJNativeEditorSession(project: initial, store: store)
+        defer { editor.close() }
+        let id = initial.annotations[0].s("id"), initialRevision = editor.project.revision
+        editor.select(id); editor.beginCueEdit()
+        editor.previewCue = BJJCueGeometry.move(try XCTUnwrap(editor.selectedCue), delta: CGPoint(x: 0.1, y: 0.1), size: editor.pictureSize)
+        editor.cancelCueEdit()
+        XCTAssertEqual(editor.project.revision, initialRevision); XCTAssertEqual(editor.undoCount, 0)
+        XCTAssertEqual(try store.load(initial.id).annotations[0]["geometry"] as! NSDictionary, initial.annotations[0]["geometry"] as! NSDictionary)
+        editor.beginCueEdit()
+        editor.previewCue = BJJCueGeometry.move(try XCTUnwrap(editor.selectedCue), delta: CGPoint(x: 0.1, y: 0.1), size: editor.pictureSize)
+        editor.finishCueEdit()
+        XCTAssertEqual(editor.undoCount, 1)
+        XCTAssertEqual((editor.project.annotations[0]["geometry"] as! BJJJSON).n("x"), 0.2, accuracy: 0.00001)
+        editor.history(redo: false); XCTAssertEqual((editor.project.annotations[0]["geometry"] as! BJJJSON).n("x"), 0.1, accuracy: 0.00001)
+        editor.history(redo: true)
+        var cue = try XCTUnwrap(editor.selectedCue); cue["startSec"] = 0.5; cue["endSec"] = 1.5; cue["strokeOpacity"] = 0.4
+        try editor.updateCue(cue)
+        XCTAssertTrue(BJJProject.visible(cue, time: 0.5, fps: 30)); XCTAssertFalse(BJJProject.visible(cue, time: 1.5, fps: 30))
+        let before = editor.project.revision
+        XCTAssertThrowsError(try editor.updateCue(cue, expectedRevision: initialRevision))
+        cue["endSec"] = 0.1; XCTAssertThrowsError(try editor.updateCue(cue))
+        XCTAssertEqual(editor.project.revision, before)
+        editor.add([CGPoint(x: 0.1, y: 0.1), CGPoint(x: 0.8, y: 0.8)])
+        editor.layer(id, forward: true)
+        XCTAssertEqual(editor.project.annotations.last?.s("id"), id)
+        let reopened = try store.load(initial.id)
+        XCTAssertEqual(reopened.annotations.last?.n("strokeOpacity"), 0.4)
+        XCTAssertEqual(reopened.annotations.last?.n("endSec"), 1.5)
+        editor.exporting = true; XCTAssertThrowsError(try editor.updateCue(reopened.annotations[0])); editor.exporting = false
+    }
+    func testNativeEditedAllToolsReopenAndExport() async throws {
+        executionTimeAllowance = 300
+        let source = root.appendingPathComponent("cue-edit-source.mp4"); try await silentVideo(source)
+        let library = BJJNativeLibrary(root: root.appendingPathComponent("edits"), originalRoot: root.appendingPathComponent("originals"))
+        await library.importFile(source)
+        await library.open(try XCTUnwrap(library.reviews.first))
+        let editor = try XCTUnwrap(library.session); defer { editor.close() }
+        for tool in BJJNativeTool.allCases {
+            editor.tool = tool; editor.add([CGPoint(x: 0.1, y: 0.2), CGPoint(x: 0.5, y: 0.6)])
+            var cue = try XCTUnwrap(editor.project.annotations.last)
+            cue = BJJCueGeometry.move(cue, delta: CGPoint(x: 0.1, y: 0.1), size: editor.pictureSize)
+            cue["strokeOpacity"] = 0.8; cue["startSec"] = 0.5; cue["endSec"] = 2.5
+            try editor.updateCue(cue)
+        }
+        let reopened = try library.services().store.load(editor.project.id)
+        XCTAssertEqual(reopened.annotations.count, 6)
+        XCTAssertTrue(reopened.annotations.allSatisfy { $0.n("startSec") == 0.5 && $0.n("strokeOpacity") == 0.8 })
+        let overlay = try BJJOverlay(annotations: reopened.annotations, size: CGSize(width: 320, height: 180), fps: 30)
+        XCTAssertNil(overlay.image(at: 0)); XCTAssertNotNil(overlay.image(at: 1)); XCTAssertNil(overlay.image(at: 3))
+        await editor.export()
+        XCTAssertNil(editor.error)
+        let exported = try XCTUnwrap(editor.shareURL)
+        XCTAssertGreaterThan(try exported.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0, 1000)
+        let asset = AVURLAsset(url: exported)
+        let duration = try await asset.load(.duration)
+        XCTAssertEqual(duration.seconds, 4, accuracy: 0.1)
+        XCTAssertGreaterThan(try dominantPixels(exported, time: 1, channel: 0), try dominantPixels(exported, time: 3, channel: 0))
+    }
     func testNativeLibraryImportsManagesAndRestoresWithoutChangingSource() async throws {
         let source = root.appendingPathComponent("library-source.mp4")
         try await silentVideo(source)
@@ -137,13 +224,31 @@ import SwiftUI
             host.willMove(toParent: nil); host.view.removeFromSuperview(); host.removeFromParent()
         }
     }
+    func testNativeCuePropertiesCompactAndLargeTextLayouts() async throws {
+        let initial = try project(), editor = try BJJNativeEditorSession(project: initial, store: store)
+        defer { editor.close() }
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = scene.windows.first { $0.isKeyWindow }, container = UIViewController()
+        let window = UIWindow(windowScene: scene); window.rootViewController = container; window.makeKeyAndVisible()
+        defer { window.isHidden = true; previous?.makeKeyAndVisible() }
+        for (name, size, text) in [("compact", CGSize(width: 375, height: 667), DynamicTypeSize.large),
+                                  ("large-text", CGSize(width: 402, height: 874), DynamicTypeSize.accessibility2)] {
+            let host = UIHostingController(rootView: BJJCueProperties(session: editor, cue: initial.annotations[0]).environment(\.dynamicTypeSize, text))
+            container.addChild(host); container.view.addSubview(host.view); host.didMove(toParent: container)
+            host.view.frame = CGRect(origin: .zero, size: size)
+            try await Task.sleep(nanoseconds: 750_000_000); host.view.layoutIfNeeded()
+            let attachment = XCTAttachment(image: UIGraphicsImageRenderer(size: size).image { _ in host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true) })
+            attachment.name = "native-cue-properties-\(name)"; attachment.lifetime = .keepAlways; add(attachment)
+            host.willMove(toParent: nil); host.view.removeFromSuperview(); host.removeFromParent()
+        }
+    }
     func testNativePilotScreenSnapshots() async throws {
         let source = root.appendingPathComponent("native-pilot.mp4")
         try await silentVideo(source)
         let imported = try await BJJService(store: store).importFile(source, originalName: "Native pilot.mp4")
         let editor = try BJJNativeEditorSession(project: imported, store: store)
         editor.add([CGPoint(x: 0.2, y: 0.2), CGPoint(x: 0.7, y: 0.65)])
-        editor.drawing = true
+        editor.select(editor.project.annotations.last?.s("id"))
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let previous = scene.windows.first { $0.isKeyWindow }
         let host = UIHostingController(rootView: BJJNativeEditorScreen(session: editor))

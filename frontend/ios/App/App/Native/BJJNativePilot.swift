@@ -164,6 +164,10 @@ struct BJJNativeTransportState: Codable {
     @Published var time = 0.0
     @Published var playing = false
     @Published var drawing = false { didSet { if drawing { pause() } } }
+    @Published var selecting = false
+    @Published var selectedID: String?
+    @Published var previewCue: BJJJSON?
+    var editRevision: Int?
     @Published var tool: BJJNativeTool = .arrow
     @Published var color = "#FF453A"
     @Published var text = "Cue"
@@ -278,11 +282,14 @@ struct BJJNativeTransportState: Codable {
         if let data = try? JSONEncoder().encode(state) { preferences?.set(data, forKey: "native-review.\(id)") }
     }
     func commit(_ annotations: [BJJJSON]) throws {
+        guard !exporting else { throw BJJError.invalid("Wait for export to finish before editing.") }
+        cancelCueEdit()
         var json = project.json; json["annotations"] = annotations
         let previous = project.annotations
         let saved = try store.save(BJJProject(json))
         undoStack.append(previous); if undoStack.count > 50 { undoStack.removeFirst() }
         redoStack.removeAll(); project = saved; syncHistory()
+        if !annotations.contains(where: { $0.s("id") == selectedID }) { selectedID = nil }
     }
     func add(_ points: [CGPoint]) {
         do { try commit(project.annotations + [try BJJNativeGeometry.annotation(tool: tool, points: points, time: time, project: project, color: color, text: text)]) }
@@ -294,6 +301,7 @@ struct BJJNativeTransportState: Codable {
         catch { self.error = error.localizedDescription }
     }
     func history(redo: Bool) {
+        guard !exporting else { return }; cancelCueEdit()
         guard let annotations = redo ? redoStack.last : undoStack.last else { return }
         do {
             var json = project.json; json["annotations"] = annotations
@@ -319,7 +327,7 @@ struct BJJNativeTransportState: Codable {
     }
     func export() async {
         guard !exporting else { return }
-        pause(); exporting = true; exportProgress = 0
+        cancelCueEdit(); pause(); exporting = true; exportProgress = 0
         defer { exporting = false; jobID = nil }
         do {
             if service == nil { service = try BJJService(store: store) }
@@ -340,7 +348,7 @@ struct BJJNativeTransportState: Codable {
     func cancelExport() { if let jobID { _ = try? service?.cancel(jobID) } }
     func close() {
         guard !closed else { return }
-        closed = true; pause(); cancelExport()
+        closed = true; cancelCueEdit(); pause(); cancelExport()
         if let observer { player.removeTimeObserver(observer); self.observer = nil }
         if let endObserver { NotificationCenter.default.removeObserver(endObserver); self.endObserver = nil }
         player.replaceCurrentItem(with: nil)

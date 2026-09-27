@@ -65,3 +65,14 @@ Native library commands are serialized by one UI operation and existing store re
 The shipping editor still uses existing annotation-only command history. Recording coordinator extraction, audio-mix preview, full-document history, checkpoint/recovery inspection UI, direct geometry manipulation, precise cue timing, and native narration are not claimed complete. They continue under N1/N3/N4. Desktop/runtime retirement still waits for N5/N6 acceptance.
 
 Next device check: import a real video from Photos and Files, cancel a second import, search/rename/reopen the native review, scrub rapidly at each speed, set a short loop, rotate, and confirm no unexpected drawing. Back up to Files, restore as an independent review, and recover a review from Recently Deleted. Verify your existing 2.0.0 native copies and original 1.1.1 reviews remain available.
+
+
+## N3 candidate: 2.0.2
+
+Steve approved continuation after 2.0.1 (10.1). This candidate adds selection/move/resize/endpoints, overlap cycling, layer ordering, a timed cue strip, and a native properties form with text/color/opacity, exact video-second timing, Start here/End here, numeric geometry, and accessible nudge controls. Tap repeatedly on overlapping cues to cycle, or select from Cues. In Draw, choose Select / move, then drag a cue or its handles.
+
+Gesture previews remain in memory; release commits one annotation-history entry. Cancellation, rotation, view reset, and backgrounding discard unfinished gestures. Property forms save atomically and reject stale revisions. All geometry remains normalized in source space; selection handles never enter exported frames. Existing annotation-only history remains in use; full-document history and native audio coordination remain pending.
+
+Validation includes all-tool geometry/field preservation, cancelled and committed gesture transactions, invalid/stale timing rejection, undo/redo/reopen, layer changes, bounded freehand sampling, edited six-tool MP4 export, and compact/large-text property captures. Hosted XCTest and visual review results belong in the release PR; these are not physical-device passes.
+
+Device check: select each tool, move/resize/endpoints at normal and zoomed view, rotate during a drag, cancel a properties form, edit text/style, change cue boundaries and layers, undo/redo, reopen, and export/play the MP4 externally. Check text/opacity and cue appearance/disappearance. Native narration and advanced export follow N4; desktop retirement stays behind N5/N6.

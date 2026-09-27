@@ -21,6 +21,7 @@ struct BJJNativeEditorScreen: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var showAnnotations = false
     @State private var showText = false
+    @State private var showProperties = false
     @State private var zoomReset = 0
     var body: some View {
         NavigationStack {
@@ -30,8 +31,9 @@ struct BJJNativeEditorScreen: View {
                     BJJNativeVideoSurface(session: session, reset: zoomReset)
                         .background(.black)
                         .accessibilityLabel("Video and annotations")
-                        .accessibilityHint("Choose Draw to add a cue. Use the Cues button to navigate or delete annotations.")
+                        .accessibilityHint("Choose Draw to add or select cues. Use Cues for accessible selection and properties.")
                     if !landscape { filmstrip }
+                    if session.drawing && !landscape { cueStrip }
                     transport
                     controls
                 }.frame(width: geometry.size.width, height: geometry.size.height)
@@ -50,6 +52,9 @@ struct BJJNativeEditorScreen: View {
                 }
             }
             .sheet(isPresented: $showAnnotations) { annotationList }
+            .sheet(isPresented: $showProperties) {
+                if let cue = session.selectedCue { BJJCueProperties(session: session, cue: cue) }
+            }
             .sheet(isPresented: $showText) {
                 NavigationStack {
                     Form {
@@ -79,7 +84,7 @@ struct BJJNativeEditorScreen: View {
                 }
             }
             .task { await session.prepareThumbnails() }
-            .onChange(of: scenePhase) { _, phase in if phase != .active { session.pause() } }
+            .onChange(of: scenePhase) { _, phase in if phase != .active { session.cancelCueEdit(); session.pause() } }
             .onDisappear { session.close() }
         }
     }
@@ -125,24 +130,33 @@ struct BJJNativeEditorScreen: View {
             if session.drawing {
                 HStack {
                     Menu {
+                        Button("Select / move", systemImage: "cursorarrow") { session.select(nil) }
                         ForEach(BJJNativeTool.allCases) { tool in
                             Button(tool.title, systemImage: tool.symbol) {
-                                session.tool = tool
+                                session.cancelCueEdit(); session.selecting = false; session.tool = tool
                                 if tool == .text { showText = true }
                             }
                         }
-                    } label: { Label(session.tool.title, systemImage: session.tool.symbol).frame(minHeight: 44) }
+                    } label: { Label(session.selecting ? "Select" : session.tool.title, systemImage: session.selecting ? "cursorarrow" : session.tool.symbol).frame(minHeight: 44) }
                     Spacer()
-                    ForEach(["#FF453A", "#FFD60A", "#0A84FF", "#FFFFFF"], id: \.self) { color in
-                        Button {
-                            session.color = color
-                        } label: {
-                            Circle().fill(Color(uiColor: BJJNativeCanvas.color(color)))
-                                .frame(width: 22, height: 22)
-                                .padding(5).overlay(Circle().stroke(session.color == color ? Color.primary : .clear, lineWidth: 2))
-                                .frame(width: 44, height: 44)
-                        }.accessibilityLabel("\(color == "#FF453A" ? "Red" : color == "#FFD60A" ? "Yellow" : color == "#0A84FF" ? "Blue" : "White") cue")
-                            .accessibilityAddTraits(session.color == color ? .isSelected : [])
+                    if session.selecting {
+                        Button("Properties", systemImage: "slider.horizontal.3") { session.pause(); showProperties = true }
+                            .disabled(session.selectedCue == nil).frame(minHeight: 44)
+                        Menu {
+                            Button("Forward one layer") { if let id = session.selectedID { session.layer(id, forward: true) } }
+                            Button("Backward one layer") { if let id = session.selectedID { session.layer(id, forward: false) } }
+                            Button("Delete cue", role: .destructive) { if let id = session.selectedID { session.remove(id) } }
+                        } label: { Image(systemName: "ellipsis.circle").frame(width: 44, height: 44) }
+                            .accessibilityLabel("Selected cue actions").disabled(session.selectedCue == nil)
+                    } else {
+                        ForEach(["#FF453A", "#FFD60A", "#0A84FF", "#FFFFFF"], id: \.self) { color in
+                            Button { session.color = color } label: {
+                                Circle().fill(Color(uiColor: BJJNativeCanvas.color(color))).frame(width: 22, height: 22)
+                                    .padding(5).overlay(Circle().stroke(session.color == color ? Color.primary : .clear, lineWidth: 2))
+                                    .frame(width: 44, height: 44)
+                            }.accessibilityLabel("\(color == "#FF453A" ? "Red" : color == "#FFD60A" ? "Yellow" : color == "#0A84FF" ? "Blue" : "White") cue")
+                                .accessibilityAddTraits(session.color == color ? .isSelected : [])
+                        }
                     }
                 }
             }
@@ -167,7 +181,26 @@ struct BJJNativeEditorScreen: View {
                 Text("Preview plays source audio. Existing narration is preserved in exports; native narration playback is the next milestone.")
                     .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
-        }.padding(.horizontal, 12).padding(.bottom, 8).background(.bar)
+        }.padding(.horizontal, 12).padding(.bottom, 8).background(.bar).disabled(session.exporting)
+    }
+    private var cueStrip: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 8) {
+                ForEach(session.project.annotations.sorted { $0.n("startSec") < $1.n("startSec") }, id: \.selfID) { cue in
+                    Button { session.select(cue.s("id"), seekToCue: true) } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("\(cue.s("type").capitalized) · \(cue.n("startSec"), specifier: "%.1f")–\(cue.n("endSec"), specifier: "%.1f")s").font(.caption)
+                            GeometryReader { geo in
+                                Capsule().fill(.secondary.opacity(0.2))
+                                Capsule().fill(session.selectedID == cue.s("id") ? Color.accentColor : Color.secondary)
+                                    .frame(width: max(2, geo.size.width * (cue.n("endSec") - cue.n("startSec")) / session.project.duration))
+                                    .offset(x: geo.size.width * cue.n("startSec") / session.project.duration)
+                            }.frame(height: 4)
+                        }.padding(.horizontal, 8).frame(width: 150, height: 44)
+                    }.buttonStyle(.bordered).accessibilityAddTraits(session.selectedID == cue.s("id") ? .isSelected : [])
+                }
+            }.padding(.horizontal, 12)
+        }.frame(height: session.project.annotations.isEmpty ? 0 : 52)
     }
     private var annotationList: some View {
         NavigationStack {
@@ -178,15 +211,17 @@ struct BJJNativeEditorScreen: View {
                 ForEach(session.project.annotations, id: \.selfID) { cue in
                     HStack {
                         Button {
-                            session.seek(cue.n("startSec")); showAnnotations = false
+                            session.select(cue.s("id"), seekToCue: true); showAnnotations = false
                         } label: {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(cue.s("type").capitalized)
+                                Text(cue.s("type") == "text" ? (cue["geometry"] as! BJJJSON).s("text") : cue.s("type").capitalized)
                                 Text(String(format: "%.1f – %.1f seconds", cue.n("startSec"), cue.n("endSec")))
                                     .font(.caption).foregroundStyle(.secondary)
                             }.frame(minHeight: 44)
                         }
                         Spacer()
+                        NavigationLink { BJJCueProperties(session: session, cue: cue) } label: { Image(systemName: "slider.horizontal.3").frame(width: 44, height: 44) }
+                            .accessibilityLabel("Edit \(cue.s("type")) properties")
                         Button("Delete cue", systemImage: "trash", role: .destructive) { session.remove(cue.s("id")) }
                             .labelStyle(.iconOnly).frame(width: 44, height: 44)
                     }
@@ -224,6 +259,11 @@ final class BJJNativeCanvas: UIView, UIGestureRecognizerDelegate {
     private let video = AVPlayerLayer()
     private let overlay = UIImageView()
     private let draft = CAShapeLayer()
+    private let selection = CAShapeLayer()
+    private var gestureCue: BJJJSON?
+    private var gestureStart = CGPoint.zero
+    private var handleIndex: Int?
+    private var previewSignature = ""
     private let imageContext = CIContext(options: [.cacheIntermediates: false])
     private var renderer: BJJOverlay?
     private var renderRevision = -1
@@ -244,6 +284,8 @@ final class BJJNativeCanvas: UIView, UIGestureRecognizerDelegate {
         picture.layer.addSublayer(video)
         picture.addSubview(overlay)
         picture.layer.addSublayer(draft)
+        picture.layer.addSublayer(selection)
+        selection.strokeColor = UIColor.systemCyan.cgColor; selection.fillColor = UIColor.clear.cgColor
         video.player = session.player; video.videoGravity = .resizeAspect
         draft.fillColor = UIColor.clear.cgColor; draft.lineCap = .round; draft.lineJoin = .round
         let draw = UIPanGestureRecognizer(target: self, action: #selector(drawGesture(_:)))
@@ -265,18 +307,21 @@ final class BJJNativeCanvas: UIView, UIGestureRecognizerDelegate {
         picture.transform = .identity
         picture.bounds = CGRect(origin: .zero, size: size)
         picture.center = CGPoint(x: bounds.midX, y: bounds.midY)
-        video.frame = picture.bounds; overlay.frame = picture.bounds; draft.frame = picture.bounds
+        video.frame = picture.bounds; overlay.frame = picture.bounds; draft.frame = picture.bounds; selection.frame = picture.bounds
         applyTransform(); refresh(reset: resetValue)
     }
     func detach() { video.player = nil; cancelStroke() }
     func refresh(reset: Int) {
         if reset != resetValue { resetValue = reset; scale = 1; offset = .zero; cancelStroke(); applyTransform() }
-        if !session.drawing { cancelStroke() }
+        if !session.drawing || session.exporting { cancelStroke() }
         let size = picture.bounds.size
         guard size.width > 1, size.height > 1 else { return }
         do {
-            if renderRevision != session.project.revision || renderSize != size {
-                renderer = try BJJOverlay(annotations: session.project.annotations, size: size, fps: session.project.exportSettings.n("fps"))
+            let previewKey = session.previewCue.flatMap { try? JSONSerialization.data(withJSONObject: $0, options: [.sortedKeys]).base64EncodedString() } ?? ""
+            if renderRevision != session.project.revision || renderSize != size || previewSignature != previewKey {
+                previewSignature = previewKey
+                let cues = session.project.annotations.map { cue in session.previewCue?.s("id") == cue.s("id") ? session.previewCue! : cue }
+                renderer = try BJJOverlay(annotations: cues, size: size, fps: session.project.exportSettings.n("fps"))
                 renderRevision = session.project.revision; renderSize = size; signature = "invalid"
             }
             let visible = session.project.annotations.filter { BJJProject.visible($0, time: session.time, fps: session.project.exportSettings.n("fps")) }.map { $0.s("id") }.joined(separator: ",")
@@ -287,29 +332,82 @@ final class BJJNativeCanvas: UIView, UIGestureRecognizerDelegate {
                 } else { overlay.image = nil }
             }
         } catch { session.error = error.localizedDescription }
+        drawSelection()
     }
     override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         if let pan = gestureRecognizer as? UIPanGestureRecognizer, pan.minimumNumberOfTouches == 1 {
-            return session.drawing && picture.bounds.contains(pan.location(in: picture))
+            return session.drawing && !session.exporting && picture.bounds.contains(pan.location(in: picture))
         }
         return true
     }
+    private func candidates(at point: CGPoint) -> [BJJJSON] {
+        session.project.annotations.enumerated().filter {
+            BJJProject.visible($0.element, time: session.time, fps: session.project.exportSettings.n("fps")) &&
+            BJJCueGeometry.hit($0.element, point: point, size: picture.bounds.size, tolerance: 22 / scale)
+        }.sorted {
+            $0.element.n("zIndex") == $1.element.n("zIndex") ? $0.offset > $1.offset : $0.element.n("zIndex") > $1.element.n("zIndex")
+        }.map { $0.element }
+    }
     @objc private func drawGesture(_ gesture: UIPanGestureRecognizer) {
-        guard session.drawing else { cancelStroke(); return }
+        guard session.drawing, !session.exporting else { cancelStroke(); return }
         let point = BJJNativeGeometry.point(gesture.location(in: picture), in: picture.bounds)
+        if session.selecting {
+            switch gesture.state {
+            case .began:
+                session.pause(); gestureStart = point; handleIndex = nil
+                if let cue = session.selectedCue, BJJProject.visible(cue, time: session.time, fps: session.project.exportSettings.n("fps")) {
+                    let handles = BJJCueGeometry.handles(cue, size: picture.bounds.size)
+                    handleIndex = handles.indices.min(by: { distance(handles[$0], point) < distance(handles[$1], point) })
+                    if let i = handleIndex, distance(handles[i], point) > 22 / scale { handleIndex = nil }
+                    if handleIndex != nil || BJJCueGeometry.hit(cue, point: point, size: picture.bounds.size, tolerance: 22 / scale) { gestureCue = cue }
+                }
+                if gestureCue == nil { session.select(candidates(at: point).first?.s("id")); gestureCue = session.selectedCue }
+                session.beginCueEdit()
+            case .changed, .ended:
+                guard let cue = gestureCue else { return }
+                if let i = handleIndex {
+                    session.previewCue = ["line", "arrow"].contains(cue.s("type")) ? BJJCueGeometry.endpoint(cue, index: i, to: point) : BJJCueGeometry.resize(cue, corner: i, to: point, size: picture.bounds.size)
+                } else {
+                    session.previewCue = BJJCueGeometry.move(cue, delta: CGPoint(x: point.x - gestureStart.x, y: point.y - gestureStart.y), size: picture.bounds.size)
+                }
+                refresh(reset: resetValue)
+                if gesture.state == .ended { gestureCue = nil; session.finishCueEdit(); drawSelection() }
+            default: cancelStroke()
+            }
+            return
+        }
         switch gesture.state {
         case .began: session.pause(); points = [point]; drawDraft()
-        case .changed:
-            if points.count < 4000 { points.append(point) }; drawDraft()
+        case .changed: points = BJJCueGeometry.sample(points, point, size: picture.bounds.size); drawDraft()
         case .ended:
-            if points.count < 4000 { points.append(point) }
+            points = BJJCueGeometry.sample(points, point, size: picture.bounds.size, force: true)
             let completed = points; cancelStroke(); session.add(completed)
         default: cancelStroke()
         }
     }
+    private func distance(_ a: CGPoint, _ b: CGPoint) -> CGFloat {
+        hypot((a.x - b.x) * picture.bounds.width, (a.y - b.y) * picture.bounds.height)
+    }
     @objc private func tapGesture(_ gesture: UITapGestureRecognizer) {
-        guard session.drawing, session.tool == .text, picture.bounds.contains(gesture.location(in: picture)) else { return }
-        session.add([BJJNativeGeometry.point(gesture.location(in: picture), in: picture.bounds)])
+        guard session.drawing, !session.exporting, picture.bounds.contains(gesture.location(in: picture)) else { return }
+        let point = BJJNativeGeometry.point(gesture.location(in: picture), in: picture.bounds)
+        if session.selecting {
+            let cues = candidates(at: point)
+            let current = cues.firstIndex { $0.s("id") == session.selectedID }
+            session.select(cues.isEmpty ? nil : cues[(current.map { ($0 + 1) % cues.count }) ?? 0].s("id"))
+            drawSelection()
+        } else if session.tool == .text { session.add([point]) }
+    }
+    private func drawSelection() {
+        guard session.drawing, session.selecting, let cue = session.previewCue ?? session.selectedCue,
+              BJJProject.visible(cue, time: session.time, fps: session.project.exportSettings.n("fps")) else { selection.path = nil; return }
+        let b = BJJCueGeometry.bounds(cue, size: picture.bounds.size)
+        let rect = CGRect(x: b.minX * picture.bounds.width, y: b.minY * picture.bounds.height, width: b.width * picture.bounds.width, height: b.height * picture.bounds.height)
+        let path = UIBezierPath(rect: rect)
+        for p in BJJCueGeometry.handles(cue, size: picture.bounds.size) {
+            path.append(UIBezierPath(ovalIn: CGRect(x: p.x * picture.bounds.width - 5 / scale, y: p.y * picture.bounds.height - 5 / scale, width: 10 / scale, height: 10 / scale)))
+        }
+        selection.lineWidth = 2 / scale; selection.path = path.cgPath
     }
     @objc private func pinchGesture(_ gesture: UIPinchGestureRecognizer) {
         cancelStroke()
@@ -327,8 +425,9 @@ final class BJJNativeCanvas: UIView, UIGestureRecognizerDelegate {
         let maxY = max(0, (picture.bounds.height * scale - bounds.height) / 2)
         offset.x = min(maxX, max(-maxX, offset.x)); offset.y = min(maxY, max(-maxY, offset.y))
         picture.transform = CGAffineTransform(translationX: offset.x, y: offset.y).scaledBy(x: scale, y: scale)
+        drawSelection()
     }
-    private func cancelStroke() { points.removeAll(); draft.path = nil }
+    private func cancelStroke() { points.removeAll(); draft.path = nil; gestureCue = nil; handleIndex = nil; session.cancelCueEdit() }
     private func drawDraft() {
         guard let first = points.first, let last = points.last else { return }
         func screen(_ p: CGPoint) -> CGPoint { CGPoint(x: p.x * picture.bounds.width, y: p.y * picture.bounds.height) }
