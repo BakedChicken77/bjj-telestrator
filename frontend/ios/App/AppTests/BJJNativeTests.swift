@@ -17,36 +17,42 @@ import SwiftUI
         let source = root.appendingPathComponent("native-pilot.mp4")
         try await silentVideo(source)
         let imported = try await BJJService(store: store).importFile(source, originalName: "Native pilot.mp4")
-        for (name, size) in [("portrait", CGSize(width: 402, height: 874)), ("landscape", CGSize(width: 874, height: 402))] {
-            let editor = try BJJNativeEditorSession(project: store.load(imported.id), store: store)
-            defer { editor.close() }
-            if name == "portrait" { editor.add([CGPoint(x: 0.2, y: 0.2), CGPoint(x: 0.7, y: 0.65)]) }
-            editor.drawing = true
-            let host = UIHostingController(rootView: BJJNativeEditorScreen(session: editor).frame(width: size.width, height: size.height))
-            let container = UIViewController()
-            let window = UIWindow(frame: UIScreen.main.bounds)
-            window.rootViewController = container; window.isHidden = false
-            container.addChild(host); container.view.addSubview(host.view)
-            host.view.frame = CGRect(origin: .zero, size: size)
-            host.didMove(toParent: container)
-            host.view.setNeedsLayout(); host.view.layoutIfNeeded()
+        let editor = try BJJNativeEditorSession(project: imported, store: store)
+        editor.add([CGPoint(x: 0.2, y: 0.2), CGPoint(x: 0.7, y: 0.65)])
+        editor.drawing = true
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = scene.windows.first { $0.isKeyWindow }
+        let host = UIHostingController(rootView: BJJNativeEditorScreen(session: editor))
+        let window = UIWindow(windowScene: scene)
+        window.overrideUserInterfaceStyle = .light
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer {
+            editor.close(); window.isHidden = true; previous?.makeKeyAndVisible()
+            scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+        }
+        for (name, orientation) in [("portrait", UIInterfaceOrientationMask.portrait), ("landscape", UIInterfaceOrientationMask.landscapeRight)] {
+            host.setNeedsUpdateOfSupportedInterfaceOrientations()
+            scene.requestGeometryUpdate(.iOS(interfaceOrientations: orientation))
+            for _ in 0..<30 {
+                try await Task.sleep(nanoseconds: 100_000_000)
+                if (window.bounds.width > window.bounds.height) == (name == "landscape") { break }
+            }
             try await Task.sleep(nanoseconds: 750_000_000)
-            host.view.layoutIfNeeded()
+            window.layoutIfNeeded()
+            XCTAssertEqual(window.bounds.width > window.bounds.height, name == "landscape")
             func canvas(in view: UIView) -> BJJNativeCanvas? {
                 if let result = view as? BJJNativeCanvas { return result }
                 return view.subviews.compactMap { canvas(in: $0) }.first
             }
             let stage = try XCTUnwrap(canvas(in: host.view))
-            let stageFrame = stage.convert(stage.bounds, to: host.view)
+            let stageFrame = stage.convert(stage.bounds, to: window)
             XCTAssertGreaterThan(stageFrame.height, 80)
             XCTAssertGreaterThanOrEqual(stageFrame.minX, -1)
-            XCTAssertLessThanOrEqual(stageFrame.maxX, size.width + 1)
-            XCTAssertEqual(host.view.bounds.size, size)
-            let image = UIGraphicsImageRenderer(size: size).image { _ in host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true) }
+            XCTAssertLessThanOrEqual(stageFrame.maxX, window.bounds.width + 1)
+            let image = UIGraphicsImageRenderer(size: window.bounds.size).image { _ in window.drawHierarchy(in: window.bounds, afterScreenUpdates: true) }
             let attachment = XCTAttachment(image: image)
             attachment.name = "native-pilot-\(name)"; attachment.lifetime = .keepAlways; add(attachment)
-            host.willMove(toParent: nil); host.view.removeFromSuperview(); host.removeFromParent()
-            window.isHidden = true
         }
     }
     func testNativePilotCopiesWithoutMigratingOrEditingOriginal() throws {
