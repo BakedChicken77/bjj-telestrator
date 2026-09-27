@@ -34,10 +34,6 @@
 		EA818F39D15161682D8CE3A6 = {isa = PBXBuildFile; fileRef = 953EEBC42CDDB61A535324AE;};
 		028C1F41097071DDEB55A7F7 = {isa = PBXBuildFile; fileRef = C79F983F1064F0A52BAD2C31;};
 		071E4F326FF58E2C9A7043A2 = {isa = PBXBuildFile; productRef = B731938DAA243747390956C3;};
-		CF756B2876D37F4B8BB14D01 = {isa = PBXBuildFile; fileRef = C9EA53E37CEFD31D4FD2E55A;};
-		6CD98C3E0620E1FB602E664F = {isa = PBXBuildFile; fileRef = 65D45A5D9A23B84ABDE4DA5C;};
-		E85A3B241EE83DEC3FA1BA90 = {isa = PBXBuildFile; fileRef = 566D972D489435B6AB2DB02E;};
-		7E2A5A56FC45A0A602577F61 = {isa = PBXBuildFile; fileRef = 8F9A03B968D98F9B64D493EE;};
 		5715EDCC5112F33CC022E77E = {isa = PBXBuildFile; fileRef = 365DDA6A67754651C623496B;};
 		9E7C12F412DE8F0B499CFB9A = {isa = PBXBuildFile; fileRef = D2F40119B6AEE101CE409B21;};
 		77E5B3EF5BBC84654DC1E873 = {isa = PBXBuildFile; fileRef = E5F33159378A53B9F3E09AC3;};
@@ -78,10 +74,6 @@
 		E844101F5F80837C9418E01C = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJProjectVersions.swift"; sourceTree = "<group>";};
 		953EEBC42CDDB61A535324AE = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJMediaJobs.swift"; sourceTree = "<group>";};
 		C79F983F1064F0A52BAD2C31 = {isa = PBXFileReference; lastKnownFileType = text.json; path = "../../../../tests/fixtures/hdr-conformance.json"; sourceTree = "<group>";};
-		C9EA53E37CEFD31D4FD2E55A = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJPackageArchive.swift"; sourceTree = "<group>";};
-		65D45A5D9A23B84ABDE4DA5C = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJPackageJSON.swift"; sourceTree = "<group>";};
-		566D972D489435B6AB2DB02E = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJProjectPackage.swift"; sourceTree = "<group>";};
-		8F9A03B968D98F9B64D493EE = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJPackageJobs.swift"; sourceTree = "<group>";};
 		365DDA6A67754651C623496B = {isa = PBXFileReference; lastKnownFileType = text.json; path = "../../../../tests/fixtures/package-conformance.json"; sourceTree = "<group>";};
 		D2F40119B6AEE101CE409B21 = {isa = PBXFileReference; lastKnownFileType = text.json; path = "../../../../tests/fixtures/media-timing-conformance.json"; sourceTree = "<group>";};
 		E5F33159378A53B9F3E09AC3 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Native/BJJPackageArchive.swift"; sourceTree = "<group>";};
@@ -134,7 +126,6 @@
 				ADD978D2E19741D762A3D9D2,
 				0B40AB0179C695E4C83659CE,
 				E5F33159378A53B9F3E09AC3,
-				953EEBC42CDDB61A535324AE,8F9A03B968D98F9B64D493EE,566D972D489435B6AB2DB02E,65D45A5D9A23B84ABDE4DA5C,C9EA53E37CEFD31D4FD2E55A,
 				E844101F5F80837C9418E01C,
 				C3FB81060B2CE2326EB07B55,
 				DC533040243815D931B63128,
@@ -264,7 +255,6 @@
 				2D84DFA6B57353A8CFF30672,
 				FC0476D5980ED08D9851D024,
 				77E5B3EF5BBC84654DC1E873,
-				EA818F39D15161682D8CE3A6,7E2A5A56FC45A0A602577F61,E85A3B241EE83DEC3FA1BA90,6CD98C3E0620E1FB602E664F,CF756B2876D37F4B8BB14D01,
 				AE7B7702FDB3AC626938F495,
 				091E37617DA55412397ACA97,
 				5D6D9A6272569E0B1BA92C42,

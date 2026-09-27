@@ -352,7 +352,7 @@ final class BJJNativeCanvas: UIView, UIGestureRecognizerDelegate {
             }
         } catch { session.error = error.localizedDescription }
     }
-    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+    override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         if let pan = gestureRecognizer as? UIPanGestureRecognizer, pan.minimumNumberOfTouches == 1 {
             return session.drawing && picture.bounds.contains(pan.location(in: picture))
         }
