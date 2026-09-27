@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
   start: vi.fn(),
   stop: vi.fn(),
 }));
-vi.mock('./api', () => ({ api: { save: mocks.save } }));
+vi.mock('./project/saveSession', () => ({ flushActiveSave: mocks.save }));
 vi.mock('./native', () => ({
   nativeBridge: { prepareRecording: mocks.prepare, startRecording: mocks.start },
   nativeAPI: { stopRecording: mocks.stop },

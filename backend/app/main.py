@@ -18,10 +18,18 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from .assets import recording_estimate, require_space, space_estimate, storage_summary
 from .config import Config
+from .errors import DomainError, conflict
 from .jobs import JobManager
-from .media import MediaError, create_proxy, probe_media
+from .media import MediaError, check_cancelled
+from .media_jobs import MediaJobs
+from .migrations import runtime_capabilities
 from .models import Job, Project, Voiceover
+from .package_archive import PackageLimits
+from .package_jobs import PackageJobs
+from .packages import package_estimate
+from .recovery import ProjectRecovery
 from .storage import ProjectStore, StorageError, asset_path, safe_filename, utc_now
 from .voiceover import normalize_voiceover
 
@@ -70,6 +78,8 @@ class LocalRequestGuard:
             await JSONResponse({'detail': 'This request origin is not allowed'}, status_code=403)(scope, receive, send)
             return
         limit = self.config.max_upload_bytes + 1024 * 1024
+        if scope['method'] == 'PUT' and scope['path'].startswith('/api/package-jobs/') and scope['path'].endswith('/content'):
+            limit = self.config.max_package_bytes
         if scope['method'] == 'POST' and scope['path'].endswith('/voiceovers'):
             limit = min(self.config.max_voiceover_bytes, self.config.max_upload_bytes) + 1024 * 1024
         try:
@@ -92,6 +102,19 @@ class LocalRequestGuard:
         await self.app(scope, limited_receive, send)
 
 
+class ExportFileResponse(FileResponse):
+    """Release the output lease even when a client disconnects or sending fails."""
+    def __init__(self, path: Path, manager: JobManager, job: Job):
+        super().__init__(path, media_type='video/mp4', filename=job.filename)
+        self.manager, self.job = manager, job
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            await run_in_threadpool(self.manager.release_output, self.job)
+
+
 def create_app(config: Config | None = None) -> FastAPI:
     settings = config or Config()
     store = ProjectStore(settings.data_dir)
@@ -99,13 +122,102 @@ def create_app(config: Config | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(application: FastAPI):
         application.state.jobs = JobManager(store, settings.export_workers)
-        yield
-        await run_in_threadpool(application.state.jobs.close)
+        application.state.media = MediaJobs(store)
+        application.state.packages = PackageJobs(store, PackageLimits(compressed=settings.max_package_bytes,
+                                                                    expanded=settings.max_package_expanded_bytes))
+        try:
+            yield
+        finally:
+            await run_in_threadpool(application.state.packages.close)
+            await run_in_threadpool(application.state.media.close)
+            await run_in_threadpool(application.state.jobs.close)
 
     application = FastAPI(title='BJJ Telestrator', version='1.0.0', lifespan=lifespan)
     application.state.store = store
     application.state.config = settings
     application.add_middleware(LocalRequestGuard, config=settings)
+
+    @application.post('/api/package-jobs', status_code=202)
+    def create_package(body: dict, request: Request) -> dict:
+        return application.state.packages.create(body.get('operation'), body.get('requestId'),
+                project_id=body.get('projectId'), revision=expected_revision(request) if body.get('operation') == 'backup' else None,
+                include_proxy=body.get('includeProxy', False)).model_dump(mode='json')
+
+    @application.get('/api/package-jobs/{job_id}')
+    def get_package(job_id: str, response: Response) -> dict:
+        response.headers['Cache-Control'] = 'no-store'
+        return application.state.packages.get(job_id).model_dump(mode='json')
+
+    @application.get('/api/package-jobs')
+    def list_packages(response: Response) -> list[dict]:
+        response.headers['Cache-Control'] = 'no-store'
+        manager: PackageJobs = application.state.packages
+        with manager.lock:
+            return [manager.get(identifier).model_dump(mode='json') for identifier in manager.jobs]
+
+    @application.post('/api/package-jobs/{job_id}/cancel')
+    def cancel_package(job_id: str) -> dict:
+        return application.state.packages.cancel(job_id).model_dump(mode='json')
+
+    @application.delete('/api/package-jobs/{job_id}', status_code=204)
+    def remove_package(job_id: str) -> Response:
+        application.state.packages.remove(job_id)
+        return Response(status_code=204)
+
+    @application.put('/api/package-jobs/{job_id}/content', status_code=202)
+    async def upload_package(job_id: str, request: Request) -> dict:
+        manager: PackageJobs = application.state.packages
+        # Claim the operation before opening a path. A duplicate HTTP request must
+        # never fail/cancel the first request's upload.
+        path = manager.begin_upload(job_id)
+        complete = False
+        try:
+            total = int(request.headers.get('content-length', '0')) or None
+            require_space(path.parent, space_estimate('package upload', incoming=total or 0, output=0))
+            done = 0
+            with path.open('xb') as destination:
+                async for chunk in request.stream():
+                    check_cancelled(manager.events[job_id])
+                    done += len(chunk)
+                    if done > settings.max_package_bytes:
+                        raise DomainError('PACKAGE_LIMIT', 'The package exceeds the configured transfer size.', 413)
+                    if done % (16 * 1024**2) < len(chunk):
+                        require_space(path.parent, space_estimate('package upload', output=0))
+                    await run_in_threadpool(destination.write, chunk)
+                    manager.progress(job_id, 'copying', done, total)
+                await run_in_threadpool(destination.flush)
+                await run_in_threadpool(os.fsync, destination.fileno())
+            if not done or (total and done != total):
+                raise DomainError('PACKAGE_INVALID', 'The package upload is empty or incomplete.', 422)
+            result = manager.finish_upload(job_id)
+            complete = True
+            return result.model_dump(mode='json')
+        except BaseException as error:
+            manager.fail(job_id, error)
+            raise
+        finally:
+            if not complete:
+                path.unlink(missing_ok=True)
+
+    @application.get('/api/package-jobs/{job_id}/file')
+    def download_package(job_id: str) -> FileResponse:
+        manager: PackageJobs = application.state.packages
+        path = manager.acquire_output(job_id)
+        class PackageResponse(FileResponse):
+            async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+                try:
+                    await super().__call__(scope, receive, send)
+                finally:
+                    await run_in_threadpool(manager.release_output, job_id)
+        return PackageResponse(path, media_type='application/zip', filename=f'bjj-review-{job_id}.bjjproj')
+
+    @application.get('/api/projects/{project_id}/package-estimate')
+    def estimate_package(project_id: str, include_proxy: bool = False) -> dict:
+        return package_estimate(store, store.load(project_id), include_proxy)
+
+    @application.exception_handler(DomainError)
+    async def domain_error(_request: Request, exc: DomainError) -> JSONResponse:
+        return JSONResponse({'detail': str(exc), 'code': exc.code, **exc.details}, status_code=exc.status)
 
     @application.exception_handler(StorageError)
     async def storage_error(_request: Request, exc: StorageError) -> JSONResponse:
@@ -123,7 +235,8 @@ def create_app(config: Config | None = None) -> FastAPI:
     async def os_error(_request: Request, exc: OSError) -> JSONResponse:
         log.exception('Filesystem operation failed', exc_info=exc)
         detail = 'Insufficient disk space' if exc.errno == errno.ENOSPC else 'Could not access project storage'
-        return JSONResponse({'detail': detail}, status_code=507 if exc.errno == errno.ENOSPC else 500)
+        return JSONResponse({'detail': detail, 'code': 'STORAGE_LOW' if exc.errno == errno.ENOSPC else 'STORAGE_UNAVAILABLE'},
+                            status_code=507 if exc.errno == errno.ENOSPC else 500)
 
     @application.exception_handler(Exception)
     async def unexpected_error(_request: Request, exc: Exception) -> JSONResponse:
@@ -135,72 +248,150 @@ def create_app(config: Config | None = None) -> FastAPI:
         return {'status': 'ok', 'ffmpeg': shutil.which(os.getenv('BJJ_FFMPEG_PATH', 'ffmpeg')) is not None,
                 'ffprobe': shutil.which(os.getenv('BJJ_FFPROBE_PATH', 'ffprobe')) is not None}
 
+    @application.get('/api/capabilities')
+    def capabilities() -> dict:
+        return runtime_capabilities()
+
+    def expected_revision(request: Request) -> int:
+        value = request.headers.get('if-match', '')
+        if not value:
+            raise DomainError('REVISION_REQUIRED', 'Reopen this project in an updated client before changing it or starting an export.', 428)
+        if len(value) < 3 or not value.startswith('"') or not value.endswith('"') or not value[1:-1].isdigit():
+            raise DomainError('REVISION_REQUIRED', 'The expected project revision is invalid.')
+        return int(value[1:-1])
+
     @application.get('/api/projects')
     def list_projects() -> list[dict[str, object]]:
         return store.list()
 
+    @application.post('/api/import-jobs')
+    def create_import_job() -> dict:
+        return application.state.media.create().model_dump()
+
+    @application.get('/api/media-jobs/{job_id}')
+    def get_media_job(job_id: str, response: Response) -> dict:
+        response.headers['Cache-Control'] = 'no-store'
+        return application.state.media.get(job_id).model_dump()
+
+    @application.delete('/api/media-jobs/{job_id}')
+    def cancel_media_job(job_id: str) -> dict:
+        return application.state.media.cancel(job_id).model_dump()
+
+    @application.post('/api/projects/{project_id}/proxy-jobs', status_code=202)
+    def repair_proxy(project_id: str, request: Request) -> dict:
+        return application.state.media.repair(project_id, expected_revision(request)).model_dump()
+
     @application.post('/api/projects/import', response_model=Project)
-    async def import_video(file: Annotated[UploadFile, File()],
+    async def import_video(request: Request, file: Annotated[UploadFile, File()],
                            name: Annotated[str | None, Form()] = None) -> Project:
-        content_type = (file.content_type or '').split(';')[0]
-        if content_type and not (content_type.startswith('video/') or content_type in (
-                'application/octet-stream', 'application/mp4', 'application/x-matroska')):
-            await file.close()
-            raise HTTPException(415, 'Choose a video file such as MP4, MOV, MKV, or WebM')
-        original_name = safe_filename(file.filename or 'video.mp4')
-        suffix = Path(original_name).suffix.lower()
-        if len(suffix) > 12 or not suffix:
-            suffix = '.bin'
-        project_id = str(uuid4())
-        folder = store.create_dir(project_id)
-        source_asset, proxy_asset = f'source/{uuid4()}{suffix}', f'proxy/{uuid4()}.mp4'
-        source_path, proxy_path = asset_path(folder, source_asset), asset_path(folder, proxy_asset)
-        success = False
+        manager: MediaJobs = application.state.media
+        job_id = request.headers.get('x-bjj-import-id')
+        job = manager.get(job_id) if job_id else manager.create()
+        folder = None
+        started = False
         try:
+            content_type = (file.content_type or '').split(';')[0]
+            if content_type and not (content_type.startswith('video/') or content_type in (
+                    'application/octet-stream', 'application/mp4', 'application/x-matroska')):
+                raise HTTPException(415, 'Choose a video file such as MP4, MOV, MKV, or WebM')
+            original_name = safe_filename(file.filename or 'video.mp4')
+            suffix = Path(original_name).suffix.lower()
+            if len(suffix) > 12 or not suffix:
+                suffix = '.bin'
+            folder = manager.begin_import(job.jobId)
+            started = True
+            source_asset = f'source/{uuid4()}{suffix}'
+            source_path = asset_path(folder, source_asset)
+            require_space(folder, space_estimate('import', incoming=file.size or 0, output=0))
             count = 0
             with source_path.open('xb') as destination:
                 while chunk := await file.read(1024 * 1024):
+                    check_cancelled(manager.events[job.jobId])
                     count += len(chunk)
                     if count > settings.max_upload_bytes:
                         raise HTTPException(413, 'Upload exceeds the configured size limit')
+                    if count % (16 * 1024**2) < len(chunk):
+                        require_space(folder, space_estimate('import', output=0))
                     await run_in_threadpool(destination.write, chunk)
+                    manager.copied(job.jobId, count, file.size)
+                await run_in_threadpool(destination.flush)
+                await run_in_threadpool(os.fsync, destination.fileno())
             if not count:
                 raise HTTPException(422, 'The uploaded file is empty')
-            if shutil.disk_usage(folder).free < max(count, 16 * 1024**2):
-                raise HTTPException(507, 'Not enough disk space to create an editing proxy')
-            source = await run_in_threadpool(probe_media, source_path, source_asset, original_name)
-            await run_in_threadpool(create_proxy, source_path, proxy_path, source)
-            proxy = await run_in_threadpool(probe_media, proxy_path, proxy_asset, original_name)
-            now = utc_now()
-            project = Project(projectId=project_id, projectName=(name or Path(original_name).stem)[:160],
-                              createdAt=now, updatedAt=now, source=source, proxy=proxy,
-                              exportSettings={'fps': min(120, source.avgFrameRate), 'crf': 18, 'preset': 'medium'})
-            saved = await run_in_threadpool(store.save, project, existing=False)
-            success = True
-            log.info('Video imported', extra={'projectId': project_id})
-            return saved
+            future = manager.import_copied(job.jobId, source_asset, original_name, name)
+            return await run_in_threadpool(future.result)
+        except BaseException as exc:
+            # A second request must not cancel or delete the first request's staging.
+            if started or (job.operation == 'import' and job.status == 'queued' and manager.get(job.jobId).status == 'queued'):
+                manager.fail(job.jobId, exc)
+            raise
         finally:
             await file.close()
-            if not success:
+            if folder and not (folder / 'project.json').exists() and manager.get(job.jobId).status in ('failed', 'cancelled'):
                 shutil.rmtree(folder, ignore_errors=True)
 
     @application.get('/api/projects/{project_id}', response_model=Project)
-    def get_project(project_id: str) -> Project:
-        return store.load(project_id)
+    def get_project(project_id: str, response: Response) -> Project:
+        project = store.load(project_id)
+        response.headers['ETag'] = f'"{project.revision}"'
+        response.headers['Cache-Control'] = 'no-store'
+        return project
 
     @application.put('/api/projects/{project_id}', response_model=Project)
-    def save_project(project_id: str, project: Project) -> Project:
+    def save_project(project_id: str, project: Project, request: Request, response: Response) -> Project:
         if project.projectId != project_id:
             raise HTTPException(400, 'Project identifier does not match the URL')
-        return store.save(project)
+        if expected_revision(request) != project.revision:
+            raise DomainError('REVISION_REQUIRED', 'The request and project revisions do not match.')
+        saved = store.save(project)
+        response.headers['ETag'] = f'"{saved.revision}"'
+        return saved
+
+    @application.post('/api/projects/{project_id}/recover-copy', response_model=Project)
+    def recover_copy(project_id: str, project: Project) -> Project:
+        if project.projectId != project_id:
+            raise HTTPException(400, 'Project identifier does not match the URL')
+        return store.recover_copy(project)
 
     @application.delete('/api/projects/{project_id}', status_code=204)
-    def delete_project(project_id: str) -> Response:
+    def delete_project(project_id: str, request: Request) -> Response:
         with store.lock:
             if application.state.jobs.has_active(project_id):
                 raise HTTPException(409, 'Cancel or finish this project’s active exports before deleting it')
-            store.delete(project_id)
+            ProjectRecovery(store).trash(project_id, expected_revision(request))
             application.state.jobs.forget(project_id)
+        return Response(status_code=204)
+
+    @application.post('/api/projects/{project_id}/duplicate', response_model=Project)
+    def duplicate_project(project_id: str, request: Request) -> Project:
+        return ProjectRecovery(store).duplicate(project_id, expected_revision(request))
+
+    @application.get('/api/projects/{project_id}/checkpoints')
+    def list_checkpoints(project_id: str) -> list[dict]:
+        return ProjectRecovery(store).checkpoints(project_id)
+
+    @application.post('/api/projects/{project_id}/checkpoints')
+    def create_checkpoint(project_id: str, request: Request, body: dict) -> dict:
+        return ProjectRecovery(store).checkpoint(project_id, expected_revision(request), body.get('label'))
+
+    @application.post('/api/projects/{project_id}/checkpoints/{checkpoint_id}/restore', response_model=Project)
+    def restore_checkpoint(project_id: str, checkpoint_id: str, request: Request) -> Project:
+        return ProjectRecovery(store).restore_checkpoint(project_id, checkpoint_id, expected_revision(request))
+
+    @application.get('/api/recently-deleted')
+    def recently_deleted() -> list[dict]:
+        return ProjectRecovery(store).deleted()
+
+    @application.post('/api/recently-deleted/{trash_id}/restore')
+    def restore_deleted(trash_id: str) -> dict:
+        with store.lock:
+            project, copied = ProjectRecovery(store).restore_deleted(trash_id)
+            application.state.jobs.recover_project(project.projectId)
+            return {'project': project.model_dump(mode='json'), 'copied': copied}
+
+    @application.delete('/api/recently-deleted/{trash_id}', status_code=204)
+    def permanently_delete(trash_id: str) -> Response:
+        ProjectRecovery(store).permanently_delete(trash_id)
         return Response(status_code=204)
 
     @application.get('/api/projects/{project_id}/video')
@@ -212,18 +403,47 @@ def create_app(config: Config | None = None) -> FastAPI:
         return FileResponse(path, media_type='video/mp4', headers={'Cache-Control': 'private, max-age=3600'})
 
     @application.post('/api/projects/{project_id}/exports')
-    def start_export(project_id: str) -> Job:
+    def start_export(project_id: str, request: Request) -> Job:
         with store.lock:
             project = store.load(project_id)
+            if expected_revision(request) != project.revision:
+                raise conflict(project.revision)
             if not asset_path(store.project_dir(project_id), project.source.asset).is_file():
                 raise HTTPException(404, 'The original video asset is missing')
             store.validate_voiceovers(project)
+            store.acquire_lease(project_id)
+        try:
             return application.state.jobs.create(project)
+        finally:
+            store.release_lease(project_id)
 
     @application.get('/api/projects/{project_id}/exports')
     def list_exports(project_id: str) -> list[Job]:
         store.load(project_id)
         return application.state.jobs.list(project_id)
+
+    @application.get('/api/projects/{project_id}/storage')
+    def project_storage(project_id: str) -> dict:
+        from .cleanup import preview_cleanup
+        result = storage_summary(store, store.load(project_id))
+        try:
+            result['derivedCleanup'] = preview_cleanup(store, project_id)
+        except DomainError as error:
+            result['cleanupBlocked'] = str(error)
+        return result
+
+    @application.post('/api/projects/{project_id}/derived-cleanup')
+    def clean_previews(project_id: str, request: Request) -> dict:
+        from .cleanup import preview_cleanup
+        return preview_cleanup(store, project_id, expected_revision(request), remove=True)
+
+    @application.post('/api/exports/{job_id}/retry')
+    def retry_export(job_id: str) -> Job:
+        return application.state.jobs.retry(job_id)
+
+    @application.delete('/api/exports/{job_id}/file')
+    def remove_export_file(job_id: str) -> Job:
+        return application.state.jobs.remove_output(job_id)
 
     @application.get('/api/exports/{job_id}')
     def export_status(job_id: str) -> Job:
@@ -235,13 +455,9 @@ def create_app(config: Config | None = None) -> FastAPI:
 
     @application.get('/api/exports/{job_id}/download')
     def download_export(job_id: str) -> FileResponse:
-        job = application.state.jobs.get(job_id)
-        if job.status != 'completed':
-            raise HTTPException(409, 'The export is not ready for download')
-        path = application.state.jobs.output_path(job)
-        if not path.is_file():
-            raise FileNotFoundError()
-        return FileResponse(path, media_type='video/mp4', filename=job.filename)
+        manager = application.state.jobs
+        job, path = manager.acquire_output(job_id)
+        return ExportFileResponse(path, manager, job)
 
     @application.post('/api/projects/{project_id}/voiceovers', response_model=Voiceover)
     async def upload_voiceover(project_id: str, file: Annotated[UploadFile, File()],
@@ -257,8 +473,10 @@ def create_app(config: Config | None = None) -> FastAPI:
             raise HTTPException(415, 'Choose a microphone recording in WebM, Ogg, WAV, or MP4 audio format')
         clip_id = str(uuid4())
         temporary = store.project_dir(project_id) / 'temp' / f'voiceover-{clip_id}'
-        temporary.mkdir()
+        store.acquire_lease(project_id)
         try:
+            temporary.mkdir()
+            require_space(temporary, recording_estimate(project.source.durationSec - startSec, file.size or 0))
             uploaded, normalized = temporary / 'upload.bin', temporary / 'normalized.wav'
             received = 0
             limit = min(settings.max_upload_bytes, settings.max_voiceover_bytes)
@@ -271,9 +489,7 @@ def create_app(config: Config | None = None) -> FastAPI:
             if not received:
                 raise HTTPException(422, 'The recording is empty. Check the microphone and try again.')
             remaining = project.source.durationSec - startSec
-            required_space = min(remaining * 96000, received * 100) + 16 * 1024**2
-            if shutil.disk_usage(temporary).free < required_space:
-                raise HTTPException(507, 'Not enough disk space to process the recording')
+            require_space(temporary, recording_estimate(remaining))
             audio = await run_in_threadpool(normalize_voiceover, uploaded, normalized, remaining)
             clip = Voiceover(id=clip_id, asset=f'voiceover/{clip_id}.wav', startSec=startSec,
                              durationSec=audio.duration_sec, endSec=startSec + audio.duration_sec,
@@ -285,6 +501,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         finally:
             await file.close()
             shutil.rmtree(temporary, ignore_errors=True)
+            store.release_lease(project_id)
 
     @application.get('/api/projects/{project_id}/voiceovers/{clip_id}/audio')
     def voiceover_audio(project_id: str, clip_id: str) -> FileResponse:

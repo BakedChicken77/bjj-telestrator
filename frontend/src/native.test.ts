@@ -7,13 +7,27 @@ const harness = vi.hoisted(() => ({
     listProjects: vi.fn(),
     getProject: vi.fn(),
     importVideo: vi.fn(),
+    createImportJob: vi.fn(),
+    getMediaJob: vi.fn(),
+    cancelMediaJob: vi.fn(),
+    repairProxy: vi.fn(),
     saveProject: vi.fn(),
     deleteProject: vi.fn(),
+    duplicateProject: vi.fn(),
+    listCheckpoints: vi.fn(),
+    createCheckpoint: vi.fn(),
+    restoreCheckpoint: vi.fn(),
+    listDeletedProjects: vi.fn(),
+    restoreDeletedProject: vi.fn(),
+    permanentlyDeleteProject: vi.fn(),
     getAssetURL: vi.fn(),
     listExports: vi.fn(),
     createExport: vi.fn(),
     getExport: vi.fn(),
     cancelExport: vi.fn(),
+    retryExport: vi.fn(),
+    removeExportFile: vi.fn(),
+    getProjectStorage: vi.fn(),
     stopRecording: vi.fn(),
   },
 }));
@@ -35,12 +49,108 @@ beforeEach(() => {
 });
 
 describe('desktop / standalone iPhone API routing', () => {
+  it('retries native snapshots and removes only completed outputs without posting project JSON', async () => {
+    harness.native = true;
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    const job = {
+      jobId: 'attempt',
+      projectId: 'project',
+      projectRevision: 2,
+      retryAvailable: true,
+    };
+    harness.plugin.retryExport.mockResolvedValue({ job });
+    harness.plugin.removeExportFile.mockResolvedValue({ job: { ...job, outputAvailable: false } });
+    harness.plugin.getProjectStorage.mockResolvedValue({
+      sourceBytes: 123,
+      recordingsRetained: true,
+    });
+    expect(await api.retryExport('old-attempt')).toEqual(job);
+    expect(harness.plugin.retryExport).toHaveBeenCalledWith({ jobId: 'old-attempt' });
+    expect((await api.removeExportFile('attempt')).outputAvailable).toBe(false);
+    expect(harness.plugin.removeExportFile).toHaveBeenCalledWith({ jobId: 'attempt' });
+    expect((await api.storage('project')).recordingsRetained).toBe(true);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('routes recovery controls to scoped native storage with confirmed revisions', async () => {
+    harness.native = true;
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    const project = fixture();
+    const checkpoint = {
+      checkpointId: 'checkpoint',
+      projectId: project.projectId,
+      revision: 7,
+      label: 'Before',
+      createdAt: project.createdAt,
+    };
+    harness.plugin.duplicateProject.mockResolvedValue({ project });
+    harness.plugin.createCheckpoint.mockResolvedValue({ checkpoint });
+    harness.plugin.listCheckpoints.mockResolvedValue({ checkpoints: [checkpoint] });
+    harness.plugin.restoreCheckpoint.mockResolvedValue({ project });
+    harness.plugin.listDeletedProjects.mockResolvedValue({ projects: [] });
+    harness.plugin.restoreDeletedProject.mockResolvedValue({ project, copied: true });
+    expect(await api.createCheckpoint(project.projectId, 7, 'Before')).toEqual(checkpoint);
+    expect(harness.plugin.createCheckpoint).toHaveBeenCalledWith({
+      projectId: project.projectId,
+      expectedRevision: 7,
+      label: 'Before',
+    });
+    expect(await api.checkpoints(project.projectId)).toEqual([checkpoint]);
+    expect(await api.restoreCheckpoint(project.projectId, 'checkpoint', 8)).toEqual(project);
+    expect(harness.plugin.restoreCheckpoint).toHaveBeenCalledWith({
+      projectId: project.projectId,
+      expectedRevision: 8,
+      checkpointId: 'checkpoint',
+    });
+    expect(await api.duplicateProject(project.projectId, 8)).toEqual(project);
+    expect(harness.plugin.duplicateProject).toHaveBeenCalledWith({
+      projectId: project.projectId,
+      expectedRevision: 8,
+    });
+    await api.deleteProject(project.projectId, 8);
+    expect(harness.plugin.deleteProject).toHaveBeenCalledWith({
+      projectId: project.projectId,
+      expectedRevision: 8,
+    });
+    expect(await api.deletedProjects()).toEqual([]);
+    expect((await api.restoreDeletedProject('trash')).copied).toBe(true);
+    await api.permanentlyDeleteProject('trash');
+    expect(harness.plugin.permanentlyDeleteProject).toHaveBeenCalledWith({ trashId: 'trash' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it('keeps browser media on the desktop HTTP routes', async () => {
     expect(await mediaURL('example')).toBe('/api/projects/example/video');
     expect(await voiceoverURL('example', 'clip')).toBe(
       '/api/projects/example/voiceovers/clip/audio',
     );
     expect(harness.plugin.getAssetURL).not.toHaveBeenCalled();
+  });
+  it('routes tracked import, cancellation and repair through the native service', async () => {
+    harness.native = true;
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    const projectId = fixture().projectId;
+    const job = { jobId: 'media-job', projectId, status: 'queued' };
+    harness.plugin.createImportJob.mockResolvedValue({ job });
+    harness.plugin.getMediaJob.mockResolvedValue({ job });
+    harness.plugin.cancelMediaJob.mockResolvedValue({ job: { ...job, status: 'cancelled' } });
+    harness.plugin.repairProxy.mockResolvedValue({ job });
+    harness.plugin.importVideo.mockResolvedValue({ cancelled: true });
+    expect(await api.createImportJob()).toEqual(job);
+    expect(await nativeAPI.importVideo('photos', job.jobId)).toBeNull();
+    expect(harness.plugin.importVideo).toHaveBeenCalledWith({ source: 'photos', jobId: job.jobId });
+    expect(await api.mediaJob(job.jobId)).toEqual(job);
+    expect((await api.cancelMediaJob(job.jobId)).status).toBe('cancelled');
+    expect(await api.repairProxy(projectId, 7)).toEqual(job);
+    expect(harness.plugin.repairProxy).toHaveBeenCalledWith({ projectId, expectedRevision: 7 });
+    harness.plugin.getAssetURL.mockResolvedValue({
+      url: `capacitor://localhost/bjj-media/${projectId}/video.mp4`,
+    });
+    expect(await mediaURL(projectId, 'proxy/new.mp4')).toContain('?preview=proxy%2Fnew.mp4');
+    expect(fetch).not.toHaveBeenCalled();
   });
   it('loads and validates a native project without an HTTP server', async () => {
     harness.native = true;
@@ -93,7 +203,7 @@ describe('desktop / standalone iPhone API routing', () => {
     harness.native = true;
     const job = { jobId: 'job', status: 'queued' };
     harness.plugin.createExport.mockResolvedValue({ job });
-    expect(await api.export('project')).toEqual(job);
+    expect(await api.export('project', 1)).toEqual(job);
     harness.plugin.cancelExport.mockResolvedValue({ job: { ...job, status: 'cancelled' } });
     expect((await api.cancelExport('job')).status).toBe('cancelled');
   });

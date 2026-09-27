@@ -58,6 +58,14 @@ def main() -> None:
         section("PBXBuildFile", build, f"isa = PBXBuildFile; fileRef = {ref};")
         child(APP_GROUP, "children", ref)
         child(SOURCES, "files", build)
+    fonts, fonts_build = uid("native-resources"), uid("native-resources-build")
+    section(
+        "PBXFileReference", fonts,
+        'isa = PBXFileReference; lastKnownFileType = folder; path = NativeResources; sourceTree = "<group>";',
+    )
+    section("PBXBuildFile", fonts_build, f"isa = PBXBuildFile; fileRef = {fonts};")
+    child(APP_GROUP, "children", fonts)
+    child(RESOURCES, "files", fonts_build)
     privacy, privacy_build = uid("privacy"), uid("privacy-build")
     section(
         "PBXFileReference",
@@ -124,6 +132,29 @@ def main() -> None:
             phase,
             f"isa = {name}; buildActionMask = 2147483647; files = ({files}); runOnlyForDeploymentPostprocessing = 0;",
         )
+    conformance, conformance_build = uid("test:conformance-file"), uid("test:conformance-build")
+    section("PBXFileReference", conformance,
+            'isa = PBXFileReference; lastKnownFileType = text.json; path = "../../../../tests/fixtures/project-conformance.json"; sourceTree = "<group>";')
+    section("PBXBuildFile", conformance_build, f"isa = PBXBuildFile; fileRef = {conformance};")
+    child(group, "children", conformance)
+    child(resources, "files", conformance_build)
+    export_fixture, export_build = uid("test:export-plan-file"), uid("test:export-plan-build")
+    section("PBXFileReference", export_fixture,
+            'isa = PBXFileReference; lastKnownFileType = text.json; path = "../../../../tests/fixtures/export-plan-conformance.json"; sourceTree = "<group>";')
+    section("PBXBuildFile", export_build, f"isa = PBXBuildFile; fileRef = {export_fixture};")
+    child(group, "children", export_fixture)
+    child(resources, "files", export_build)
+    for name, fixture_ref, fixture_build in [
+        ("hdr-conformance", "C79F983F1064F0A52BAD2C31", "028C1F41097071DDEB55A7F7"),
+        ("package-conformance", "365DDA6A67754651C623496B", "5715EDCC5112F33CC022E77E"),
+        ("media-timing-conformance", "D2F40119B6AEE101CE409B21", "9E7C12F412DE8F0B499CFB9A"),
+    ]:
+        section("PBXFileReference", fixture_ref,
+                f'isa = PBXFileReference; lastKnownFileType = text.json; path = "../../../../tests/fixtures/{name}.json"; sourceTree = "<group>";')
+        section("PBXBuildFile", fixture_build, f"isa = PBXBuildFile; fileRef = {fixture_ref};")
+        child(group, "children", fixture_ref)
+        child(resources, "files", fixture_build)
+
     section(
         "PBXContainerItemProxy",
         proxy,

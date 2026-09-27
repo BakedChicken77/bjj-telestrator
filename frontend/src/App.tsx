@@ -1,5 +1,14 @@
+import { ProjectVersions } from './components/ProjectVersions';
+import { Appearance, useAppearance } from './components/Appearance';
+import { Modal } from './components/Modal';
+import { ProjectPackages, PackageStatus } from './components/ProjectPackages';
+import { usePackages } from './usePackages';
+import { MediaPreparation } from './components/MediaPreparation';
+import { useMediaPreparation } from './useMediaPreparation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, type ExportJob, type ProjectSummary } from './api';
+import { ProjectStorage } from './components/ProjectStorage';
+import { ExportRecovery } from './components/ExportRecovery';
 import { useEditor } from './store';
 import type { Project, Tool } from './model';
 import { VideoStage } from './components/VideoStage';
@@ -8,6 +17,8 @@ import { Inspector } from './components/Inspector';
 import { VoiceoverPanel } from './components/VoiceoverPanel';
 import { useAutosave } from './useAutosave';
 import { isNativeIOS, nativeAPI, nativeBridge } from './native';
+import { SupportDialog } from './components/SupportDialog';
+import { diagnosticSummary } from './project/diagnostics';
 
 const tools: { id: Tool; label: string; glyph: string }[] = [
   { id: 'select', label: 'Select', glyph: '↖' },
@@ -123,6 +134,7 @@ function ProjectName({ project }: { project: Project }) {
 }
 
 export default function App() {
+  const appearance = useAppearance();
   const nativeIOS = isNativeIOS();
   const [expandedVideo, setExpandedVideo] = useState(false);
   const [projectActions, setProjectActions] = useState(false);
@@ -137,8 +149,46 @@ export default function App() {
   const [busy, setBusy] = useState<string | null>('Opening your workspace…');
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [storageTools, setStorageTools] = useState(false);
+  const [recoveryTools, setRecoveryTools] = useState(false);
+  const [mediaTools, setMediaTools] = useState(false);
+  const [packageTools, setPackageTools] = useState(false);
+  const [workspaceReady, setWorkspaceReady] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [mobilePanel, setMobilePanel] = useState<'timeline' | 'properties'>('timeline');
-  const { status, error: saveError, flush } = useAutosave(project);
+  const {
+    status,
+    error: saveError,
+    flush,
+    recovery,
+    recoveryError,
+    dismissRecovery,
+    clearDraft,
+  } = useAutosave();
+  const [support, setSupport] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!nativeIOS) return;
+    const returnToNative = () => {
+      if (
+        recording ||
+        busy ||
+        jobs.some((job) => job.status === 'running' || job.status === 'queued')
+      ) {
+        setError(
+          'Finish recording, importing, or exporting before returning to the native preview.',
+        );
+        return;
+      }
+      videoRef.current?.pause();
+      void (async () => {
+        if (project) await flush();
+        await nativeBridge.closeOriginalEditor();
+      })().catch((cause: unknown) => setError(errorText(cause)));
+    };
+    window.addEventListener('bjj-return-to-native', returnToNative);
+    return () => window.removeEventListener('bjj-return-to-native', returnToNative);
+  }, [nativeIOS, recording, busy, jobs, project, flush]);
 
   const loadProject = useCallback((next: Project) => {
     videoRef.current?.pause();
@@ -148,11 +198,52 @@ export default function App() {
     setError(null);
     setJobs([]);
   }, []);
+  const media = useMediaPreparation({
+    enabled: mediaTools && workspaceReady,
+    flush,
+    onLoad: loadProject,
+    onBusy: setBusy,
+    onError: setError,
+    onNotice: setNotice,
+  });
+  const packages = usePackages({
+    enabled: packageTools && workspaceReady,
+    flush,
+    onLoad: loadProject,
+    onBusy: setBusy,
+    onError: setError,
+    onNotice: setNotice,
+  });
 
   useEffect(() => {
     let cancelled = false;
     async function start() {
       try {
+        const capabilities = await api.capabilities();
+        setMediaTools(!!(capabilities.mediaJobs && capabilities.proxyRepair));
+        setPackageTools(!!capabilities.projectPackages);
+        setRecoveryTools(
+          !!(
+            capabilities.projectCheckpoints &&
+            capabilities.projectDuplicate &&
+            capabilities.projectTrash
+          ),
+        );
+        setStorageTools(
+          !!(
+            capabilities.exportRetry &&
+            capabilities.storageBreakdown &&
+            capabilities.exportFileCleanup
+          ),
+        );
+        if (
+          !capabilities.conditionalSave ||
+          !capabilities.conditionalExport ||
+          capabilities.schemaVersion < 2
+        )
+          throw new Error(
+            'Upgrade required: the editor and local service need matching versions for safe saves.',
+          );
         const list = await api.projects();
         if (cancelled) return;
         setProjects(list);
@@ -167,7 +258,10 @@ export default function App() {
           setBrowserOpen(true);
         }
       } finally {
-        if (!cancelled) setBusy(null);
+        if (!cancelled) {
+          setBusy(null);
+          setWorkspaceReady(true);
+        }
       }
     }
     void start();
@@ -220,6 +314,12 @@ export default function App() {
         return;
       }
       const control = event.ctrlKey || event.metaKey;
+      if (
+        !control &&
+        event.key !== 'Escape' &&
+        target.closest('button, a, summary, [role="button"]')
+      )
+        return;
       if (event.code === 'Space') {
         event.preventDefault();
         if (videoRef.current?.paused)
@@ -271,6 +371,10 @@ export default function App() {
 
   async function importFile(file: File | undefined) {
     if (!file) return;
+    if (mediaTools) {
+      await media.start(file);
+      return;
+    }
     setBusy('Importing video and preparing the editing proxy…');
     setError(null);
     try {
@@ -284,6 +388,10 @@ export default function App() {
   }
 
   async function importOnPhone(source: 'photos' | 'files') {
+    if (mediaTools) {
+      await media.start(undefined, source);
+      return;
+    }
     setBusy('Choosing and preparing your video…');
     setError(null);
     try {
@@ -302,8 +410,9 @@ export default function App() {
     setExporting(true);
     setError(null);
     try {
-      await flush();
-      const job = await api.export(project.projectId);
+      const saved = await flush();
+      if (!saved) return;
+      const job = await api.export(saved.projectId, saved.revision);
       setJobs((list) => [job, ...list.filter((item) => item.jobId !== job.jobId)]);
     } catch (cause) {
       setError(errorText(cause));
@@ -312,7 +421,18 @@ export default function App() {
     }
   }
 
-  const visibleError = error ?? saveError ?? editorError;
+  async function recoverCopy(draftProject: Project) {
+    setBusy('Recovering an independent copy…');
+    try {
+      const copy = await api.recoverCopy(draftProject);
+      loadProject(copy);
+    } catch (cause) {
+      setError(errorText(cause));
+    } finally {
+      setBusy(null);
+    }
+  }
+  const visibleError = error ?? saveError ?? recoveryError ?? editorError;
   return (
     <div
       className={`app-shell mobile-${mobilePanel}${expandedVideo ? ' video-expanded' : ''}${projectActions ? ' project-actions-open' : ''}`}
@@ -346,7 +466,9 @@ export default function App() {
               ? 'Unsaved changes'
               : status === 'saving'
                 ? 'Saving…'
-                : 'Save failed'}
+                : status === 'conflict'
+                  ? 'Save conflict'
+                  : 'Save failed'}
         </div>
         <button
           className="project-actions-toggle"
@@ -366,7 +488,7 @@ export default function App() {
               title="Save now"
               onClick={() => void flush().catch((cause: unknown) => setError(errorText(cause)))}
             >
-              Save
+              {status === 'failed' ? 'Retry save' : 'Save'}
             </button>
           )}
           <button
@@ -382,9 +504,74 @@ export default function App() {
           </button>
         </div>
       </header>
+      {notice && (
+        <p className="recovery-notice" role="status">
+          {notice}
+        </p>
+      )}
+      {!browserOpen && packageTools && (packages.job || packages.error) && (
+        <PackageStatus controller={packages} />
+      )}
+      {!browserOpen && packages.pending && (
+        <p role="status">
+          A project package was opened from Files.{' '}
+          <button disabled={recording || !!busy} onClick={() => void showBrowser()}>
+            Review package restore
+          </button>
+        </p>
+      )}
+      {support !== null && <SupportDialog text={support} onClose={() => setSupport(null)} />}
+      {project && status === 'conflict' && (
+        <section className="recovery-banner" aria-label="Save conflict recovery">
+          <p>Your edits and the newer saved version have been kept separately.</p>
+          <button disabled={!!busy} onClick={() => void recoverCopy(project)}>
+            Recover my edits as a copy
+          </button>
+          <button
+            disabled={!!busy}
+            onClick={() =>
+              void api
+                .project(project.projectId)
+                .then(loadProject)
+                .catch((cause: unknown) => setError(errorText(cause)))
+            }
+          >
+            Reload saved version
+          </button>
+        </section>
+      )}
+      {recovery.length > 0 && (
+        <section className="recovery-banner" aria-label="Pending recovery drafts">
+          <p>Unsaved edits were found. Recover a separate copy to keep both versions.</p>
+          {recovery.map((draft) => (
+            <div key={draft.draftId}>
+              <span>
+                {new Date(draft.savedAt).toLocaleString()} · {draft.project.annotations.length}{' '}
+                annotations{' '}
+              </span>
+              <button disabled={!!busy} onClick={() => void recoverCopy(draft.project)}>
+                Recover draft as a copy
+              </button>
+              <button
+                onClick={() =>
+                  void clearDraft(draft)
+                    .then(dismissRecovery)
+                    .catch((cause: unknown) => setError(errorText(cause)))
+                }
+              >
+                Discard this draft
+              </button>
+            </div>
+          ))}
+          <button onClick={dismissRecovery}>Use saved version; keep drafts</button>
+        </section>
+      )}
       {visibleError && (
         <div className="error-banner" role="alert">
           <span>{visibleError}</span>
+          <button onClick={() => setSupport(diagnosticSummary(nativeIOS ? 'ios' : 'desktop'))}>
+            Inspect support summary
+          </button>
           <button
             aria-label="Dismiss error"
             onClick={() => {
@@ -432,7 +619,7 @@ export default function App() {
               </div>
             </div>
             <div className="inspector-lock-region" inert={recording}>
-              <Inspector />
+              <Inspector onSeek={seek} />
             </div>
           </main>
           <footer className="statusbar">
@@ -460,333 +647,415 @@ export default function App() {
       )}
 
       {browserOpen && (
-        <div className="modal-backdrop">
-          <section
-            className="modal project-browser"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="project-browser-title"
-          >
-            <div className="modal-heading">
-              <div>
-                <p className="eyebrow">YOUR WORKSPACE</p>
-                <h1 id="project-browser-title">Review the details.</h1>
-                <p>Turn your rolling footage into clear, visual coaching.</p>
-              </div>
-              {project && (
-                <button
-                  className="close-button"
-                  aria-label="Close projects"
-                  onClick={() => setBrowserOpen(false)}
-                >
-                  ×
-                </button>
-              )}
+        <Modal
+          className="project-browser"
+          labelledBy="project-browser-title"
+          returnFocusSelector='button[aria-label="Projects"]'
+          canClose={!!project && !busy}
+          onClose={() => setBrowserOpen(false)}
+        >
+          <div className="modal-heading">
+            <div>
+              <p className="eyebrow">YOUR WORKSPACE</p>
+              <h1 id="project-browser-title">Review the details.</h1>
+              <p>Turn your rolling footage into clear, visual coaching.</p>
             </div>
-            {nativeIOS ? (
-              <div className="native-import">
-                <strong>Import a rolling video</strong>
-                <p>Videos and projects stay on this iPhone.</p>
-                <div>
-                  <button
-                    className="primary"
-                    disabled={Boolean(busy)}
-                    onClick={() => void importOnPhone('photos')}
-                  >
-                    Choose from Photos
-                  </button>
-                  <button disabled={Boolean(busy)} onClick={() => void importOnPhone('files')}>
-                    Choose from Files
-                  </button>
-                </div>
-                <small>MP4, MOV and iPhone H.264 / HEVC videos</small>
-              </div>
-            ) : (
-              <label className={`upload-zone ${busy ? 'disabled' : ''}`}>
-                <span className="upload-icon">↑</span>
-                <strong>Import a rolling video</strong>
-                <span>MP4, MOV, HEVC, WebM and more</span>
-                <small>Your footage stays on this computer.</small>
-                <input
-                  aria-label="Import video"
-                  type="file"
-                  accept="video/*,.mov,.mkv,.avi,.m4v,.mts,.m2ts"
-                  disabled={Boolean(busy)}
-                  onChange={(e) => {
-                    void importFile(e.target.files?.[0]);
-                    e.target.value = '';
-                  }}
-                />
-              </label>
-            )}
-            <div className="section-heading">
-              <h2>Recent projects</h2>
-              <button
-                className="text-button"
-                disabled={Boolean(busy)}
-                onClick={() =>
-                  void api
-                    .projects()
-                    .then(setProjects)
-                    .catch((cause: unknown) => setError(errorText(cause)))
-                }
-              >
-                Refresh
-              </button>
-            </div>
-            <div className="project-list">
-              {projects.length === 0 ? (
-                <div className="empty-projects">
-                  Your projects will appear here after importing a video.
-                </div>
-              ) : (
-                projects.map((item) => (
-                  <div className="project-card" key={item.projectId}>
-                    <button
-                      className="project-open"
-                      disabled={Boolean(busy)}
-                      onClick={async () => {
-                        setBusy('Opening project…');
-                        try {
-                          await flush();
-                          loadProject(await api.project(item.projectId));
-                        } catch (cause) {
-                          setError(errorText(cause));
-                        } finally {
-                          setBusy(null);
-                        }
-                      }}
-                    >
-                      <div className="project-thumbnail">▶</div>
-                      <div>
-                        <strong>{item.projectName}</strong>
-                        <span>
-                          {durationLabel(item.durationSec)} · {item.annotationCount} annotations ·{' '}
-                          {new Date(item.updatedAt).toLocaleDateString()}
-                        </span>
-                      </div>
-                      <span className="open-arrow">↗</span>
-                    </button>
-                    <button
-                      className="delete-project"
-                      aria-label={`Delete project ${item.projectName}`}
-                      title="Delete project"
-                      disabled={Boolean(busy)}
-                      onClick={async () => {
-                        if (
-                          !window.confirm(
-                            `Delete “${item.projectName}” and all its video assets and exports? This cannot be undone.`,
-                          )
-                        )
-                          return;
-                        try {
-                          await api.deleteProject(item.projectId);
-                          setProjects((list) =>
-                            list.filter((entry) => entry.projectId !== item.projectId),
-                          );
-                          if (project?.projectId === item.projectId) {
-                            useEditor.getState().setProject(null);
-                            localStorage.removeItem('bjj:lastProject');
-                          }
-                        } catch (cause) {
-                          setError(errorText(cause));
-                        }
-                      }}
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-            {busy && (
-              <div className="import-status" role="status">
-                <span className="spinner" />
-                {busy}
-                <small>
-                  Long videos may take a few minutes. Keep {nativeIOS ? 'the app' : 'this tab'}{' '}
-                  open.
-                </small>
-              </div>
-            )}
-            {visibleError && (
-              <p className="dialog-error" role="alert">
-                {visibleError}
-              </p>
-            )}
-          </section>
-        </div>
-      )}
-
-      {exportOpen && project && (
-        <div className="modal-backdrop">
-          <section
-            className="modal export-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="export-title"
-          >
-            <div className="modal-heading">
-              <div>
-                <p className="eyebrow">READY TO SHARE</p>
-                <h1 id="export-title">Export your review.</h1>
-                <p>One ordinary MP4, with every annotation in the picture.</p>
-              </div>
+            {project && (
               <button
                 className="close-button"
-                aria-label="Close exports"
-                onClick={() => setExportOpen(false)}
+                aria-label="Close projects"
+                disabled={!!busy}
+                onClick={() => setBrowserOpen(false)}
               >
                 ×
               </button>
+            )}
+          </div>
+          <Appearance preferences={appearance} />
+          {nativeIOS ? (
+            <div className="native-import">
+              <strong>Import a rolling video</strong>
+              <p>Videos and projects stay on this iPhone.</p>
+              <div>
+                <button
+                  className="primary"
+                  disabled={Boolean(busy)}
+                  onClick={() => void importOnPhone('photos')}
+                >
+                  Choose from Photos
+                </button>
+                <button disabled={Boolean(busy)} onClick={() => void importOnPhone('files')}>
+                  Choose from Files
+                </button>
+              </div>
+              <small>MP4, MOV and iPhone H.264 / HEVC videos</small>
             </div>
-            <div className="export-spec">
-              <span>MP4 / H.264 + AAC</span>
-              <span>
-                {project.source.displayWidth} × {project.source.displayHeight}
-              </span>
-              <span>{durationLabel(project.source.durationSec)}</span>
+          ) : (
+            <label className={`upload-zone ${busy ? 'disabled' : ''}`}>
+              <span className="upload-icon">↑</span>
+              <strong>Import a rolling video</strong>
+              <span>MP4, MOV, HEVC, WebM and more</span>
+              <small>Your footage stays on this computer.</small>
+              <input
+                aria-label="Import video"
+                type="file"
+                accept="video/*,.mov,.mkv,.avi,.m4v,.mts,.m2ts"
+                disabled={Boolean(busy)}
+                onChange={(e) => {
+                  void importFile(e.target.files?.[0]);
+                  e.target.value = '';
+                }}
+              />
+            </label>
+          )}
+          <div className="section-heading">
+            <h2>Recent projects</h2>
+            <button
+              className="text-button"
+              disabled={Boolean(busy)}
+              onClick={() =>
+                void api
+                  .projects()
+                  .then(setProjects)
+                  .catch((cause: unknown) => setError(errorText(cause)))
+              }
+            >
+              Refresh
+            </button>
+          </div>
+          {recoveryTools && (
+            <ProjectVersions
+              project={project}
+              projects={projects}
+              busy={!!busy}
+              flush={flush}
+              onBusy={setBusy}
+              onLoad={loadProject}
+              onNotice={setNotice}
+            />
+          )}
+          {packageTools && (
+            <ProjectPackages project={project} busy={!!busy || recording} controller={packages} />
+          )}
+          {mediaTools && project && (
+            <div className="preview-repair">
+              <button
+                disabled={!!busy || recording}
+                onClick={() => void media.start(undefined, undefined, true)}
+              >
+                Repair preview
+              </button>
+              <small>
+                Regenerate this review’s preview from its original, preserving drawings and
+                narration.
+              </small>
             </div>
-            <div className="export-options">
+          )}
+          <div className="project-list">
+            {projects.length === 0 ? (
+              <div className="empty-projects">
+                Your projects will appear here after importing a video.
+              </div>
+            ) : (
+              projects.map((item) => (
+                <div className="project-card" key={item.projectId}>
+                  <button
+                    className="project-open"
+                    disabled={Boolean(busy)}
+                    onClick={async () => {
+                      setBusy('Opening project…');
+                      try {
+                        await flush();
+                        loadProject(await api.project(item.projectId));
+                      } catch (cause) {
+                        setError(errorText(cause));
+                      } finally {
+                        setBusy(null);
+                      }
+                    }}
+                  >
+                    <div className="project-thumbnail">▶</div>
+                    <div>
+                      <strong>{item.projectName}</strong>
+                      <span>
+                        {durationLabel(item.durationSec)} · {item.annotationCount} annotations ·{' '}
+                        {new Date(item.updatedAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <span className="open-arrow">↗</span>
+                  </button>
+                  <button
+                    className="delete-project"
+                    aria-label={`Delete project ${item.projectName}`}
+                    title="Move to Recently deleted"
+                    disabled={Boolean(busy) || !recoveryTools || !!item.unavailableCode}
+                    onClick={async () => {
+                      if (
+                        !window.confirm(
+                          `Move “${item.projectName}” to Recently deleted? Its video, recordings, checkpoints and exports will be kept until permanent deletion.`,
+                        )
+                      )
+                        return;
+                      setBusy('Moving project to Recently deleted…');
+                      try {
+                        const saved = await flush();
+                        const revision =
+                          saved?.projectId === item.projectId ? saved.revision : item.revision;
+                        if (revision === undefined)
+                          throw new Error('Refresh the project list before deleting this project.');
+                        await api.deleteProject(item.projectId, revision);
+                        setProjects((list) =>
+                          list.filter((entry) => entry.projectId !== item.projectId),
+                        );
+                        if (project?.projectId === item.projectId) {
+                          useEditor.getState().setProject(null);
+                          localStorage.removeItem('bjj:lastProject');
+                        }
+                        setNotice(
+                          'Project moved to Recently deleted. Its files are still recoverable.',
+                        );
+                      } catch (cause) {
+                        setError(errorText(cause));
+                      } finally {
+                        setBusy(null);
+                      }
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+          {media.job && (
+            <MediaPreparation
+              job={media.job}
+              error={media.statusError}
+              onCancel={() => void media.cancel()}
+              onDismiss={media.dismiss}
+            />
+          )}
+          {busy && !media.job && (
+            <div className="import-status" role="status">
+              <span className="spinner" />
+              {busy}
+              <small>
+                Long videos may take a few minutes. Keep {nativeIOS ? 'the app' : 'this tab'} open.
+              </small>
+            </div>
+          )}
+          {visibleError && (
+            <p className="dialog-error" role="alert">
+              {visibleError}
+            </p>
+          )}
+        </Modal>
+      )}
+
+      {exportOpen && project && (
+        <Modal
+          className="export-dialog"
+          returnFocusSelector='button[aria-label="Export video"]'
+          labelledBy="export-title"
+          onClose={() => setExportOpen(false)}
+        >
+          <div className="modal-heading">
+            <div>
+              <p className="eyebrow">READY TO SHARE</p>
+              <h1 id="export-title">Export your review.</h1>
+              <p>One ordinary MP4, with every annotation in the picture.</p>
+            </div>
+            <button
+              className="close-button"
+              aria-label="Close exports"
+              onClick={() => setExportOpen(false)}
+            >
+              ×
+            </button>
+          </div>
+          <div className="export-spec">
+            <span>MP4 / H.264 + AAC</span>
+            <span>
+              {project.source.displayWidth} × {project.source.displayHeight}
+            </span>
+            <span>{durationLabel(project.source.durationSec)}</span>
+          </div>
+          <div className="export-options">
+            <label>
+              Frame rate
+              <input
+                aria-label="Export frame rate"
+                type="number"
+                min={1}
+                max={nativeIOS ? 60 : 120}
+                value={project.exportSettings.fps}
+                onChange={(e) => {
+                  const value = Number(e.target.value);
+                  if (value > 0 && value <= (nativeIOS ? 60 : 120))
+                    useEditor.getState().edit((p) => {
+                      p.exportSettings.fps = value;
+                    });
+                }}
+              />
+            </label>
+            <label>
+              Quality
+              <select
+                aria-label="Export quality"
+                value={project.exportSettings.crf}
+                onChange={(e) =>
+                  useEditor.getState().edit((p) => {
+                    p.exportSettings.crf = Number(e.target.value);
+                  })
+                }
+              >
+                <option value={18}>{nativeIOS ? 'High quality' : 'High · CRF 18'}</option>
+                <option value={23}>{nativeIOS ? 'Balanced' : 'Balanced · CRF 23'}</option>
+                <option value={28}>{nativeIOS ? 'Smaller file' : 'Smaller file · CRF 28'}</option>
+              </select>
+            </label>
+            {!nativeIOS && (
               <label>
-                Frame rate
-                <input
-                  aria-label="Export frame rate"
-                  type="number"
-                  min={1}
-                  max={nativeIOS ? 60 : 120}
-                  value={project.exportSettings.fps}
-                  onChange={(e) => {
-                    const value = Number(e.target.value);
-                    if (value > 0 && value <= (nativeIOS ? 60 : 120))
-                      useEditor.getState().edit((p) => {
-                        p.exportSettings.fps = value;
-                      });
-                  }}
-                />
-              </label>
-              <label>
-                Quality
+                Encoding speed
                 <select
-                  aria-label="Export quality"
-                  value={project.exportSettings.crf}
+                  aria-label="Encoding speed"
+                  value={project.exportSettings.preset}
                   onChange={(e) =>
                     useEditor.getState().edit((p) => {
-                      p.exportSettings.crf = Number(e.target.value);
+                      p.exportSettings.preset = e.target
+                        .value as Project['exportSettings']['preset'];
                     })
                   }
                 >
-                  <option value={18}>{nativeIOS ? 'High quality' : 'High · CRF 18'}</option>
-                  <option value={23}>{nativeIOS ? 'Balanced' : 'Balanced · CRF 23'}</option>
-                  <option value={28}>{nativeIOS ? 'Smaller file' : 'Smaller file · CRF 28'}</option>
+                  <option value="veryfast">Fast</option>
+                  <option value="medium">Balanced</option>
+                  <option value="slow">Compact</option>
                 </select>
               </label>
-              {!nativeIOS && (
-                <label>
-                  Encoding speed
-                  <select
-                    aria-label="Encoding speed"
-                    value={project.exportSettings.preset}
-                    onChange={(e) =>
-                      useEditor.getState().edit((p) => {
-                        p.exportSettings.preset = e.target
-                          .value as Project['exportSettings']['preset'];
-                      })
-                    }
-                  >
-                    <option value="veryfast">Fast</option>
-                    <option value="medium">Balanced</option>
-                    <option value="slow">Compact</option>
-                  </select>
-                </label>
-              )}
-            </div>
-            <button
-              className="primary export-start"
-              disabled={exporting}
-              onClick={() => void startExport()}
-            >
-              {exporting ? 'Starting export…' : 'Render MP4'}
-            </button>
-            <div className="section-heading">
-              <h2>Exports</h2>
-              <span>
-                {nativeIOS
-                  ? 'Keep the app open during rendering'
-                  : 'Rendering continues while you edit'}
-              </span>
-            </div>
-            <div className="export-list">
-              {jobs.length === 0 ? (
-                <p className="empty-projects">Your rendered reviews will appear here.</p>
-              ) : (
-                jobs.map((job) => (
-                  <article className="export-job" key={job.jobId}>
-                    <div className="job-heading">
-                      <strong>
-                        {job.filename ?? `Review · ${new Date(job.createdAt).toLocaleTimeString()}`}
-                      </strong>
-                      <span className={`job-state ${job.status}`}>{job.status}</span>
-                    </div>
-                    {(job.status === 'running' || job.status === 'queued') && (
-                      <>
-                        <progress max={100} value={job.progress} aria-label="Export progress" />
-                        <div className="job-details">
-                          <span>
-                            {Math.round(job.progress)}% · {durationLabel(job.renderedSec)} rendered
-                          </span>
-                          <button
-                            onClick={() =>
-                              void api
-                                .cancelExport(job.jobId)
-                                .then((next) =>
-                                  setJobs((list) =>
-                                    list.map((item) => (item.jobId === next.jobId ? next : item)),
-                                  ),
-                                )
-                                .catch((cause: unknown) => setError(errorText(cause)))
-                            }
-                          >
-                            Cancel export
-                          </button>
-                        </div>
-                      </>
-                    )}
-                    {job.status === 'completed' &&
-                      (nativeIOS ? (
+            )}
+          </div>
+          <button
+            className="primary export-start"
+            disabled={exporting}
+            onClick={() => void startExport()}
+          >
+            {exporting ? 'Starting export…' : 'Render MP4'}
+          </button>
+          <div className="section-heading">
+            <h2>Exports</h2>
+            <span>
+              {nativeIOS
+                ? 'Keep the app open during rendering'
+                : 'Rendering continues while you edit'}
+            </span>
+          </div>
+          <div className="export-list">
+            {jobs.length === 0 ? (
+              <p className="empty-projects">Your rendered reviews will appear here.</p>
+            ) : (
+              jobs.map((job) => (
+                <article className="export-job" key={job.jobId}>
+                  <div className="job-heading">
+                    <strong>
+                      {job.filename ?? `Review · ${new Date(job.createdAt).toLocaleTimeString()}`}
+                    </strong>
+                    <span role="status" className={`job-state ${job.status}`}>
+                      {job.status}
+                    </span>
+                  </div>
+                  {(job.status === 'running' || job.status === 'queued') && (
+                    <>
+                      <progress max={100} value={job.progress} aria-label="Export progress" />
+                      <div className="job-details">
+                        <span>
+                          {Math.round(job.progress)}% · {durationLabel(job.renderedSec)} rendered
+                        </span>
                         <button
-                          className="download-button"
                           onClick={() =>
-                            void nativeBridge
-                              .shareExport({ jobId: job.jobId })
+                            void api
+                              .cancelExport(job.jobId)
+                              .then((next) =>
+                                setJobs((list) =>
+                                  list.map((item) => (item.jobId === next.jobId ? next : item)),
+                                ),
+                              )
                               .catch((cause: unknown) => setError(errorText(cause)))
                           }
                         >
-                          Save or share MP4 ↗
+                          Cancel export
                         </button>
-                      ) : (
-                        <a
-                          className="download-button"
-                          href={`/api/exports/${job.jobId}/download`}
-                          download={job.filename ?? undefined}
-                        >
-                          Download MP4 ↓
-                        </a>
-                      ))}
-                    {job.error && <p className="dialog-error">{job.error}</p>}
-                  </article>
-                ))
-              )}
-            </div>
-            {visibleError && (
-              <p className="dialog-error" role="alert">
-                {visibleError}
-              </p>
+                      </div>
+                    </>
+                  )}
+                  {job.status === 'completed' &&
+                    job.outputAvailable !== false &&
+                    (nativeIOS ? (
+                      <button
+                        className="download-button"
+                        onClick={() =>
+                          void nativeBridge
+                            .shareExport({ jobId: job.jobId })
+                            .catch((cause: unknown) => setError(errorText(cause)))
+                        }
+                      >
+                        Save or share MP4 ↗
+                      </button>
+                    ) : (
+                      <a
+                        className="download-button"
+                        href={`/api/exports/${job.jobId}/download`}
+                        download={job.filename ?? undefined}
+                      >
+                        Download MP4 ↓
+                      </a>
+                    ))}
+                  {job.error && <p className="dialog-error">{job.error}</p>}
+                  {storageTools && (
+                    <ExportRecovery
+                      job={job}
+                      revision={project.revision}
+                      dirty={status !== 'saved'}
+                      onJob={(next) =>
+                        setJobs((list) => [
+                          next,
+                          ...list.filter((item) => item.jobId !== next.jobId),
+                        ])
+                      }
+                      onError={(cause) => setError(errorText(cause))}
+                    />
+                  )}
+                </article>
+              ))
             )}
-          </section>
+          </div>
+          {storageTools && (
+            <ProjectStorage
+              flush={flush}
+              projectId={project.projectId}
+              revision={project.revision}
+              outputs={jobs
+                .map((job) => `${job.jobId}:${job.status}:${String(job.outputAvailable)}`)
+                .join(',')}
+            />
+          )}
+          {visibleError && (
+            <p className="dialog-error" role="alert">
+              {visibleError}
+            </p>
+          )}
+        </Modal>
+      )}
+      {media.job && !browserOpen && (
+        <div className="media-preparation-toast">
+          <MediaPreparation
+            job={media.job}
+            error={media.statusError}
+            onCancel={() => void media.cancel()}
+            onDismiss={media.dismiss}
+          />
         </div>
       )}
-      {busy && !browserOpen && (
+      {busy && !browserOpen && !media.job && (
         <div className="loading-toast" role="status">
           <span className="spinner" />
           {busy}

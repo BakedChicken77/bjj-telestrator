@@ -76,6 +76,10 @@ def main() -> None:
         check=True,
     )
     print(f"Native simulator tests passed. Results: {output}")
+    subprocess.run([
+        "xcrun", "xcresulttool", "export", "attachments", "--path", str(output),
+        "--output-path", str(ROOT / ".ci-artifacts/native-screenshots"),
+    ], check=True, cwd=ROOT)
 
 
 if __name__ == "__main__":

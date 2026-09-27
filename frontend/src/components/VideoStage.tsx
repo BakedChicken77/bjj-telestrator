@@ -277,13 +277,15 @@ export function VideoStage({ videoRef, onSeek }: Props) {
   pictureSize.current = picture;
   const duration = project?.source.durationSec ?? 0;
   const projectId = project?.projectId;
+  const proxyReference = project?.proxy.asset;
   const activePointer = useRef<number | null>(null);
 
   useEffect(() => {
     let disposed = false;
     setVideoURL(undefined);
+    setPlaybackError('');
     if (projectId)
-      void mediaURL(projectId)
+      void mediaURL(projectId, proxyReference)
         .then((url) => {
           if (!disposed) setVideoURL(url);
         })
@@ -296,7 +298,7 @@ export function VideoStage({ videoRef, onSeek }: Props) {
     return () => {
       disposed = true;
     };
-  }, [projectId]);
+  }, [projectId, proxyReference]);
 
   useEffect(() => {
     const element = viewportRef.current;

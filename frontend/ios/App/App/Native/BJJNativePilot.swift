@@ -1,0 +1,348 @@
+import Foundation
+import AVFoundation
+import SwiftUI
+import UIKit
+
+struct BJJNativeReview: Identifiable {
+    let id: String
+    let name: String
+    let duration: Double
+    let preview: Bool
+    var updatedAt: String = ""
+    var problem: String? = nil
+    var key: String { "\(preview ? "native" : "original")-\(id)" }
+}
+
+/// Pilot projects have a separate root. Reading the original library never calls
+/// load(), which can migrate schema-1 documents as a side effect.
+enum BJJNativePilot {
+    static func previewRoot() -> URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("BJJTelestrator/native-preview/projects", isDirectory: true)
+    }
+    static func reviews(_ store: BJJStore, preview: Bool) throws -> [BJJNativeReview] {
+        try FileManager.default.contentsOfDirectory(at: store.root, includingPropertiesForKeys: nil)
+            .filter { UUID(uuidString: $0.lastPathComponent) != nil }
+            .map { folder in
+                let id = folder.lastPathComponent
+                do {
+                    let json = try store.readJSON(folder.appendingPathComponent("project.json"))
+                    let project = try BJJProject(json)
+                    guard project.id == id else { throw BJJError.invalid("The review identity differs from its folder.") }
+                    return BJJNativeReview(id: id, name: project.name, duration: project.duration, preview: preview,
+                                           updatedAt: json.s("updatedAt"))
+                } catch {
+                    // Keep unsupported/corrupt documents visible; do not migrate or discard them while listing.
+                    return BJJNativeReview(id: id, name: "Review needs recovery", duration: 0, preview: preview,
+                                           problem: error.localizedDescription)
+                }
+            }.sorted { ($0.updatedAt, $0.id) > ($1.updatedAt, $1.id) }
+    }
+
+    static func copy(_ id: String, from source: BJJStore, to target: BJJStore) throws -> BJJProject {
+        let destination = try target.directory(id)
+        if FileManager.default.fileExists(atPath: destination.appendingPathComponent("project.json").path) {
+            return try target.loadRecoveringRecordings(id)
+        }
+        let original = try source.readJSON(source.directory(id).appendingPathComponent("project.json"))
+        let project = try BJJProject(original)
+        guard project.id == id else { throw BJJError.invalid("The selected project identity does not match its folder.") }
+        let references = Set([project.source.s("asset"), project.proxy.s("asset")] + project.voiceovers.map { $0.s("asset") })
+        let files = try references.map { reference -> (String, URL, Int64) in
+            let url = try BJJAssets.file(source, id, reference)
+            return (reference, url, Int64(try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0))
+        }
+        try target.checkSpace(required: files.reduce(Int64(100_000_000)) { $0 + $1.2 })
+        let staging = target.root.appendingPathComponent(".copy-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: staging) }
+        try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
+        for (reference, input, _) in files {
+            let output = staging.appendingPathComponent(reference)
+            try FileManager.default.createDirectory(at: output.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try FileManager.default.copyItem(at: input, to: output)
+            guard try BJJAssets.digest(input) == BJJAssets.digest(output) else {
+                throw BJJError.invalid("The preview copy could not be verified. Your original was preserved.")
+            }
+        }
+        for folder in ["source", "proxy", "voiceover", "exports", "temp"] {
+            try FileManager.default.createDirectory(at: staging.appendingPathComponent(folder), withIntermediateDirectories: true)
+        }
+        var document = original
+        document["nativePreviewCopy"] = true
+        try target.writeJSON(document, to: staging.appendingPathComponent("project.json"))
+        let registry = Dictionary(uniqueKeysWithValues: project.voiceovers.map { ($0.s("id"), $0 as Any) })
+        try target.writeJSON(registry, to: staging.appendingPathComponent("voiceover/assets.json"))
+        try FileManager.default.moveItem(at: staging, to: destination)
+        return try target.load(id)
+    }
+}
+
+enum BJJNativeTool: String, CaseIterable, Identifiable {
+    case arrow, freehand, line, ellipse, rectangle, text
+    var id: String { rawValue }
+    var title: String { self == .freehand ? "Pen" : rawValue.capitalized }
+    var symbol: String {
+        switch self {
+        case .arrow: return "arrow.up.right"
+        case .freehand: return "pencil.tip"
+        case .line: return "line.diagonal"
+        case .ellipse: return "circle"
+        case .rectangle: return "rectangle"
+        case .text: return "textformat"
+        }
+    }
+}
+
+enum BJJNativeGeometry {
+    static func point(_ point: CGPoint, in rect: CGRect) -> CGPoint {
+        CGPoint(x: min(1, max(0, (point.x - rect.minX) / max(1, rect.width))),
+                y: min(1, max(0, (point.y - rect.minY) / max(1, rect.height))))
+    }
+    static func annotation(tool: BJJNativeTool, points: [CGPoint], time: Double,
+                           project: BJJProject, color: String, text: String) throws -> BJJJSON {
+        guard let first = points.first, let last = points.last, time.isFinite,
+              time >= 0, time < project.duration - 0.001 else {
+            throw BJJError.invalid("Move the playhead before the end of the video to draw.")
+        }
+        let x = min(first.x, last.x), y = min(first.y, last.y)
+        let width = abs(first.x - last.x), height = abs(first.y - last.y)
+        var geometry: BJJJSON
+        switch tool {
+        case .arrow, .line:
+            guard hypot(width, height) > 0.002 else { throw BJJError.cancelled }
+            geometry = ["x1": first.x, "y1": first.y, "x2": last.x, "y2": last.y]
+            if tool == .arrow { geometry["arrowheadSize"] = 0.035 }
+        case .rectangle:
+            guard width > 0.002, height > 0.002 else { throw BJJError.cancelled }
+            geometry = ["x": x, "y": y, "width": width, "height": height]
+        case .ellipse:
+            guard width > 0.002, height > 0.002 else { throw BJJError.cancelled }
+            geometry = ["centerX": x + width / 2, "centerY": y + height / 2, "radiusX": width / 2, "radiusY": height / 2]
+        case .freehand:
+            guard points.count > 1 else { throw BJJError.cancelled }
+            geometry = ["points": points.prefix(4000).map { ["x": $0.x, "y": $0.y] }, "smoothing": 0]
+        case .text:
+            guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw BJJError.invalid("Enter the text for your cue first.") }
+            geometry = ["x": first.x, "y": first.y, "text": String(text.prefix(2000)), "fontSize": 0.045,
+                        "alignment": "left", "backgroundColor": "#000000", "backgroundOpacity": 0.6]
+        }
+        let stamp = BJJProject.now()
+        return ["id": UUID().uuidString.lowercased(), "type": tool.rawValue, "startSec": time,
+                "endSec": min(project.duration, time + 5),
+                "zIndex": min(100000, (project.annotations.map { Int($0.n("zIndex")) }.max() ?? -1) + 1),
+                "strokeColor": color, "strokeWidth": 0.006, "strokeOpacity": 1.0,
+                "fillColor": color, "fillOpacity": 0.0, "createdAt": stamp, "updatedAt": stamp, "geometry": geometry]
+    }
+}
+
+struct BJJNativeTransportState: Codable {
+    var time: Double = 0
+    var speed: Float = 1
+    var loopStart: Double = 0
+    var loopEnd: Double = 0
+    var loopEnabled = false
+    func validated(duration: Double) -> BJJNativeTransportState {
+        var result = self
+        result.time = time.isFinite ? min(duration, max(0, time)) : 0
+        result.speed = [Float(0.25), 0.5, 1, 2].contains(speed) ? speed : 1
+        result.loopStart = loopStart.isFinite ? min(duration, max(0, loopStart)) : 0
+        result.loopEnd = loopEnd.isFinite ? min(duration, max(0, loopEnd)) : duration
+        result.loopEnabled = loopEnabled && result.loopEnd - result.loopStart >= 0.2
+        return result
+    }
+}
+
+@MainActor final class BJJNativeEditorSession: ObservableObject, Identifiable {
+    let id: String
+    let store: BJJStore
+    let player: AVPlayer
+    @Published private(set) var project: BJJProject
+    @Published private(set) var speed: Float = 1
+    @Published private(set) var loopStart = 0.0
+    @Published private(set) var loopEnd = 0.0
+    @Published private(set) var loopEnabled = false
+    @Published var time = 0.0
+    @Published var playing = false
+    @Published var drawing = false { didSet { if drawing { pause() } } }
+    @Published var tool: BJJNativeTool = .arrow
+    @Published var color = "#FF453A"
+    @Published var text = "Cue"
+    @Published var error: String?
+    @Published var thumbnails: [UIImage] = []
+    @Published var exporting = false
+    @Published var exportProgress = 0.0
+    @Published var shareURL: URL?
+    @Published private(set) var undoCount = 0
+    @Published private(set) var redoCount = 0
+    private var undoStack: [[BJJJSON]] = []
+    private var redoStack: [[BJJJSON]] = []
+    private var observer: Any?
+    private var endObserver: NSObjectProtocol?
+    private var seekTask: Task<Void, Never>?
+    private var seeking = false
+    private let preferences: UserDefaults?
+    private var service: BJJService?
+    private var jobID: String?
+    private var closed = false
+    private var seekGeneration = 0
+    init(project: BJJProject, store: BJJStore, service: BJJService? = nil, preferences: UserDefaults? = .standard) throws {
+        self.project = project; self.store = store; id = project.id
+        self.service = service; self.preferences = preferences; loopEnd = project.duration
+        player = AVPlayer(url: try store.asset(project.id, project.proxy.s("asset")))
+        player.volume = (project.settings["originalAudioMuted"] as? Bool) == true ? 0 : Float(min(1, project.settings.n("originalAudioGain")))
+        observer = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 1.0 / 30, preferredTimescale: 600), queue: .main) { [weak self] value in
+            Task { @MainActor in
+                guard let self, !self.closed, !self.seeking else { return }
+                let seconds = value.seconds
+                if seconds.isFinite { self.time = min(self.project.duration, max(0, seconds)) }
+                self.playing = self.player.rate != 0
+                if self.loopEnabled, self.playing, self.time >= self.loopEnd {
+                    self.seek(self.loopStart, resume: true)
+                }
+            }
+        }
+        endObserver = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: player.currentItem, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, !self.closed, !self.seeking else { return }
+                if self.loopEnabled { self.seek(self.loopStart, resume: true) } else { self.pause() }
+            }
+        }
+        if let data = preferences?.data(forKey: "native-review.\(id)"),
+           let saved = try? JSONDecoder().decode(BJJNativeTransportState.self, from: data) {
+            let state = saved.validated(duration: project.duration)
+            speed = state.speed; loopStart = state.loopStart; loopEnd = state.loopEnd; loopEnabled = state.loopEnabled
+            seek(state.time)
+        }
+    }
+    func pause() {
+        player.pause(); playing = false
+        // Fence a pending seek that intended to resume playback, including loop wrap.
+        seekGeneration += 1; seekTask?.cancel(); seekTask = nil
+        player.currentItem?.cancelPendingSeeks(); seeking = false
+        savePosition()
+    }
+    func togglePlayback() {
+        if playing { pause(); return }
+        drawing = false
+        let target: Double
+        if loopEnabled && (time < loopStart || time >= loopEnd) { target = loopStart }
+        else { target = time >= project.duration - 0.05 ? 0 : time }
+        seek(target, resume: true)
+    }
+    func seek(_ seconds: Double, resume: Bool = false) {
+        guard seconds.isFinite, !closed else { return }
+        pause(); seekGeneration += 1
+        let generation = seekGeneration
+        let target = min(project.duration, max(0, seconds))
+        seeking = true; time = target
+        // Coalesce rapid slider changes while retaining an immediate visual playhead.
+        seekTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 25_000_000)
+            guard let self, !Task.isCancelled, !self.closed, self.seekGeneration == generation else { return }
+            self.player.seek(to: CMTime(seconds: target, preferredTimescale: 60000), toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] finished in
+                Task { @MainActor in
+                    guard let self, self.seekGeneration == generation, !self.closed else { return }
+                    self.seeking = false
+                    if finished {
+                        let resolved = self.player.currentTime().seconds
+                        if resolved.isFinite { self.time = min(self.project.duration, max(0, resolved)) }
+                        if resume { self.player.playImmediately(atRate: self.speed); self.playing = true }
+                    }
+                    self.savePosition()
+                }
+            }
+        }
+    }
+    func setSpeed(_ value: Float) {
+        guard [Float(0.25), 0.5, 1, 2].contains(value) else { return }
+        speed = value
+        if playing { player.rate = value }
+        savePosition()
+    }
+    func setLoop(start: Double, end: Double, enabled: Bool) throws {
+        guard start.isFinite, end.isFinite, start >= 0, end <= project.duration, end - start >= 0.2 else {
+            throw BJJError.invalid("Choose an end at least 0.2 seconds after the start, within the video.")
+        }
+        loopStart = start; loopEnd = end; loopEnabled = enabled; savePosition()
+    }
+    func toggleLoop() {
+        do { try setLoop(start: loopStart, end: loopEnd, enabled: !loopEnabled) }
+        catch { self.error = error.localizedDescription }
+    }
+    func markLoop(start: Bool) {
+        do { try setLoop(start: start ? time : loopStart, end: start ? loopEnd : time, enabled: loopEnabled) }
+        catch { self.error = error.localizedDescription }
+    }
+    private func savePosition() {
+        let state = BJJNativeTransportState(time: time, speed: speed, loopStart: loopStart, loopEnd: loopEnd, loopEnabled: loopEnabled)
+        if let data = try? JSONEncoder().encode(state) { preferences?.set(data, forKey: "native-review.\(id)") }
+    }
+    func commit(_ annotations: [BJJJSON]) throws {
+        var json = project.json; json["annotations"] = annotations
+        let previous = project.annotations
+        let saved = try store.save(BJJProject(json))
+        undoStack.append(previous); if undoStack.count > 50 { undoStack.removeFirst() }
+        redoStack.removeAll(); project = saved; syncHistory()
+    }
+    func add(_ points: [CGPoint]) {
+        do { try commit(project.annotations + [try BJJNativeGeometry.annotation(tool: tool, points: points, time: time, project: project, color: color, text: text)]) }
+        catch BJJError.cancelled { }
+        catch { self.error = error.localizedDescription }
+    }
+    func remove(_ id: String) {
+        do { try commit(project.annotations.filter { $0.s("id") != id }) }
+        catch { self.error = error.localizedDescription }
+    }
+    func history(redo: Bool) {
+        guard let annotations = redo ? redoStack.last : undoStack.last else { return }
+        do {
+            var json = project.json; json["annotations"] = annotations
+            let saved = try store.save(BJJProject(json))
+            if redo { redoStack.removeLast(); undoStack.append(project.annotations) }
+            else { undoStack.removeLast(); redoStack.append(project.annotations) }
+            project = saved; syncHistory()
+        } catch { self.error = error.localizedDescription }
+    }
+    private func syncHistory() { undoCount = undoStack.count; redoCount = redoStack.count }
+    func prepareThumbnails() async {
+        guard thumbnails.isEmpty else { return }
+        do {
+            let generator = AVAssetImageGenerator(asset: AVURLAsset(url: try store.asset(id, project.proxy.s("asset"))))
+            generator.appliesPreferredTrackTransform = true
+            generator.maximumSize = CGSize(width: 180, height: 100)
+            for index in 0..<8 {
+                guard !Task.isCancelled, !closed else { generator.cancelAllCGImageGeneration(); return }
+                let result = try await generator.image(at: CMTime(seconds: project.duration * Double(index) / 8, preferredTimescale: 600))
+                thumbnails.append(UIImage(cgImage: result.image))
+            }
+        } catch { /* The player remains usable when thumbnails cannot decode. */ }
+    }
+    func export() async {
+        guard !exporting else { return }
+        pause(); exporting = true; exportProgress = 0
+        defer { exporting = false; jobID = nil }
+        do {
+            if service == nil { service = try BJJService(store: store) }
+            guard let service else { return }
+            let job = try await service.createExport(id, expectedRevision: project.revision)
+            jobID = job.jobId
+            while !Task.isCancelled, !closed {
+                let current = try service.job(job.jobId)
+                exportProgress = current.progress / 100
+                if current.status == "completed" { shareURL = try service.exportedFile(job.jobId); return }
+                if current.status == "cancelled" { return }
+                if current.status == "failed" { throw BJJError.invalid(current.error ?? "Export failed.") }
+                try await Task.sleep(nanoseconds: 250_000_000)
+            }
+            _ = try service.cancel(job.jobId)
+        } catch { self.error = error.localizedDescription }
+    }
+    func cancelExport() { if let jobID { _ = try? service?.cancel(jobID) } }
+    func close() {
+        guard !closed else { return }
+        closed = true; pause(); cancelExport()
+        if let observer { player.removeTimeObserver(observer); self.observer = nil }
+        if let endObserver { NotificationCenter.default.removeObserver(endObserver); self.endObserver = nil }
+        player.replaceCurrentItem(with: nil)
+    }
+}

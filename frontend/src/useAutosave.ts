@@ -1,76 +1,102 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api } from './api';
-import type { Project } from './model';
+import { isNativeIOS, nativeBridge } from './native';
+import { useEditor } from './store';
+import { clearDraft, findDrafts, writeDraft, writerId } from './project/recovery';
+import {
+  flushActiveSave,
+  SaveSession,
+  setActiveSave,
+  type Draft,
+  type SaveState,
+} from './project/saveSession';
 
-export function useAutosave(project: Project | null) {
-  const [status, setStatus] = useState<'saved' | 'pending' | 'saving' | 'failed'>('saved');
-  const [error, setError] = useState<string | null>(null);
-  const latest = useRef(project);
-  const saved = useRef(project);
-  const queue = useRef<Promise<void>>(Promise.resolve());
-  const activeId = useRef(project?.projectId);
-  latest.current = project;
-
-  const flush = useCallback(async () => {
-    const target = latest.current;
-    if (!target) return;
-    const save = queue.current
-      .catch(() => undefined)
-      .then(async () => {
-        if (saved.current === target) return;
-        if (latest.current?.projectId === target.projectId) setStatus('saving');
-        try {
-          await api.save(target);
-          if (latest.current?.projectId === target.projectId) {
-            saved.current = target;
-            setError(null);
-            setStatus(latest.current === target ? 'saved' : 'pending');
-          }
-        } catch (cause) {
-          if (latest.current?.projectId === target.projectId) {
-            setStatus('failed');
-            setError(cause instanceof Error ? cause.message : 'Unable to save project.');
-          }
-          throw cause;
-        }
-      });
-    queue.current = save;
-    await save;
-  }, []);
-
+export function useAutosave() {
+  const sessionId = useEditor((state) => state.session);
+  const [state, setState] = useState<SaveState>({ status: 'saved', error: null });
+  const [recovery, setRecovery] = useState<Draft[]>([]);
+  const [recoveryError, setRecoveryError] = useState<string | null>(null);
   useEffect(() => {
-    if (activeId.current !== project?.projectId) {
-      activeId.current = project?.projectId;
-      saved.current = project;
-      setStatus('saved');
-      setError(null);
+    const initial = useEditor.getState().project;
+    setRecovery([]);
+    setRecoveryError(null);
+    setState({ status: 'saved', error: null });
+    if (!initial) {
+      setActiveSave(null);
       return;
     }
-    if (!project || saved.current === project) return;
-    setStatus('pending');
-    const timer = window.setTimeout(() => {
-      void flush().catch(() => undefined);
-    }, 550);
-    return () => window.clearTimeout(timer);
-  }, [project, flush]);
-
-  useEffect(() => {
-    const onHidden = () => {
-      if (document.visibilityState === 'hidden') void flush().catch(() => undefined);
+    let disposed = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const session = new SaveSession(initial, {
+      save: api.save,
+      read: api.project,
+      journal: writeDraft,
+      clear: clearDraft,
+      writerId,
+      acknowledge: (target, saved) => useEditor.getState().acknowledge(target, saved),
+      notify: setState,
+    });
+    setActiveSave(session);
+    void findDrafts(initial)
+      .then((result) => {
+        if (!disposed) {
+          setRecovery(result.drafts);
+          if (result.corrupt)
+            setRecoveryError(
+              'A recovery draft is damaged. The confirmed project is intact; the draft was retained.',
+            );
+        }
+      })
+      .catch(() => {
+        if (!disposed)
+          setRecoveryError(
+            'Recovery storage could not be read. Your confirmed project is still available.',
+          );
+      });
+    const unsubscribe = useEditor.subscribe((next, previous) => {
+      if (next.session !== sessionId || next.project === previous.project || !next.project) return;
+      session.update(next.project);
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        void session.flush().catch(() => undefined);
+      }, 550);
+    });
+    const flush = () => {
+      void session.flush().catch(() => undefined);
     };
-    const onBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (latest.current && latest.current !== saved.current) {
+    const hidden = () => {
+      if (document.visibilityState === 'hidden') flush();
+    };
+    const unload = (event: BeforeUnloadEvent) => {
+      if (session.dirty) {
         event.preventDefault();
         event.returnValue = '';
       }
     };
-    window.addEventListener('beforeunload', onBeforeUnload);
-    document.addEventListener('visibilitychange', onHidden);
+    const listener = isNativeIOS() ? nativeBridge.addListener('appSuspending', flush) : null;
+    document.addEventListener('visibilitychange', hidden);
+    window.addEventListener('beforeunload', unload);
     return () => {
-      window.removeEventListener('beforeunload', onBeforeUnload);
-      document.removeEventListener('visibilitychange', onHidden);
+      disposed = true;
+      session.dispose();
+      setActiveSave(null);
+      clearTimeout(timer);
+      unsubscribe();
+      document.removeEventListener('visibilitychange', hidden);
+      window.removeEventListener('beforeunload', unload);
+      if (listener) void listener.then((handle) => handle.remove()).catch(() => undefined);
     };
-  }, [flush]);
-
-  return { status, error, flush };
+  }, [sessionId]);
+  const flush = useCallback(async () => {
+    if (!useEditor.getState().project) return null;
+    return flushActiveSave();
+  }, []);
+  return {
+    ...state,
+    flush,
+    recovery,
+    recoveryError,
+    dismissRecovery: () => setRecovery([]),
+    clearDraft,
+  };
 }

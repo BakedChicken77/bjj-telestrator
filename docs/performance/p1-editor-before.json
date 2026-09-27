@@ -1,0 +1,28 @@
+{
+  "date": "2026-09-13T13:08:29.875Z",
+  "node": "v24.19.0",
+  "platform": "linux 6.18.44 x64",
+  "cpu": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+  "logicalCpus": 9,
+  "workload": {
+    "sourceSeconds": 1200,
+    "annotations": 100,
+    "freehandPaths": 20,
+    "pointsPerPath": 2000,
+    "historyEdits": 100
+  },
+  "editMedianMs": 211.04582199999913,
+  "editP95Ms": 287.3652179999999,
+  "editMaxMs": 498.4469220000001,
+  "heapGrowthBytes": 394224336,
+  "rssBytes": 999292928,
+  "historyItems": 100,
+  "distinctRetainedFreehandArrays": 2000,
+  "filteringFrames": 36000,
+  "filteringTotalMs": 101.36973600000056,
+  "filteringMsPerFrame": 0.0028158260000000156,
+  "visibleCount": 360060,
+  "activeOverlapClips": 3,
+  "fullDecodeAudioBytes": 691200000,
+  "limitations": "Node profiling isolates state/filtering; it does not measure browser React commits, physical phone thermals or native export."
+}

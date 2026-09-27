@@ -49,4 +49,35 @@ describe('project edit history', () => {
     });
     expect(useEditor.getState().future).toHaveLength(0);
   });
+  it('shares unchanged geometry across 100 validated snapshots without mutating undo', () => {
+    useEditor.getState().edit((project) => {
+      project.annotations.push(arrow());
+    });
+    const before = useEditor.getState().project!;
+    const geometry = before.annotations[0].geometry;
+    for (let index = 0; index < 100; index++) {
+      useEditor.getState().edit((project) => {
+        project.projectName = `Review ${index}`;
+      });
+    }
+    expect(useEditor.getState().past).toHaveLength(100);
+    expect(
+      new Set(useEditor.getState().past.map((project) => project.annotations[0].geometry)).size,
+    ).toBe(1);
+    expect(useEditor.getState().project!.annotations[0].geometry).toBe(geometry);
+    useEditor.getState().edit((project) => {
+      const item = project.annotations[0];
+      if (item.type === 'arrow') item.geometry.x1 = 0.1;
+    });
+    expect(before.annotations[0].geometry).toEqual(geometry);
+    expect(useEditor.getState().project!.annotations[0].geometry).not.toBe(geometry);
+    useEditor.getState().undo();
+    expect(useEditor.getState().project!.annotations[0].geometry).toBe(geometry);
+    // Global validation remains active after structural sharing.
+    useEditor.getState().edit((project) => {
+      project.annotations.push(project.annotations[0]);
+    });
+    expect(useEditor.getState().project!.annotations).toHaveLength(1);
+    expect(useEditor.getState().error).toContain('Duplicate identifier');
+  });
 });
