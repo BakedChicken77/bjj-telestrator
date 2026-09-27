@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.0.0]
+
+- Internal native iPhone pilot: SwiftUI library and controls, AVPlayer playback, filmstrip scrubbing, native drawing/undo, and MP4 share.
+- Pilot edits use verified copies in a separate project root; originals remain in the existing editor.
+- Integrates the pending Phase 1 storage, revision, recovery, package, and media-job foundations while preserving 1.1.1 recording lifecycle fixes.
+- Adds TestFlight processing and existing-group distribution verification to upload automation.
+- Native narration, full cue editing, import, accessibility/device acceptance, and desktop retirement remain migration milestones. This is not a completed 2.0 production release.
+
 ## [1.1.1] - 2026-09-27
 
 - Fence native voiceover preparation, playback, capture, interruption and stop with session IDs; initialize capture after playback and preserve valid partial clips.
