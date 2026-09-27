@@ -18,7 +18,7 @@ import SwiftUI
         try await silentVideo(source)
         let imported = try await BJJService(store: store).importFile(source, originalName: "Native pilot.mp4")
         for (name, size) in [("portrait", CGSize(width: 402, height: 874)), ("landscape", CGSize(width: 874, height: 402))] {
-            let editor = try BJJNativeEditorSession(project: imported, store: store)
+            let editor = try BJJNativeEditorSession(project: store.load(imported.id), store: store)
             defer { editor.close() }
             if name == "portrait" { editor.add([CGPoint(x: 0.2, y: 0.2), CGPoint(x: 0.7, y: 0.65)]) }
             editor.drawing = true
