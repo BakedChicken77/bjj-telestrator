@@ -1,0 +1,27 @@
+name: Fetch TestFlight feedback
+on:
+  push:
+    branches: [ops/testflight-feedback]
+permissions:
+  contents: read
+jobs:
+  feedback:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: ios-release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Fetch sanitized TestFlight feedback
+        run: python3 scripts/ci/fetch_testflight_feedback.py
+        env:
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+          ASC_API_KEY_P8_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: testflight-feedback
+          path: .ci-artifacts/testflight-feedback/latest.json
+          if-no-files-found: error
+          retention-days: 3
