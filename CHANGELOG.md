@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.0] - 2026-09-28
+
+### Optional tips (TestFlight)
+- Add Support Fresh Frame beside Help & support, with a $5 tip and a custom whole-dollar amount from $1–$10 USD.
+- Handle repeatable Apple purchases, pending approvals, interruptions, and unavailable products without interrupting editing.
+- Keep every editing and export feature free; tip availability depends on the configured Apple product catalog.
+
 ## [2.0.7] - 2026-09-28
 
 ### Maintenance preview
