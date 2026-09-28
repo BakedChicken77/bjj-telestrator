@@ -9,6 +9,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
+from urllib.request import urlopen
 
 from distribute_testflight import APP, AppleAPI
 
@@ -89,6 +90,15 @@ def main():
             # Screenshot feedback is the requested source; lack of crash-feedback permission
             # should not prevent reviewing the user's submitted notes.
             pass
+
+        for item in screenshot_feedback:
+            for index, shot in enumerate(item.get("screenshots") or []):
+                url = shot.get("url")
+                if not url:
+                    continue
+                target = OUT / f"{item['id']}-{index}.jpg"
+                with urlopen(url, timeout=60) as response:
+                    target.write_bytes(response.read())
 
         payload = {
             "appId": APP,
