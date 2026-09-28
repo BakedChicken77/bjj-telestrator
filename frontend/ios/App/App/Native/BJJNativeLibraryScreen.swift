@@ -16,6 +16,7 @@ struct BJJNativeHome: View {
     @State private var files = false
     @State private var backupImport = false
     @State private var recentlyDeleted = false
+    @State private var support = false
     @State private var renaming: BJJNativeReview?
     @State private var name = ""
     @State private var trash: BJJNativeReview?
@@ -61,6 +62,8 @@ struct BJJNativeHome: View {
                 }
                 Section {
                     Button("Recently Deleted", systemImage: "trash") { recentlyDeleted = true }.frame(minHeight: 44)
+                    Button("Support Fresh Frame", systemImage: "heart") { support = true }
+                        .frame(minHeight: 44).accessibilityIdentifier("tips.open")
                     Link("Help & support", destination: URL(string: "https://github.com/BakedChicken77/bjj-telestrator/blob/main/docs/SUPPORT.md")!)
                     Link("Privacy policy", destination: URL(string: "https://github.com/BakedChicken77/bjj-telestrator/blob/main/docs/PRIVACY.md")!)
                 }
@@ -101,6 +104,7 @@ struct BJJNativeHome: View {
             .fullScreenCover(item: $library.session, onDismiss: { Task { await library.refresh() } }) { session in
                 BJJNativeEditorScreen(session: session)
             }
+            .sheet(isPresented: $support) { BJJTipSheet(store: BJJTipStore.shared) }
             .sheet(isPresented: $recentlyDeleted) { deletedList }
             .sheet(isPresented: Binding(get: { library.shareURL != nil }, set: { if !$0 { library.endShare() } }), onDismiss: { library.endShare() }) {
                 if let url = library.shareURL { BJJNativeShare(url: url) }
