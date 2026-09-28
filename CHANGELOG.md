@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.0.4] - 2026-09-28
+
+### Native acceptance foundation
+- Add a separate XCUITest runner for real native drawing, undo/redo, reopen, export, and rotation/sheet navigation.
+- Keep automation fixtures in isolated debug-only libraries; reject fixture hooks in release archives.
+- Add stable accessibility identifiers and correct outdated library guidance about native narration.
+- Record the remaining physical-device usability, route, performance, and upgrade acceptance gates without claiming simulator evidence proves them.
+
 ## [2.0.3] - 2026-09-27
 
 ### Native narration and export candidate

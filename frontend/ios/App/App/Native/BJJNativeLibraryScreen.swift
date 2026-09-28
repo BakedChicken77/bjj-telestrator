@@ -4,7 +4,11 @@ import UniformTypeIdentifiers
 struct BJJNativeHome: View {
     @StateObject private var library: BJJNativeLibrary
     init(library: BJJNativeLibrary? = nil) {
+        #if DEBUG
+        _library = StateObject(wrappedValue: library ?? BJJUITestFixture.library() ?? BJJNativeLibrary())
+        #else
         _library = StateObject(wrappedValue: library ?? BJJNativeLibrary())
+        #endif
     }
     @Environment(\.scenePhase) private var scenePhase
     @State private var search = ""
@@ -39,6 +43,7 @@ struct BJJNativeHome: View {
                                 Button { Task { await library.open(review) } } label: {
                                     BJJNativeLibraryRow(library: library, review: review)
                                 }
+                                .accessibilityIdentifier("review.\(review.id)")
                                 .contextMenu {
                                     if native && review.problem == nil {
                                         Button("Rename", systemImage: "pencil") { name = review.name; renaming = review }
@@ -58,7 +63,7 @@ struct BJJNativeHome: View {
                 Section {
                     Button("Recently Deleted", systemImage: "trash") { recentlyDeleted = true }.frame(minHeight: 44)
                     Button("Original editor", systemImage: "square.stack") { originalEditor = true }.frame(minHeight: 44)
-                    Text("Narration and advanced editing still use the original editor while the native migration continues.")
+                    Text("Native reviews support drawing, narration, and export. The original editor remains available during migration validation.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
             }
@@ -66,7 +71,12 @@ struct BJJNativeHome: View {
             .navigationTitle("Your reviews")
             .searchable(text: $search, prompt: "Find a review")
             .refreshable { await library.refresh() }
-            .task { await library.refresh() }
+            .task {
+                #if DEBUG
+                await BJJUITestFixture.prepare(library)
+                #endif
+                await library.refresh()
+            }
             .overlay {
                 if library.busy {
                     VStack(spacing: 16) {

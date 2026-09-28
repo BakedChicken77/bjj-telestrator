@@ -33,6 +33,7 @@ struct BJJNativeEditorScreen: View {
                 let landscape = geometry.size.width > geometry.size.height
                 VStack(spacing: 0) {
                     BJJNativeVideoSurface(session: session, reset: zoomReset)
+                        .accessibilityIdentifier("editor.video")
                         .background(.black)
                         .accessibilityLabel("Video and annotations")
                         .accessibilityHint("Choose Draw to add or select cues. Use Cues for accessible selection and properties.")
@@ -47,11 +48,12 @@ struct BJJNativeEditorScreen: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Done") { session.close(); dismiss() }.disabled(session.exporting || session.recording || session.preparingAudio)
+                    Button("Done") { session.close(); dismiss() }.disabled(session.exporting || session.recording || session.preparingAudio).accessibilityIdentifier("editor.done")
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button("Cues", systemImage: "list.bullet") { session.pause(); showAnnotations = true }.disabled(session.recording || session.preparingAudio)
+                    Button("Cues", systemImage: "list.bullet") { session.pause(); showAnnotations = true }.disabled(session.recording || session.preparingAudio).accessibilityIdentifier("editor.cues")
                     Button("Export", systemImage: "square.and.arrow.up") { session.pause(); showExport = true }
+                        .accessibilityIdentifier("editor.export")
                         .disabled(session.exporting || session.recording || session.preparingAudio)
                 }
             }
@@ -258,7 +260,7 @@ struct BJJNativeEditorScreen: View {
                 if let cue = session.project.annotations.first(where: { $0.s("id") == listCueID }) { BJJCueProperties(session: session, cue: cue) }
             }
             .navigationTitle("Cues").navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showAnnotations = false } } }
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showAnnotations = false }.accessibilityIdentifier("cues.done") } }
         }.presentationDetents([.medium, .large])
     }
 }

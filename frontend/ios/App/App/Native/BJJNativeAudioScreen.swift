@@ -33,7 +33,7 @@ struct BJJNativeAudioScreen: View {
             .disabled(session.preparingAudio)
             .overlay { if session.preparingAudio { ProgressView("Preparing audio preview…").padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12)) } }
             .navigationTitle("Narration").navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.accessibilityIdentifier("narration.done") } }
         }
     }
     private func gain(_ title: String, key: String) -> some View {
@@ -115,7 +115,7 @@ struct BJJNativeExportScreen: View {
                         let options = BJJExportOptions(start: selectedRange ? start : 0, end: selectedRange ? end : session.project.duration, maximum: maximum, crf: crf)
                         do { try options.validate(session.project); dismiss(); Task { await session.export(options: options) } }
                         catch { session.error = error.localizedDescription }
-                    }
+                    }.accessibilityIdentifier("export.start")
                     if let retry = session.retryExportID {
                         Button("Retry previous export") { dismiss(); Task { await session.export(retry: retry) } }
                         Text("Retries the same saved revision, range, and quality.").font(.footnote).foregroundStyle(.secondary)
@@ -146,7 +146,7 @@ struct BJJNativeExportPreview: View {
                     Button("Save to Photos", systemImage: "photo.badge.arrow.down") { Task { await savePhotos() } }.disabled(saving)
                 }.padding()
             }.navigationTitle("Export ready").navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { player.pause(); dismiss() }.disabled(saving) } }
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { player.pause(); dismiss() }.disabled(saving).accessibilityIdentifier("export.done") } }
                 .sheet(isPresented: $sharing) { BJJNativeShare(url: url) }
                 .alert("Export", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) { Button("OK") { message = nil } } message: { Text(message ?? "") }
                 .onDisappear { player.pause() }

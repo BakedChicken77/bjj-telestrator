@@ -185,6 +185,30 @@ def main() -> None:
     child(MAIN_GROUP, "children", group)
     child(PRODUCTS, "children", product)
     child(PROJECT_ID, "targets", target)
+    # A separate UI runner launches the app and interacts with real native controls.
+    ui = {key: uid("ui-test:" + key) for key in ["target", "group", "product", "file", "build",
+          "config-list", "debug", "release", "sources", "frameworks", "resources"]}
+    section("PBXFileReference", ui["file"],
+            'isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BJJWorkflowTests.swift; sourceTree = "<group>";')
+    section("PBXFileReference", ui["product"],
+            'isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR;')
+    section("PBXGroup", ui["group"],
+            f'isa = PBXGroup; children = ({ui["file"]},); path = AppUITests; sourceTree = "<group>";')
+    section("PBXBuildFile", ui["build"], f'isa = PBXBuildFile; fileRef = {ui["file"]};')
+    for kind, key, files in [("PBXSourcesBuildPhase", "sources", ui["build"] + ","),
+                             ("PBXFrameworksBuildPhase", "frameworks", ""),
+                             ("PBXResourcesBuildPhase", "resources", "")]:
+        section(kind, ui[key], f"isa = {kind}; buildActionMask = 2147483647; files = ({files}); runOnlyForDeploymentPostprocessing = 0;")
+    for key, name in [("debug", "Debug"), ("release", "Release")]:
+        settings = 'GENERATE_INFOPLIST_FILE = YES; IPHONEOS_DEPLOYMENT_TARGET = 17.0; PRODUCT_BUNDLE_IDENTIFIER = com.bakedchicken77.bjjtelestrator.uitests; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = "1"; CODE_SIGN_STYLE = Automatic; TEST_TARGET_NAME = App;'
+        section("XCBuildConfiguration", ui[key], f"isa = XCBuildConfiguration; buildSettings = {{{settings}}}; name = {name};")
+    section("XCConfigurationList", ui["config-list"],
+            f'isa = XCConfigurationList; buildConfigurations = ({ui["debug"]}, {ui["release"]},); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;')
+    section("PBXNativeTarget", ui["target"],
+            f'isa = PBXNativeTarget; buildConfigurationList = {ui["config-list"]}; buildPhases = ({ui["sources"]}, {ui["frameworks"]}, {ui["resources"]},); buildRules = (); dependencies = ({dependency},); name = AppUITests; productName = AppUITests; productReference = {ui["product"]}; productType = "com.apple.product-type.bundle.ui-testing";')
+    child(MAIN_GROUP, "children", ui["group"])
+    child(PRODUCTS, "children", ui["product"])
+    child(PROJECT_ID, "targets", ui["target"])
     PROJECT.write_text(text)
     scheme = PROJECT.parent / "xcshareddata/xcschemes/App.xcscheme"
     scheme.parent.mkdir(parents=True, exist_ok=True)
@@ -193,12 +217,13 @@ def main() -> None:
         return f'<BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="{identifier}" BuildableName="{product_name}" BlueprintName="{name}" ReferencedContainer="container:App.xcodeproj"/>'
 
     app_ref, test_ref = reference(APP, "App", "App.app"), reference(target, "AppTests", "AppTests.xctest")
+    ui_ref = reference(ui["target"], "AppUITests", "AppUITests.xctest")
     scheme.write_text(f"""<?xml version="1.0" encoding="UTF-8"?>
 <Scheme LastUpgradeVersion="2600" version="1.3">
   <BuildAction parallelizeBuildables="YES" buildImplicitDependencies="YES"><BuildActionEntries>
     <BuildActionEntry buildForTesting="YES" buildForRunning="YES" buildForProfiling="YES" buildForArchiving="YES" buildForAnalyzing="YES">{app_ref}</BuildActionEntry>
   </BuildActionEntries></BuildAction>
-  <TestAction buildConfiguration="Debug" selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier="Xcode.IDEFoundation.Launcher.LLDB" shouldUseLaunchSchemeArgsEnv="YES"><Testables><TestableReference skipped="NO">{test_ref}</TestableReference></Testables></TestAction>
+  <TestAction buildConfiguration="Debug" selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier="Xcode.IDEFoundation.Launcher.LLDB" shouldUseLaunchSchemeArgsEnv="YES"><Testables><TestableReference skipped="NO">{test_ref}</TestableReference><TestableReference skipped="NO">{ui_ref}</TestableReference></Testables></TestAction>
   <LaunchAction buildConfiguration="Debug" selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier="Xcode.IDEFoundation.Launcher.LLDB" launchStyle="0" useCustomWorkingDirectory="NO" ignoresPersistentStateOnLaunch="NO" debugDocumentVersioning="YES" debugServiceExtension="internal" allowLocationSimulation="YES"><BuildableProductRunnable runnableDebuggingMode="0">{app_ref}</BuildableProductRunnable></LaunchAction>
   <ProfileAction buildConfiguration="Release" shouldUseLaunchSchemeArgsEnv="YES" savedToolIdentifier="" useCustomWorkingDirectory="NO" debugDocumentVersioning="YES"><BuildableProductRunnable runnableDebuggingMode="0">{app_ref}</BuildableProductRunnable></ProfileAction>
   <AnalyzeAction buildConfiguration="Debug"/><ArchiveAction buildConfiguration="Release" revealArchiveInOrganizer="YES"/>
