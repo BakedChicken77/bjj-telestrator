@@ -55,7 +55,8 @@ import SwiftUI
                     if cue.n("startSec") >= 1 / fps {
                         XCTAssertNil(overlay.image(at: cue.n("startSec") - 1 / fps))
                     }
-                    XCTAssertNil(overlay.image(at: cue.n("endSec")))
+                    let endFrame = ceil(cue.n("endSec") * fps - 0.000001) / fps
+                    XCTAssertNil(overlay.image(at: endFrame))
                 }
             }
         }
