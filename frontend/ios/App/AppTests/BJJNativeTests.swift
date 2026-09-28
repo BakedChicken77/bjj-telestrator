@@ -13,6 +13,28 @@ import SwiftUI
         store = try BJJStore(root: root)
     }
     override func tearDownWithError() throws { try? FileManager.default.removeItem(at: root) }
+    func testCueRangeHandlesClampAndPreviewIsNotSavedUntilCommit() throws {
+        let initial = try project()
+        let editor = try BJJNativeEditorSession(project: initial, store: store, preferences: nil)
+        defer { editor.close() }
+        let original = initial.annotations[0]
+        let moved = BJJCueTiming.adjust(original, start: true, seconds: 0.517, duration: 4, fps: 30)
+        XCTAssertEqual(moved.n("startSec"), 16.0 / 30, accuracy: 0.000001)
+        let crossed = BJJCueTiming.adjust(moved, start: true, seconds: 8, duration: 4, fps: 30)
+        XCTAssertEqual(crossed.n("startSec"), crossed.n("endSec") - 1 / 30.0, accuracy: 0.000001)
+        let short = BJJCueTiming.adjust(moved, start: false, seconds: -1, duration: 4, fps: 30)
+        XCTAssertEqual(short.n("endSec"), short.n("startSec") + 1 / 30.0, accuracy: 0.000001)
+        XCTAssertEqual(BJJCueTiming.adjust(moved, start: false, seconds: 20, duration: 4, fps: 30).n("endSec"), 4)
+        editor.select(original.s("id")); editor.previewCue = moved
+        XCTAssertEqual(try store.load(initial.id).annotations[0].n("startSec"), 1)
+        editor.cancelCueEdit()
+        XCTAssertNil(editor.previewCue)
+        try editor.updateCue(moved, expectedRevision: initial.revision)
+        XCTAssertEqual(editor.undoCount, 1)
+        XCTAssertEqual(try store.load(initial.id).annotations[0].n("startSec"), 16.0 / 30, accuracy: 0.000001)
+        editor.history(redo: false)
+        XCTAssertEqual(editor.project.annotations[0].n("startSec"), 1)
+    }
     func testNewNativeCuesRemainVisibleAtFractionalPausedTimes() throws {
         let initial = try project()
         let points = [CGPoint(x: 0.2, y: 0.3), CGPoint(x: 0.7, y: 0.8)]

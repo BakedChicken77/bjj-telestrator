@@ -2,9 +2,10 @@
 
 ## [2.0.6] - 2026-09-28
 
-### Paused drawing visibility
+### Paused drawing and cue timing
 - Start newly drawn cues on the current output frame so they remain visible immediately on a paused video.
 - Preserve existing cues, explicit timing edits, and half-open export boundaries.
+- Tap a cue label to open settings beside/below the video with draggable start/end handles and a live preview; Save commits one edit and Cancel discards the draft.
 - Add fractional-time coverage for all six tools and saved-review/MP4 checks for arrows and boxes.
 
 ## [2.0.5] - 2026-09-28

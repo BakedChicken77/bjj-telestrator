@@ -31,17 +31,21 @@ struct BJJNativeEditorScreen: View {
         NavigationStack {
             GeometryReader { geometry in
                 let landscape = geometry.size.width > geometry.size.height
-                VStack(spacing: 0) {
-                    BJJNativeVideoSurface(session: session, reset: zoomReset)
-                        .accessibilityIdentifier("editor.video")
-                        .background(.black)
-                        .accessibilityLabel("Video and annotations")
-                        .accessibilityHint("Choose Draw to add or select cues. Use Cues for accessible selection and properties.")
-                    if !landscape { filmstrip.disabled(session.recording || session.preparingAudio) }
-                    if session.drawing && !landscape { cueStrip }
-                    transport.disabled(session.recording || session.preparingAudio)
-                    controls
-                }.frame(width: geometry.size.width, height: geometry.size.height)
+                if showProperties, let cue = session.selectedCue {
+                    let layout = landscape ? AnyLayout(HStackLayout(spacing: 0)) : AnyLayout(VStackLayout(spacing: 0))
+                    layout {
+                        videoSurface.frame(height: landscape ? nil : geometry.size.height * 0.40)
+                        properties(cue).frame(width: landscape ? min(360, geometry.size.width * 0.48) : nil)
+                    }.frame(width: geometry.size.width, height: geometry.size.height)
+                } else {
+                    VStack(spacing: 0) {
+                        videoSurface
+                        if !landscape { filmstrip.disabled(session.recording || session.preparingAudio) }
+                        if session.drawing { cueStrip }
+                        transport.disabled(session.recording || session.preparingAudio)
+                        controls
+                    }.frame(width: geometry.size.width, height: geometry.size.height)
+                }
             }
             .background(Color(uiColor: .systemBackground))
             .navigationTitle(session.project.name)
@@ -51,10 +55,10 @@ struct BJJNativeEditorScreen: View {
                     Button("Done") { session.close(); dismiss() }.disabled(session.exporting || session.recording || session.preparingAudio).accessibilityIdentifier("editor.done")
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button("Cues", systemImage: "list.bullet") { session.pause(); showAnnotations = true }.disabled(session.recording || session.preparingAudio).accessibilityIdentifier("editor.cues")
+                    Button("Cues", systemImage: "list.bullet") { session.pause(); showAnnotations = true }.disabled(showProperties || session.recording || session.preparingAudio).accessibilityIdentifier("editor.cues")
                     Button("Export", systemImage: "square.and.arrow.up") { session.pause(); showExport = true }
                         .accessibilityIdentifier("editor.export")
-                        .disabled(session.exporting || session.recording || session.preparingAudio)
+                        .disabled(showProperties || session.exporting || session.recording || session.preparingAudio)
                 }
             }
             .sheet(isPresented: $showAudio) { BJJNativeAudioScreen(session: session) }
@@ -65,10 +69,9 @@ struct BJJNativeEditorScreen: View {
             .confirmationDialog("Record narration at 1×", isPresented: $confirmRecord, titleVisibility: .visible) {
                 Button("Start recording") { Task { await session.startRecording() } }
             } message: { Text("Use headphones to avoid recording the speaker. Bluetooth can switch to its microphone audio quality. Playback begins before capture, and recording stops if the route changes.") }
-            .sheet(isPresented: $showAnnotations) { annotationList }
-            .sheet(isPresented: $showProperties) {
-                if let cue = session.selectedCue { BJJCueProperties(session: session, cue: cue) }
-            }
+            .sheet(isPresented: $showAnnotations, onDismiss: {
+                if let id = listCueID { listCueID = nil; openProperties(id) }
+            }) { annotationList }
             .sheet(isPresented: $showText) {
                 NavigationStack {
                     Form {
@@ -102,6 +105,21 @@ struct BJJNativeEditorScreen: View {
             .interactiveDismissDisabled(session.recording || session.exporting || session.preparingAudio)
             .onDisappear { session.close() }
         }
+    }
+    private var videoSurface: some View {
+        BJJNativeVideoSurface(session: session, reset: zoomReset)
+            .accessibilityIdentifier("editor.video")
+            .background(.black)
+            .accessibilityLabel("Video and annotations")
+            .accessibilityHint("Choose Draw to add or select cues. Tap a cue label to edit it.")
+            .allowsHitTesting(!showProperties)
+    }
+    private func openProperties(_ id: String) {
+        session.select(id, seekToCue: true); showProperties = true
+    }
+    private func properties(_ cue: BJJJSON) -> some View {
+        BJJCueProperties(session: session, cue: cue, onClose: { showProperties = false })
+            .id(cue.s("id"))
     }
     private var filmstrip: some View {
         GeometryReader { geometry in
@@ -215,7 +233,7 @@ struct BJJNativeEditorScreen: View {
         ScrollView(.horizontal) {
             HStack(spacing: 8) {
                 ForEach(session.project.annotations.sorted { $0.n("startSec") < $1.n("startSec") }, id: \.selfID) { cue in
-                    Button { session.select(cue.s("id"), seekToCue: true) } label: {
+                    Button { openProperties(cue.s("id")) } label: {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("\(cue.s("type").capitalized) · \(cue.n("startSec"), specifier: "%.1f")–\(cue.n("endSec"), specifier: "%.1f")s").font(.caption)
                             GeometryReader { geo in
@@ -225,7 +243,7 @@ struct BJJNativeEditorScreen: View {
                                     .offset(x: geo.size.width * cue.n("startSec") / session.project.duration)
                             }.frame(height: 4)
                         }.padding(.horizontal, 8).frame(width: 150, height: 44)
-                    }.buttonStyle(.bordered).accessibilityAddTraits(session.selectedID == cue.s("id") ? .isSelected : [])
+                    }.buttonStyle(.bordered).accessibilityIdentifier("cue.strip.\(cue.s("id"))").accessibilityAddTraits(session.selectedID == cue.s("id") ? .isSelected : [])
                 }
             }.padding(.horizontal, 12)
         }.frame(height: session.project.annotations.isEmpty ? 0 : 52)
@@ -239,7 +257,7 @@ struct BJJNativeEditorScreen: View {
                 ForEach(session.project.annotations, id: \.selfID) { cue in
                     HStack {
                         Button {
-                            session.select(cue.s("id"), seekToCue: true); showAnnotations = false
+                            listCueID = cue.s("id"); showAnnotations = false
                         } label: {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(cue.s("type") == "text" ? (cue["geometry"] as! BJJJSON).s("text") : cue.s("type").capitalized)
@@ -248,7 +266,7 @@ struct BJJNativeEditorScreen: View {
                             }.frame(minHeight: 44)
                         }
                         Spacer()
-                        Button { listCueID = cue.s("id") } label: { Image(systemName: "slider.horizontal.3").frame(width: 44, height: 44) }
+                        Button { listCueID = cue.s("id"); showAnnotations = false } label: { Image(systemName: "slider.horizontal.3").frame(width: 44, height: 44) }
                             .accessibilityLabel("Edit \(cue.s("type")) properties")
                         Button("Delete cue", systemImage: "trash", role: .destructive) { session.remove(cue.s("id")) }
                             .labelStyle(.iconOnly).frame(width: 44, height: 44)
@@ -256,9 +274,6 @@ struct BJJNativeEditorScreen: View {
                 }
             }
             .buttonStyle(.borderless)
-            .sheet(isPresented: Binding(get: { listCueID != nil }, set: { if !$0 { listCueID = nil } })) {
-                if let cue = session.project.annotations.first(where: { $0.s("id") == listCueID }) { BJJCueProperties(session: session, cue: cue) }
-            }
             .navigationTitle("Cues").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showAnnotations = false }.accessibilityIdentifier("cues.done") } }
         }.presentationDetents([.medium, .large])
@@ -356,7 +371,7 @@ final class BJJNativeCanvas: UIView, UIGestureRecognizerDelegate {
                 renderer = try BJJOverlay(annotations: cues, size: size, fps: session.project.exportSettings.n("fps"))
                 renderRevision = session.project.revision; renderSize = size; signature = "invalid"
             }
-            let visible = session.project.annotations.filter { BJJProject.visible($0, time: session.time, fps: session.project.exportSettings.n("fps")) }.map { $0.s("id") }.joined(separator: ",")
+            let visible = session.project.annotations.map { session.previewCue?.s("id") == $0.s("id") ? session.previewCue! : $0 }.filter { BJJProject.visible($0, time: session.time, fps: session.project.exportSettings.n("fps")) }.map { $0.s("id") }.joined(separator: ",")
             if signature != visible {
                 signature = visible
                 if let image = renderer?.image(at: session.time), let cg = imageContext.createCGImage(image, from: image.extent) {

@@ -7,19 +7,28 @@ struct BJJCueProperties: View {
     @Environment(\.dismiss) private var dismiss
     @State private var cue: BJJJSON
     @State private var problem: String?
+    private let onClose: (() -> Void)?
     private let revision: Int
-    init(session: BJJNativeEditorSession, cue: BJJJSON) {
-        self.session = session; _cue = State(initialValue: cue); revision = session.project.revision
+    init(session: BJJNativeEditorSession, cue: BJJJSON, onClose: (() -> Void)? = nil) {
+        self.onClose = onClose; self.session = session; _cue = State(initialValue: cue); revision = session.project.revision
     }
     private var geometry: BJJJSON { cue["geometry"] as! BJJJSON }
     var body: some View {
         NavigationStack {
             Form {
                 Section("Timing · seconds") {
-                    number("Start", "startSec", range: 0...session.project.duration)
-                    number("End", "endSec", range: 0...session.project.duration)
-                    Button("Start here") { cue["startSec"] = session.time }
-                    Button("End here") { cue["endSec"] = session.time }
+                    BJJCueRangeBar(start: cue.n("startSec"), end: cue.n("endSec"),
+                                   duration: session.project.duration, fps: session.project.exportSettings.n("fps"),
+                                   change: changeBoundary)
+                    Text("Drag either handle to set when the cue appears. The video follows the handle.").font(.caption)
+                    Slider(value: Binding(get: { session.time }, set: { session.seek($0) }), in: 0...session.project.duration)
+                        .accessibilityLabel("Preview video position")
+                    DisclosureGroup("Precise timing") {
+                        number("Start", "startSec", range: 0...session.project.duration)
+                        number("End", "endSec", range: 0...session.project.duration)
+                        Button("Start here") { changeBoundary(true, session.time) }
+                        Button("End here") { changeBoundary(false, session.time) }
+                    }
                     Text("The cue appears at Start and disappears at End. Times are video seconds.").font(.footnote)
                 }
                 Section("Appearance") {
@@ -68,24 +77,37 @@ struct BJJCueProperties: View {
             }
             .navigationTitle("\(cue.s("type").capitalized) properties").navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { close() }.accessibilityIdentifier("cue.properties.cancel") }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        do { try session.updateCue(cue, expectedRevision: revision); dismiss() }
+                        do { try session.updateCue(cue, expectedRevision: revision); close() }
                         catch { problem = error.localizedDescription }
-                    }
+                    }.accessibilityIdentifier("cue.properties.save")
                 }
                 ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("Done") { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) } }
             }
         }
+        .onAppear { session.previewCue = cue }
+        .onDisappear { session.cancelCueEdit() }
     }
-    private func move(_ x: CGFloat, _ y: CGFloat) { cue = BJJCueGeometry.move(cue, delta: CGPoint(x: x, y: y), size: session.pictureSize) }
+    private func close() { session.cancelCueEdit(); if let onClose { onClose() } else { dismiss() } }
+    private func changeBoundary(_ start: Bool, _ seconds: Double) {
+        cue = BJJCueTiming.adjust(cue, start: start, seconds: seconds, duration: session.project.duration, fps: session.project.exportSettings.n("fps"))
+        session.previewCue = cue
+        let position = start ? cue.n("startSec") : max(cue.n("startSec"), cue.n("endSec") - 1 / session.project.exportSettings.n("fps"))
+        session.seek(position)
+    }
+    private func move(_ x: CGFloat, _ y: CGFloat) { cue = BJJCueGeometry.move(cue, delta: CGPoint(x: x, y: y), size: session.pictureSize); session.previewCue = cue }
     private func resize(_ factor: CGFloat) {
         let b = BJJCueGeometry.bounds(cue, size: session.pictureSize)
         cue = BJJCueGeometry.resize(cue, corner: 3, to: CGPoint(x: b.minX + b.width * factor, y: b.minY + b.height * factor), size: session.pictureSize)
+        session.previewCue = cue
     }
     private func set(_ key: String, _ value: Any, nested: Bool) {
         if nested { var g = geometry; g[key] = value; cue["geometry"] = g } else { cue[key] = value }
+        // Invalid numeric drafts stay in the form until corrected, never in the renderer.
+        var document = session.project.json; document["annotations"] = [cue]
+        if (try? BJJProject(document)) != nil { session.previewCue = cue }
     }
     private func string(_ key: String, nested: Bool = false) -> Binding<String> {
         Binding(get: { (nested ? geometry : cue).s(key) }, set: { set(key, $0, nested: nested) })
@@ -108,5 +130,53 @@ struct BJJCueProperties: View {
             UIColor(color).getRed(&r, green: &g, blue: &b, alpha: &a)
             set(key, String(format: "#%02X%02X%02X", Int(r * 255), Int(g * 255), Int(b * 255)), nested: nested)
         }), supportsOpacity: false)
+    }
+}
+
+/// Both handles share the full-video scale. Separate touch lanes keep short
+/// cues editable even when their start and end positions are almost identical.
+struct BJJCueRangeBar: View {
+    let start: Double
+    let end: Double
+    let duration: Double
+    let fps: Double
+    let change: (Bool, Double) -> Void
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text(String(format: "Start %.2fs", start))
+                Spacer()
+                Text(String(format: "End %.2fs", end))
+            }.font(.caption).monospacedDigit()
+            GeometryReader { geometry in
+                let width = max(1, geometry.size.width - 44)
+                let left = 22 + width * start / duration
+                let right = 22 + width * end / duration
+                ZStack(alignment: .topLeading) {
+                    Capsule().fill(.secondary.opacity(0.2)).frame(width: width, height: 8).offset(x: 22, y: 44)
+                    Capsule().fill(Color.accentColor).frame(width: max(2, right - left), height: 8).offset(x: left, y: 44)
+                    handle(true, x: left, y: 22, width: width)
+                    handle(false, x: right, y: 74, width: width)
+                }.coordinateSpace(name: "cue.range")
+            }.frame(height: 96)
+            HStack { Text("0:00"); Spacer(); Text(String(format: "%02d:%02d", Int(duration) / 60, Int(duration) % 60)) }
+                .font(.caption2).foregroundStyle(.secondary)
+        }.accessibilityIdentifier("cue.range")
+    }
+    private func handle(_ isStart: Bool, x: CGFloat, y: CGFloat, width: CGFloat) -> some View {
+        Image(systemName: isStart ? "arrow.right.to.line" : "arrow.left.to.line")
+            .font(.headline).foregroundStyle(.white)
+            .frame(width: 44, height: 44).background(Color.accentColor, in: Circle())
+            .contentShape(Rectangle()).position(x: x, y: y)
+            .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .named("cue.range"))
+                .onChanged { value in change(isStart, Double((value.location.x - 22) / width) * duration) })
+            .accessibilityElement()
+            .accessibilityLabel(isStart ? "Cue start" : "Cue end")
+            .accessibilityValue(String(format: "%.2f seconds", isStart ? start : end))
+            .accessibilityIdentifier(isStart ? "cue.range.start" : "cue.range.end")
+            .accessibilityAdjustableAction { direction in
+                let delta = direction == .increment ? 1 / fps : -1 / fps
+                change(isStart, (isStart ? start : end) + delta)
+            }
     }
 }
