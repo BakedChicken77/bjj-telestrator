@@ -132,6 +132,18 @@ def main() -> None:
             phase,
             f"isa = {name}; buildActionMask = 2147483647; files = ({files}); runOnlyForDeploymentPostprocessing = 0;",
         )
+    # Tip tests and the local catalog belong only to the test bundle, never App resources.
+    for filename, file_type, phase in [
+        ("BJJTipTests.swift", "sourcecode.swift", sources),
+        ("FreshFrameTips.storekit", "text", resources),
+    ]:
+        tip_ref, tip_build = uid("test:" + filename), uid("test-build:" + filename)
+        section("PBXFileReference", tip_ref,
+                f'isa = PBXFileReference; lastKnownFileType = {file_type}; path = "{filename}"; sourceTree = "<group>";')
+        section("PBXBuildFile", tip_build, f"isa = PBXBuildFile; fileRef = {tip_ref};")
+        child(group, "children", tip_ref)
+        child(phase, "files", tip_build)
+
     conformance, conformance_build = uid("test:conformance-file"), uid("test:conformance-build")
     section("PBXFileReference", conformance,
             'isa = PBXFileReference; lastKnownFileType = text.json; path = "../../../../tests/fixtures/project-conformance.json"; sourceTree = "<group>";')

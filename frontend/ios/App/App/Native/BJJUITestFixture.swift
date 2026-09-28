@@ -57,4 +57,27 @@ import AVFoundation
         guard writer.status == .completed else { throw BJJError.invalid("UI fixture did not finish.") }
     }
 }
+
+extension BJJUITestFixture {
+    static func tipStore() -> BJJTipStore? {
+        guard root != nil, ProcessInfo.processInfo.environment["BJJ_UI_TEST_TIPS"] == "1" else { return nil }
+        return BJJTipStore(client: BJJTipUITestClient())
+    }
+}
+
+@MainActor private final class BJJTipUITestClient: BJJTipClient {
+    var canMakePayments: Bool { true }
+    func storefront() async -> String? { "USA" }
+    func products(for ids: Set<String>) async throws -> [BJJTipProduct] {
+        BJJTipCatalog.amounts.compactMap { amount in
+            let id = BJJTipCatalog.id(for: amount)
+            guard ids.contains(id) else { return nil }
+            return BJJTipProduct(id: id, price: Decimal(amount), currency: "USD",
+                                 displayPrice: "$\(amount).00", consumable: true)
+        }
+    }
+    func purchase(_ product: BJJTipProduct) async throws -> BJJTipPurchaseResult { .cancelled }
+    func updates() -> AsyncStream<BJJTipTransaction> { AsyncStream { $0.finish() } }
+    func unfinished() -> AsyncStream<BJJTipTransaction> { AsyncStream { $0.finish() } }
+}
 #endif
