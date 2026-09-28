@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.bakedchicken77.bjjtelestrator',
-  appName: 'BJJ Telestrator',
+  appName: 'Fresh Frame',
   webDir: 'dist',
   ios: {
     contentInset: 'never',

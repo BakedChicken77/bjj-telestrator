@@ -217,7 +217,7 @@ struct BJJExportJob: Codable {
         background = UIApplication.shared.beginBackgroundTask(withName: "BJJ video export") { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
-                _ = try? self.cancel(id, reason: "iOS stopped the background export. Keep BJJ Telestrator open while rendering, then retry.")
+                _ = try? self.cancel(id, reason: "iOS stopped the background export. Keep Fresh Frame open while rendering, then retry.")
                 self.endBackgroundTask()
             }
         }

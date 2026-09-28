@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.0.5] - 2026-09-28
+
+### Fresh Frame release candidate
+- Rename the app Fresh Frame and install the owner-provided dog-and-camera icon.
+- Finish the native library wording and remove the original web editor entry point.
+- Add accessible support and privacy links while preserving existing projects and backup compatibility.
+- Record owner acceptance of TestFlight 2.0.4 (20.1); this candidate still requires an update smoke check.
+
 ## [2.0.4] - 2026-09-28
 
 ### Native acceptance foundation
