@@ -127,7 +127,12 @@ enum BJJNativeGeometry {
                         "alignment": "left", "backgroundColor": "#000000", "backgroundOpacity": 0.6]
         }
         let stamp = BJJProject.now()
-        return ["id": UUID().uuidString.lowercased(), "type": tool.rawValue, "startSec": time,
+        // The renderer floors the playhead to an output frame but ceils cue starts.
+        // Anchor a new drawing to that same frame so an off-grid paused time does
+        // not hide it until playback advances. Preserve explicit timing edits.
+        let fps = project.exportSettings.n("fps")
+        let start = BJJProject.frameIndex(at: time, fps: fps) / fps
+        return ["id": UUID().uuidString.lowercased(), "type": tool.rawValue, "startSec": start,
                 "endSec": min(project.duration, time + 5),
                 "zIndex": min(100000, (project.annotations.map { Int($0.n("zIndex")) }.max() ?? -1) + 1),
                 "strokeColor": color, "strokeWidth": 0.006, "strokeOpacity": 1.0,
