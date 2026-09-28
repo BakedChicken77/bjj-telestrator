@@ -161,7 +161,7 @@ struct BJJCueRangeBar: View {
             }.frame(height: 96)
             HStack { Text("0:00"); Spacer(); Text(String(format: "%02d:%02d", Int(duration) / 60, Int(duration) % 60)) }
                 .font(.caption2).foregroundStyle(.secondary)
-        }.accessibilityIdentifier("cue.range")
+        }
     }
     private func handle(_ isStart: Bool, x: CGFloat, y: CGFloat, width: CGFloat) -> some View {
         Image(systemName: isStart ? "arrow.right.to.line" : "arrow.left.to.line")

@@ -41,7 +41,7 @@ struct BJJNativeEditorScreen: View {
                     VStack(spacing: 0) {
                         videoSurface
                         if !landscape { filmstrip.disabled(session.recording || session.preparingAudio) }
-                        if session.drawing { cueStrip }
+                        if session.drawing && !landscape { cueStrip }
                         transport.disabled(session.recording || session.preparingAudio)
                         controls
                     }.frame(width: geometry.size.width, height: geometry.size.height)
@@ -51,6 +51,7 @@ struct BJJNativeEditorScreen: View {
             .navigationTitle(session.project.name)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                if !showProperties {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Done") { session.close(); dismiss() }.disabled(session.exporting || session.recording || session.preparingAudio).accessibilityIdentifier("editor.done")
                 }
@@ -59,6 +60,7 @@ struct BJJNativeEditorScreen: View {
                     Button("Export", systemImage: "square.and.arrow.up") { session.pause(); showExport = true }
                         .accessibilityIdentifier("editor.export")
                         .disabled(showProperties || session.exporting || session.recording || session.preparingAudio)
+                }
                 }
             }
             .sheet(isPresented: $showAudio) { BJJNativeAudioScreen(session: session) }

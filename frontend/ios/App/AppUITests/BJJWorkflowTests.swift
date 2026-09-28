@@ -69,7 +69,7 @@ final class BJJWorkflowTests: XCTestCase {
         XCTAssertTrue(label.waitForExistence(timeout: 10)); label.tap()
         let start = app.descendants(matching: .any)["cue.range.start"].firstMatch
         let end = app.descendants(matching: .any)["cue.range.end"].firstMatch
-        XCTAssertTrue(start.waitForExistence(timeout: 10)); XCTAssertTrue(end.exists)
+        XCTAssertTrue(start.waitForExistence(timeout: 10), app.debugDescription); XCTAssertTrue(end.exists)
         XCTAssertGreaterThan(canvas.frame.height, 100)
         XCTAssertLessThanOrEqual(canvas.frame.maxY, start.frame.minY)
         let oldValue = start.value as? String
