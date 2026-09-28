@@ -115,7 +115,7 @@ struct BJJNativeExportScreen: View {
                         let options = BJJExportOptions(start: selectedRange ? start : 0, end: selectedRange ? end : session.project.duration, maximum: maximum, crf: crf)
                         do { try options.validate(session.project); dismiss(); Task { await session.export(options: options) } }
                         catch { session.error = error.localizedDescription }
-                    }
+                    }.accessibilityIdentifier("export.start")
                     if let retry = session.retryExportID {
                         Button("Retry previous export") { dismiss(); Task { await session.export(retry: retry) } }
                         Text("Retries the same saved revision, range, and quality.").font(.footnote).foregroundStyle(.secondary)

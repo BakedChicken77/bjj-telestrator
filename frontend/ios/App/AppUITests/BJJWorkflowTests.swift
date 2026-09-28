@@ -1,0 +1,65 @@
+import XCTest
+
+final class BJJWorkflowTests: XCTestCase {
+    private var app: XCUIApplication!
+    override func setUpWithError() throws {
+        continueAfterFailure = false
+        app = XCUIApplication()
+        app.launchEnvironment["BJJ_UI_TEST_SESSION"] = UUID().uuidString
+        XCUIDevice.shared.orientation = .portrait
+    }
+    override func tearDownWithError() throws {
+        app.terminate()
+        XCUIDevice.shared.orientation = .portrait
+    }
+    private func openReview() {
+        let review = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "review.")).firstMatch
+        XCTAssertTrue(review.waitForExistence(timeout: 60), app.debugDescription)
+        review.tap()
+        XCTAssertTrue(app.buttons["editor.cues"].waitForExistence(timeout: 20))
+        let ready = NSPredicate(format: "enabled == true")
+        expectation(for: ready, evaluatedWith: app.buttons["editor.export"])
+        waitForExpectations(timeout: 30)
+    }
+    func testDrawUndoReopenAndExport() throws {
+        app.launch(); openReview()
+        app.segmentedControls.buttons["Draw"].tap()
+        let canvas = app.otherElements["editor.video"]
+        XCTAssertTrue(canvas.exists)
+        canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.35, dy: 0.48))
+            .press(forDuration: 0.1, thenDragTo: canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.65, dy: 0.55)))
+        XCTAssertTrue(app.buttons["Undo"].isEnabled)
+        app.buttons["Undo"].tap()
+        XCTAssertTrue(app.buttons["Redo"].isEnabled)
+        app.buttons["Redo"].tap()
+        app.buttons["editor.cues"].tap()
+        XCTAssertTrue(app.buttons["Edit arrow properties"].waitForExistence(timeout: 10))
+        app.buttons["cues.done"].tap()
+        app.buttons["editor.done"].tap()
+        app.terminate(); app.launch(); openReview()
+        app.buttons["editor.cues"].tap()
+        XCTAssertTrue(app.buttons["Edit arrow properties"].waitForExistence(timeout: 10))
+        app.buttons["cues.done"].tap()
+        app.buttons["editor.export"].tap()
+        let export = app.buttons["export.start"]
+        if !export.isHittable { app.swipeUp() }
+        XCTAssertTrue(export.waitForExistence(timeout: 10)); export.tap()
+        XCTAssertTrue(app.navigationBars["Export ready"].waitForExistence(timeout: 60), app.debugDescription)
+        XCTAssertTrue(app.buttons["Share / Save to Files"].exists)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "native-ui-export-ready"; screenshot.lifetime = .keepAlways; add(screenshot)
+    }
+    func testNativeSheetsRemainDismissibleAfterRotation() throws {
+        app.launch(); openReview()
+        app.buttons["Narration"].tap()
+        XCTAssertTrue(app.switches["Mute original"].waitForExistence(timeout: 10))
+        XCUIDevice.shared.orientation = .landscapeLeft
+        XCTAssertTrue(app.buttons["Done"].isHittable)
+        app.buttons["Done"].tap()
+        XCUIDevice.shared.orientation = .portrait
+        app.buttons["editor.export"].tap()
+        XCTAssertTrue(app.navigationBars["Export video"].waitForExistence(timeout: 10))
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(app.buttons["editor.done"].waitForExistence(timeout: 10))
+    }
+}

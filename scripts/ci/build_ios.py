@@ -10,6 +10,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def verify_release_app(app: Path) -> None:
+    """Fail closed if the debug UI-test launch hook leaks into a device archive."""
+    binary = app / "App"
+    if not binary.is_file():
+        raise ValueError("The archived app executable is missing.")
+    if b"BJJ_UI_TEST_SESSION" in binary.read_bytes():
+        raise ValueError("Debug UI-test fixture code must not ship in a release archive.")
+
+
 def main() -> None:
     if platform.system() != "Darwin":
         raise SystemExit("The iOS build requires a macOS Xcode runner.")
@@ -25,6 +34,7 @@ def main() -> None:
                     "-archivePath", str(archive), "-derivedDataPath", str(output / "device-build"),
                     "CODE_SIGNING_ALLOWED=NO", f"MARKETING_VERSION={version.split('-')[0]}",
                     f"CURRENT_PROJECT_VERSION={build}"], check=True, cwd=ROOT)
+    verify_release_app(archive / "Products/Applications/App.app")
     simulator = ROOT / ".ci-artifacts/ios-derived/Build/Products/Debug-iphonesimulator/App.app"
     for source, name in [(archive, "unsigned-xcarchive"), (simulator, "simulator")]:
         if not source.exists():

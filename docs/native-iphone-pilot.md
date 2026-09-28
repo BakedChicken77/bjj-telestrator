@@ -1,6 +1,26 @@
-# Native iPhone migration: N0 pilot
+# Native iPhone migration: milestone and acceptance record
 
-Status: N0 delivered as TestFlight 2.0.0 (6.2). Steve approved its native feel on September 27, 2026: “It feels good. Proceed.” This clears the interaction-direction gate, not the complete audio/recovery/performance acceptance matrix.
+Current status: N0–N4 candidates have been delivered through TestFlight 2.0.3 (16.1). Steve reported “Everything looks good. Proceed” on September 28, 2026. N5 automated native workflow validation is underway. That feedback approves continuation; it does not supply measurements or attest to every audio/recovery/performance scenario. Historical milestone descriptions below describe their original scope, not the current feature set.
+
+## N4 delivered; N5 acceptance foundation (2.0.4)
+
+2.0.3 adds native recording at 1×, mixed preview, take gain/mute/nudge/delete, audio-aware undo/redo, range/quality export, immutable retry, MP4 preview, and Photos/Files delivery. Its 47 native integration tests and full CI gate passed. Apple build 198876ab-e1e3-41c2-9cf7-021706656b04 was independently verified as Testing in the existing iPhone Acceptance group; automatic assignment/read-back remains in the release workflow.
+
+2.0.4 adds XCUITest coverage through the app's actual controls, not direct session method calls. Each test gets a UUID-scoped debug-only library with synthetic video. Relaunch tests reuse only that test's namespace. Real project roots are never reset. Release archive verification rejects the test launch marker. The UI runner is part of the same required native test scheme and CI gate.
+
+### Outstanding physical-device evidence
+
+Keep `IOS_DEVICE_ACCEPTED=false` until the exact release candidate has this evidence. Do not retire the original editor, desktop runtime, or data before that gate.
+
+| Check | Record | Current evidence |
+| --- | --- | --- |
+| Three real coaching reviews | Device/build, taps, task time excluding processing, accidental actions, comfort; compare the agreed task with 1.1.1 | Positive general feedback; no measured comparison |
+| Long real video | 20-minute 1080p roll, 100 cues and narration; peak memory, thermal behavior, export time, scrub p95 | Not measured on device |
+| Audio routes and timing | Start/middle/end alignment target about 100 ms; deny/retry mic permission, interruption, speaker, available wired headset, Bluetooth | Automated mix/range parity; physical routes unverified |
+| Recovery and update | Install over existing reviews; confirm sources/takes, force-close recovery, backup/restore, low storage, export/share cancellation | Native integration coverage; signed-update user scenario not itemized |
+| Accessibility | VoiceOver project/cue/take/export flow, small portrait/landscape, large text, contrast/motion preferences | Simulator captures and native UI workflows; physical VoiceOver audit outstanding |
+
+For the next device check, use one real review: record with headphones, adjust/mute a take, reopen, export a selected range, and play it in Photos. Then interrupt a second take and confirm the saved result. Record the exact build and any timing or navigation issue. Device-only evidence cannot be manufactured by CI or replaced by a blanket approval.
 
 ## Baseline reconciliation
 
