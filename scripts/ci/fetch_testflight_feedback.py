@@ -10,7 +10,7 @@ import os
 import tempfile
 from pathlib import Path
 
-from scripts.ci.distribute_testflight import APP, AppleAPI
+from distribute_testflight import APP, AppleAPI
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / ".ci-artifacts" / "testflight-feedback"
