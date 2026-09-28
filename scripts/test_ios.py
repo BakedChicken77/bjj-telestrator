@@ -49,7 +49,7 @@ def main() -> None:
     output = ROOT / "tests/generated" / ("ios-" + datetime.now(UTC).strftime("%Y%m%d-%H%M%S") + ".xcresult")
     output = args.result_bundle or output
     output.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
+    tests = subprocess.run(
         [
             "xcodebuild",
             "test",
@@ -73,13 +73,15 @@ def main() -> None:
             "CODE_SIGNING_ALLOWED=NO",
         ],
         cwd=ROOT,
-        check=True,
+        check=False,
     )
+    if output.exists():
+        subprocess.run([
+            "xcrun", "xcresulttool", "export", "attachments", "--path", str(output),
+            "--output-path", str(ROOT / ".ci-artifacts/native-screenshots"),
+        ], check=True, cwd=ROOT)
+    tests.check_returncode()
     print(f"Native simulator tests passed. Results: {output}")
-    subprocess.run([
-        "xcrun", "xcresulttool", "export", "attachments", "--path", str(output),
-        "--output-path", str(ROOT / ".ci-artifacts/native-screenshots"),
-    ], check=True, cwd=ROOT)
 
 
 if __name__ == "__main__":

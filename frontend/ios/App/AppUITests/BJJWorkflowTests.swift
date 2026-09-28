@@ -9,6 +9,10 @@ final class BJJWorkflowTests: XCTestCase {
         XCUIDevice.shared.orientation = .portrait
     }
     override func tearDownWithError() throws {
+        if testRun?.hasSucceeded == false {
+            let screenshot = XCTAttachment(screenshot: app.screenshot())
+            screenshot.name = "native-ui-failure"; screenshot.lifetime = .keepAlways; add(screenshot)
+        }
         app.terminate()
         XCUIDevice.shared.orientation = .portrait
     }
@@ -54,8 +58,10 @@ final class BJJWorkflowTests: XCTestCase {
         app.buttons["Narration"].tap()
         XCTAssertTrue(app.switches["Mute original"].waitForExistence(timeout: 10))
         XCUIDevice.shared.orientation = .landscapeLeft
-        XCTAssertTrue(app.buttons["Done"].isHittable)
-        app.buttons["Done"].tap()
+        let done = app.buttons["narration.done"]
+        expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: done)
+        waitForExpectations(timeout: 10)
+        done.tap()
         XCUIDevice.shared.orientation = .portrait
         app.buttons["editor.export"].tap()
         XCTAssertTrue(app.navigationBars["Export video"].waitForExistence(timeout: 10))

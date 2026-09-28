@@ -33,7 +33,7 @@ struct BJJNativeAudioScreen: View {
             .disabled(session.preparingAudio)
             .overlay { if session.preparingAudio { ProgressView("Preparing audio preview…").padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12)) } }
             .navigationTitle("Narration").navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.accessibilityIdentifier("narration.done") } }
         }
     }
     private func gain(_ title: String, key: String) -> some View {
