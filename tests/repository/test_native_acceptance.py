@@ -17,6 +17,17 @@ class NativeAcceptanceTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 verify_release_app(app)
 
+    def test_release_archive_rejects_tip_fixture_and_local_catalog(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            app = Path(temporary)
+            (app / "App").write_bytes(b"native executable BJJ_UI_TEST_TIPS")
+            with self.assertRaises(ValueError):
+                verify_release_app(app)
+            (app / "App").write_bytes(b"native executable")
+            (app / "FreshFrameTips.storekit").write_text("{}")
+            with self.assertRaises(ValueError):
+                verify_release_app(app)
+
     def test_native_ui_runner_remains_in_required_scheme(self):
         root = Path(__file__).resolve().parents[2]
         scheme = (root / "frontend/ios/App/App.xcodeproj/xcshareddata/xcschemes/App.xcscheme").read_text()

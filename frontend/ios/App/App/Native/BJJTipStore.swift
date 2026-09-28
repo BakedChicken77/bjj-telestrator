@@ -121,7 +121,11 @@ enum BJJTipPurchaseResult {
             catalogMessage = "In-app purchases are restricted on this device."
             return
         }
-        guard await client.storefront() == "USA" else {
+        guard let country = await client.storefront() else {
+            catalogMessage = "Tips are temporarily unavailable. Check your App Store connection and try again."
+            return
+        }
+        guard country == "USA" else {
             catalogMessage = "Tips are currently available only in the US App Store."
             return
         }
@@ -153,15 +157,19 @@ enum BJJTipPurchaseResult {
         let session = sheetSession
         defer { purchasing = false }
         do {
-            guard await client.storefront() == "USA" else {
+            let country = await client.storefront()
+            guard country == "USA" else {
                 products = [:]
-                catalogMessage = "Tips are currently available only in the US App Store."
+                catalogMessage = country == nil
+                    ? "Tips are temporarily unavailable. Check your App Store connection and try again."
+                    : "Tips are currently available only in the US App Store."
                 return
             }
             // Refresh immediately before purchase. Never buy a changed price or product type.
             let fresh = try await client.products(for: [product.id])
             guard fresh.contains(where: { $0.id == product.id && $0.supported }) else {
                 products.removeValue(forKey: product.id)
+                catalogMessage = "Some tip amounts are temporarily unavailable. Reload prices to check again."
                 if session == sheetSession { notice = .error("That exact price is no longer available. Please reload tips.") }
                 return
             }

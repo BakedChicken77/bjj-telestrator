@@ -47,6 +47,12 @@ import StoreKitTest
         XCTAssertTrue(store.products.isEmpty)
         XCTAssertTrue(client.requests.isEmpty)
     }
+    func testMissingStorefrontExplainsTemporaryUnavailability() async {
+        client.country = nil
+        await store.load()
+        XCTAssertTrue(store.catalogMessage?.contains("temporarily unavailable") == true)
+        XCTAssertTrue(client.requests.isEmpty)
+    }
     func testOfflineMissingProductsAndRetry() async {
         client.fail = true
         await store.load()
@@ -62,11 +68,11 @@ import StoreKitTest
         await store.load()
         await store.purchase(amount: 5)
         XCTAssertNil(store.notice); XCTAssertFalse(store.purchasing)
-        client.fail = true
+        client.purchaseFails = true
         await store.purchase(amount: 5)
         guard case .error = store.notice else { return XCTFail("Expected failure") }
         XCTAssertFalse(store.purchasing)
-        client.fail = false
+        client.purchaseFails = false
         await store.purchase(amount: 5)
         XCTAssertNil(store.notice)
     }
@@ -95,6 +101,7 @@ import StoreKitTest
         await store.purchase(amount: 5)
         XCTAssertTrue(client.purchases.isEmpty)
         XCTAssertNil(store.product(amount: 5))
+        XCTAssertNotNil(store.catalogMessage, "Price mismatch must offer reload")
         client.catalog = [TipTestClient.product(5)]; await store.load()
         client.canMakePayments = false
         await store.purchase(amount: 5)
@@ -209,6 +216,7 @@ import StoreKitTest
     var country: String? = "USA"
     var catalog = BJJTipCatalog.amounts.map { product($0) }
     var fail = false
+    var purchaseFails = false
     var result: BJJTipPurchaseResult = .cancelled
     var requests: [Set<String>] = []
     var purchases: [Int] = []
@@ -230,6 +238,7 @@ import StoreKitTest
     }
     func purchase(_ product: BJJTipProduct) async throws -> BJJTipPurchaseResult {
         purchases.append(BJJTipCatalog.amount(for: product.id)!)
+        if purchaseFails { throw Failure.offline }
         if holdPurchase { return await withCheckedContinuation { pendingPurchase = $0 } }
         return result
     }

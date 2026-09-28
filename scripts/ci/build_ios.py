@@ -15,8 +15,11 @@ def verify_release_app(app: Path) -> None:
     binary = app / "App"
     if not binary.is_file():
         raise ValueError("The archived app executable is missing.")
-    if b"BJJ_UI_TEST_SESSION" in binary.read_bytes():
+    binary_data = binary.read_bytes()
+    if any(hook in binary_data for hook in (b"BJJ_UI_TEST_SESSION", b"BJJ_UI_TEST_TIPS")):
         raise ValueError("Debug UI-test fixture code must not ship in a release archive.")
+    if any(app.rglob("*.storekit")):
+        raise ValueError("Local StoreKit catalogs must not ship in a release archive.")
 
 
 def main() -> None:
