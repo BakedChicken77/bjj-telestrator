@@ -48,7 +48,7 @@ export function diagnosticSummary(platform: 'ios' | 'desktop') {
   return JSON.stringify(
     {
       formatVersion: 1,
-      app: 'BJJ Telestrator',
+      app: 'Fresh Frame',
       version: __APP_VERSION__,
       build: __BUILD_SHA__,
       platform,

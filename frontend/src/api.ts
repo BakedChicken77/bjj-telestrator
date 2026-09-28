@@ -141,7 +141,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     recordDiagnostic('CONNECTION_UNAVAILABLE');
     throw new ProjectError(
       'CONNECTION_UNAVAILABLE',
-      'Cannot connect to BJJ Telestrator. Check that the local backend is running, then retry.',
+      'Cannot connect to Fresh Frame. Check that the local backend is running, then retry.',
     );
   }
   if (!response.ok) {

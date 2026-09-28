@@ -1,3 +1,7 @@
+# Current checkpoint — September 28, 2026
+
+Signing, TestFlight processing, and automatic internal tester distribution are operational through 2.0.4 (20.1). Steve reported device acceptance complete and requested Fresh Frame branding plus completion of App Store preparation, submission, and release. See [Fresh Frame submission package](app-store/fresh-frame.md). The September 26 checkpoint below is retained as historical context and is superseded where it describes pending signing or missing owner authorization.
+
 # iOS App Store release
 
 ## Identity and current checkpoint — 2026-09-26

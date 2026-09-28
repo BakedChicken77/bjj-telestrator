@@ -176,7 +176,7 @@ export default function App() {
         jobs.some((job) => job.status === 'running' || job.status === 'queued')
       ) {
         setError(
-          'Finish recording, importing, or exporting before returning to the native preview.',
+          'Finish recording, importing, or exporting before returning to your reviews.',
         );
         return;
       }
@@ -449,7 +449,7 @@ export default function App() {
             />
           </svg>
           <span>
-            BJJ <strong>TELESTRATOR</strong>
+            Fresh <strong>FRAME</strong>
           </span>
         </div>
         <div className="topbar-divider" />

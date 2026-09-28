@@ -1,0 +1,25 @@
+# Fresh Frame support
+
+Fresh Frame helps you review videos, draw annotations, record commentary, and share an ordinary MP4. Previously named BJJ Telestrator. Requires iPhone with iOS 17 or later.
+
+## Quick start
+
+1. Tap **New review** and choose a video from Photos or Files.
+2. Open the review. Scrub to a moment, choose Draw, and add a shape or text. Use Cues to adjust timing and properties.
+3. Tap Record to add commentary. Narration lets you adjust, mute, or remove takes.
+4. Export the full video or a selected range, preview the result, and save or share it.
+
+Long-press a review to rename, duplicate, back up, or move it to Recently Deleted. Use **New review → Restore project backup** to import an editable backup. Earlier BJJ Telestrator reviews open as protected copies; the original data is preserved.
+
+## Troubleshooting
+
+- **Recording:** Allow Fresh Frame access to the microphone in iPhone Settings. Check the selected audio route and try headphones to avoid speaker feedback.
+- **Export:** Keep the app open and ensure sufficient free storage. Retry an interrupted export from the export screen.
+- **Missing review:** Check search filters and Recently Deleted. Do not uninstall the app as a troubleshooting step: local projects can be removed.
+- **Backup:** Save an editable project backup to Files before deleting the app or moving to a different device. An exported MP4 is a finished video, not an editable project.
+
+## Report a problem
+
+[Open a support issue](https://github.com/BakedChicken77/bjj-telestrator/issues/new) with your app version/build, iPhone model, iOS version, steps to reproduce, and any error message. GitHub issues are public; do not attach private footage, account information, or other personal data.
+
+[Privacy policy](PRIVACY.md)

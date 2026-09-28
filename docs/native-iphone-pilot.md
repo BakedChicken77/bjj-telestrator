@@ -1,6 +1,10 @@
+# Current release status — September 28, 2026
+
+Steve explicitly reported the structured device acceptance item complete for TestFlight 2.0.4 (20.1). Fresh Frame 2.0.5 prepares public branding and native-only navigation. See [submission package](app-store/fresh-frame.md) for the owner acceptance record, scope, and remaining final-candidate smoke check. The unmeasured entries below are historical records, not a rejection of Steve’s subsequent acceptance.
+
 # Native iPhone migration: milestone and acceptance record
 
-Current status: N0–N4 candidates have been delivered through TestFlight 2.0.3 (16.1). Steve reported “Everything looks good. Proceed” on September 28, 2026. N5 automated native workflow validation is underway. That feedback approves continuation; it does not supply measurements or attest to every audio/recovery/performance scenario. Historical milestone descriptions below describe their original scope, not the current feature set.
+Historical checkpoint:  N0–N4 candidates have been delivered through TestFlight 2.0.3 (16.1). Steve reported “Everything looks good. Proceed” on September 28, 2026. N5 automated native workflow validation is underway. That feedback approves continuation; it does not supply measurements or attest to every audio/recovery/performance scenario. Historical milestone descriptions below describe their original scope, not the current feature set.
 
 ## N4 delivered; N5 acceptance foundation (2.0.4)
 

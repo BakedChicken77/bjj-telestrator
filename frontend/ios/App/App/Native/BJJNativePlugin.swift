@@ -483,7 +483,7 @@ public class BJJNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDeleg
                     AVAudioSession.sharedInstance().requestRecordPermission { continuation.resume(returning: $0) }
                 }
                 guard lifecycle.sessionID == sessionID else { throw BJJError.invalid("Recording was cancelled. Tap Record voiceover to retry.") }
-                guard allowed else { throw BJJError.invalid("Microphone access is denied. Allow BJJ Telestrator in iPhone Settings → Privacy & Security → Microphone.") }
+                guard allowed else { throw BJJError.invalid("Microphone access is denied. Allow Fresh Frame in iPhone Settings → Privacy & Security → Microphone.") }
                 try service.store.checkSpace(required: (BJJAssets.recordingEstimate(project.duration)["requiredBytes"] as! NSNumber).int64Value)
                 // Permission/storage only. WKWebView starts playback before we activate
                 // capture, so playback cannot invalidate a pre-created recorder.

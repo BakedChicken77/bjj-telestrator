@@ -15,7 +15,6 @@ struct BJJNativeHome: View {
     @State private var photos = false
     @State private var files = false
     @State private var backupImport = false
-    @State private var originalEditor = false
     @State private var recentlyDeleted = false
     @State private var renaming: BJJNativeReview?
     @State private var name = ""
@@ -32,13 +31,13 @@ struct BJJNativeHome: View {
                         Button("Choose from Files", systemImage: "folder") { backupImport = false; files = true }
                         Button("Restore project backup", systemImage: "arrow.down.doc") { backupImport = true; files = true }
                     } label: { Label("New review", systemImage: "plus.circle.fill").font(.headline).frame(minHeight: 44) }
-                    Text("Native preview · Import and review videos here. Original reviews are preserved when you open a native copy.")
+                    Text("Draw on your videos, record commentary, and share your perspective.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 ForEach([true, false], id: \.self) { native in
                     let items = filtered.filter { $0.preview == native }
                     if !items.isEmpty {
-                        Section(native ? "Your native reviews" : "Original reviews · open a protected copy") {
+                        Section(native ? "Your reviews" : "Earlier reviews · open a protected copy") {
                             ForEach(items, id: \.key) { review in
                                 Button { Task { await library.open(review) } } label: {
                                     BJJNativeLibraryRow(library: library, review: review)
@@ -62,13 +61,12 @@ struct BJJNativeHome: View {
                 }
                 Section {
                     Button("Recently Deleted", systemImage: "trash") { recentlyDeleted = true }.frame(minHeight: 44)
-                    Button("Original editor", systemImage: "square.stack") { originalEditor = true }.frame(minHeight: 44)
-                    Text("Native reviews support drawing, narration, and export. The original editor remains available during migration validation.")
-                        .font(.footnote).foregroundStyle(.secondary)
+                    Link("Help & support", destination: URL(string: "https://github.com/BakedChicken77/bjj-telestrator/blob/main/docs/SUPPORT.md")!)
+                    Link("Privacy policy", destination: URL(string: "https://github.com/BakedChicken77/bjj-telestrator/blob/main/docs/PRIVACY.md")!)
                 }
             }
             .disabled(library.busy)
-            .navigationTitle("Your reviews")
+            .navigationTitle("Fresh Frame")
             .searchable(text: $search, prompt: "Find a review")
             .refreshable { await library.refresh() }
             .task {
@@ -103,8 +101,6 @@ struct BJJNativeHome: View {
             .fullScreenCover(item: $library.session, onDismiss: { Task { await library.refresh() } }) { session in
                 BJJNativeEditorScreen(session: session)
             }
-            .fullScreenCover(isPresented: $originalEditor, onDismiss: { Task { await library.refresh() } }) { BJJOriginalEditor() }
-            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("BJJReturnToNative"))) { _ in originalEditor = false }
             .sheet(isPresented: $recentlyDeleted) { deletedList }
             .sheet(isPresented: Binding(get: { library.shareURL != nil }, set: { if !$0 { library.endShare() } }), onDismiss: { library.endShare() }) {
                 if let url = library.shareURL { BJJNativeShare(url: url) }
@@ -122,7 +118,7 @@ struct BJJNativeHome: View {
                     if let review = trash { Task { await library.change(review, action: "Move to Recently Deleted") } }
                     trash = nil
                 }
-            } message: { Text("You can restore this native review later. Original reviews remain unchanged.") }
+            } message: { Text("You can restore this review later. Original reviews remain unchanged.") }
             .alert("Review needs attention", isPresented: Binding(get: { library.error != nil }, set: { if !$0 { library.error = nil } })) {
                 Button("OK") { library.error = nil }
             } message: { Text(library.error ?? "") }
@@ -132,7 +128,7 @@ struct BJJNativeHome: View {
     private var deletedList: some View {
         NavigationStack {
             List {
-                if library.deleted.isEmpty { Text("No deleted native reviews.").foregroundStyle(.secondary) }
+                if library.deleted.isEmpty { Text("No deleted reviews.").foregroundStyle(.secondary) }
                 ForEach(library.deleted) { item in
                     VStack(alignment: .leading) {
                         Text(item.name).font(.headline)
