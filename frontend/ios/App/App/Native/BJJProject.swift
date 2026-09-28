@@ -219,9 +219,12 @@ struct BJJProject {
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter.string(from: Date())
     }
+    static func frameIndex(at time: Double, fps: Double) -> Double {
+        (time * fps + 0.00001).rounded(.down)
+    }
     static func visible(_ annotation: BJJJSON, time: Double, fps: Double) -> Bool {
         // Round every boundary up to the first output frame at or after it.
-        let frame = (time * fps + 0.00001).rounded(.down)
+        let frame = frameIndex(at: time, fps: fps)
         let start = ((annotation["startSec"] as! NSNumber).doubleValue * fps - 0.000001).rounded(.up)
         let end = ((annotation["endSec"] as! NSNumber).doubleValue * fps - 0.000001).rounded(.up)
         return frame >= start && frame < end

@@ -13,6 +13,87 @@ import SwiftUI
         store = try BJJStore(root: root)
     }
     override func tearDownWithError() throws { try? FileManager.default.removeItem(at: root) }
+    func testCueRangeHandlesClampAndPreviewIsNotSavedUntilCommit() throws {
+        let initial = try project()
+        let editor = try BJJNativeEditorSession(project: initial, store: store, preferences: nil)
+        defer { editor.close() }
+        let original = initial.annotations[0]
+        let moved = BJJCueTiming.adjust(original, start: true, seconds: 0.517, duration: 4, fps: 30)
+        XCTAssertEqual(moved.n("startSec"), 16.0 / 30, accuracy: 0.000001)
+        let crossed = BJJCueTiming.adjust(moved, start: true, seconds: 8, duration: 4, fps: 30)
+        XCTAssertEqual(crossed.n("startSec"), crossed.n("endSec") - 1 / 30.0, accuracy: 0.000001)
+        let short = BJJCueTiming.adjust(moved, start: false, seconds: -1, duration: 4, fps: 30)
+        XCTAssertEqual(short.n("endSec"), short.n("startSec") + 1 / 30.0, accuracy: 0.000001)
+        XCTAssertEqual(BJJCueTiming.adjust(moved, start: false, seconds: 20, duration: 4, fps: 30).n("endSec"), 4)
+        editor.select(original.s("id")); editor.previewCue = moved
+        XCTAssertEqual(try store.load(initial.id).annotations[0].n("startSec"), 1)
+        editor.cancelCueEdit()
+        XCTAssertNil(editor.previewCue)
+        try editor.updateCue(moved, expectedRevision: initial.revision)
+        XCTAssertEqual(editor.undoCount, 1)
+        XCTAssertEqual(try store.load(initial.id).annotations[0].n("startSec"), 16.0 / 30, accuracy: 0.000001)
+        editor.history(redo: false)
+        XCTAssertEqual(editor.project.annotations[0].n("startSec"), 1)
+    }
+    func testNewNativeCuesRemainVisibleAtFractionalPausedTimes() throws {
+        let initial = try project()
+        let points = [CGPoint(x: 0.2, y: 0.3), CGPoint(x: 0.7, y: 0.8)]
+        for fps in [24.0, 25, 30, 60, 30000.0 / 1001] {
+            var json = initial.json
+            var settings = initial.exportSettings; settings["fps"] = fps
+            json["exportSettings"] = settings
+            let configured = try BJJProject(json)
+            for time in [0.0, 0.001, 0.1, 1.01, 1.017, 1.999, 3.998, 31 / fps] {
+                for tool in BJJNativeTool.allCases {
+                    let cue = try BJJNativeGeometry.annotation(tool: tool, points: points, time: time,
+                                                              project: configured, color: "#FF0000", text: "Cue")
+                    XCTAssertTrue(BJJProject.visible(cue, time: time, fps: fps), "\(tool) at \(time), \(fps) fps")
+                    XCTAssertEqual(cue.n("endSec"), min(configured.duration, time + 5))
+                    XCTAssertLessThan(abs(cue.n("startSec") - time), 1 / fps)
+                    let overlay = try BJJOverlay(annotations: [cue], size: CGSize(width: 320, height: 180), fps: fps)
+                    XCTAssertNotNil(overlay.image(at: time), "New cue must render without advancing playback")
+                    if cue.n("startSec") >= 1 / fps {
+                        XCTAssertNil(overlay.image(at: cue.n("startSec") - 1 / fps))
+                    }
+                    let endFrame = ceil(cue.n("endSec") * fps - 0.000001) / fps
+                    XCTAssertNil(overlay.image(at: endFrame))
+                }
+            }
+        }
+    }
+    func testPausedDrawingSurvivesReopenAndExportsOnCurrentFrame() async throws {
+        executionTimeAllowance = 300
+        let service = try BJJService(store: store)
+        let imported = try await service.importFile(try await sourceVideo(audio: false), originalName: "paused.mp4")
+        let editor = try BJJNativeEditorSession(project: imported, store: store, service: service, preferences: nil)
+        defer { editor.close() }
+        editor.seek(1.017)
+        for _ in 0..<100 {
+            if abs(editor.player.currentTime().seconds - 1.017) < 0.001 { break }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        XCTAssertEqual(editor.player.currentTime().seconds, 1.017, accuracy: 0.001)
+        editor.drawing = true
+        for tool in [BJJNativeTool.arrow, .rectangle] {
+            editor.tool = tool
+            editor.color = "#FF0000"
+            editor.add([CGPoint(x: 0.2, y: 0.3), CGPoint(x: 0.7, y: 0.8)])
+            XCTAssertNil(editor.error)
+            let cue = try XCTUnwrap(editor.project.annotations.last)
+            XCTAssertTrue(BJJProject.visible(cue, time: editor.time, fps: 30))
+            XCTAssertEqual(cue.n("startSec"), 1, accuracy: 0.000001)
+        }
+        XCTAssertEqual(editor.player.rate, 0)
+        let saved = try store.load(imported.id)
+        let overlay = try BJJOverlay(annotations: saved.annotations, size: CGSize(width: 320, height: 180), fps: 30)
+        XCTAssertNotNil(overlay.image(at: editor.time))
+        XCTAssertNil(overlay.image(at: 29.0 / 30))
+        await editor.export()
+        XCTAssertNil(editor.error)
+        let output = try XCTUnwrap(editor.exportURL)
+        XCTAssertEqual(try redPixels(output, time: 29.0 / 30), 0)
+        XCTAssertGreaterThan(try redPixels(output, time: 1), 20)
+    }
     func testNativeNarrationPreviewRangeExportAndImmutableRetry() async throws {
         executionTimeAllowance = 300
         let service = try BJJService(store: store)

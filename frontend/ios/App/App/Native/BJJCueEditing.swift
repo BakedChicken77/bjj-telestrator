@@ -141,3 +141,16 @@ extension BJJNativeEditorSession {
         do { try commit(ordered) } catch { self.error = error.localizedDescription }
     }
 }
+
+/// Range handles snap to output frames and cannot cross or leave the video.
+enum BJJCueTiming {
+    static func adjust(_ cue: BJJJSON, start: Bool, seconds: Double, duration: Double, fps: Double) -> BJJJSON {
+        guard seconds.isFinite, duration > 0, fps > 0 else { return cue }
+        let gap = min(1 / fps, duration)
+        let snapped = min(duration, max(0, (seconds * fps).rounded() / fps))
+        var result = cue
+        if start { result["startSec"] = max(0, min(cue.n("endSec") - gap, snapped)) }
+        else { result["endSec"] = min(duration, max(cue.n("startSec") + gap, snapped)) }
+        return result
+    }
+}
