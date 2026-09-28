@@ -94,6 +94,29 @@ final class BJJWorkflowTests: XCTestCase {
         app.buttons["cue.properties.cancel"].tap()
         app.buttons["editor.done"].tap()
     }
+    func testCueEndHandleCancellationPreservesSavedTiming() throws {
+        app.launch(); openReview()
+        app.segmentedControls.buttons["Draw"].tap()
+        let canvas = app.otherElements["editor.video"]
+        canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.4))
+            .press(forDuration: 0.1, thenDragTo: canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.6)))
+        let label = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "cue.strip.")).firstMatch
+        XCTAssertTrue(label.waitForExistence(timeout: 10)); label.tap()
+        let end = app.descendants(matching: .any)["cue.range.end"].firstMatch
+        XCTAssertTrue(end.waitForExistence(timeout: 10))
+        let savedEnd = try XCTUnwrap(end.value as? String)
+        end.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            .press(forDuration: 0.1, thenDragTo: end.coordinate(withNormalizedOffset: CGVector(dx: -1, dy: 0.5)))
+        XCTAssertNotEqual(end.value as? String, savedEnd)
+        XCTAssertGreaterThan(canvas.frame.height, 100)
+        XCTAssertLessThanOrEqual(canvas.frame.maxY, end.frame.minY)
+        app.buttons["cue.properties.cancel"].tap()
+        XCTAssertTrue(label.waitForExistence(timeout: 10)); label.tap()
+        XCTAssertTrue(end.waitForExistence(timeout: 10))
+        XCTAssertEqual(end.value as? String, savedEnd, "Cancel must discard the end-handle draft")
+        app.buttons["cue.properties.cancel"].tap()
+        app.buttons["editor.done"].tap()
+    }
     func testNativeSheetsRemainDismissibleAfterRotation() throws {
         app.launch(); openReview()
         app.buttons["Narration"].tap()
