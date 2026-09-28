@@ -19,29 +19,29 @@
     "test:mobile": "playwright test mobile.spec.ts"
   },
   "dependencies": {
-    "@capacitor/core": "8.5.1",
-    "@capacitor/ios": "8.5.1",
-    "konva": "10.3.3",
-    "react": "19.2.8",
-    "react-dom": "19.2.8",
-    "react-konva": "19.2.6",
-    "zod": "4.5.4",
+    "@capacitor/core": "8.5.2",
+    "@capacitor/ios": "8.5.2",
+    "konva": "10.7.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-konva": "19.3.0",
+    "zod": "4.6.5",
     "zustand": "5.0.15"
   },
   "devDependencies": {
-    "@capacitor/cli": "8.5.1",
+    "@capacitor/cli": "8.5.2",
     "@eslint/js": "10.0.1",
     "@playwright/test": "1.63.0",
-    "@types/node": "26.4.1",
-    "@types/react": "19.2.18",
-    "@types/react-dom": "19.2.7",
+    "@types/node": "26.6.2",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.1",
-    "eslint": "10.10.0",
+    "eslint": "10.11.0",
     "globals": "17.12.0",
-    "prettier": "3.9.6",
+    "prettier": "3.9.9",
     "typescript": "6.0.3",
-    "typescript-eslint": "8.69.0",
-    "vite": "8.2.2",
-    "vitest": "5.0.0"
+    "typescript-eslint": "8.70.1",
+    "vite": "8.3.1",
+    "vitest": "5.0.2"
   }
 }
