@@ -175,9 +175,7 @@ export default function App() {
         busy ||
         jobs.some((job) => job.status === 'running' || job.status === 'queued')
       ) {
-        setError(
-          'Finish recording, importing, or exporting before returning to your reviews.',
-        );
+        setError('Finish recording, importing, or exporting before returning to your reviews.');
         return;
       }
       videoRef.current?.pause();
