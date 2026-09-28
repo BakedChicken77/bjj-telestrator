@@ -4,12 +4,15 @@ final class BJJWorkflowTests: XCTestCase {
     private var app: XCUIApplication!
     override func setUpWithError() throws {
         continueAfterFailure = false
+        // This workflow includes cold launch, import, relaunch and a real export.
+        // Keep each control's bounded wait; allow simulator scheduling overhead.
+        executionTimeAllowance = 240
         app = XCUIApplication()
         app.launchEnvironment["BJJ_UI_TEST_SESSION"] = UUID().uuidString
         XCUIDevice.shared.orientation = .portrait
     }
     override func tearDownWithError() throws {
-        if testRun?.hasSucceeded == false {
+        if let testRun, testRun.failureCount > 0 {
             let screenshot = XCTAttachment(screenshot: app.screenshot())
             screenshot.name = "native-ui-failure"; screenshot.lifetime = .keepAlways; add(screenshot)
         }
