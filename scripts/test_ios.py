@@ -7,11 +7,36 @@ No signing credentials are required for simulator tests. Device installation is 
 import argparse
 import json
 import platform
+import re
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+
+def choose_simulator(available: dict) -> dict:
+    """Avoid the documented StoreKitTest service regression in iOS 26.3–26.5.
+
+    https://developer.apple.com/forums/thread/826971
+    Select the newest compatible installed runtime; never skip purchase tests.
+    """
+    candidates = []
+    for runtime, devices in available.items():
+        match = re.search(r"iOS-(\d+)-(\d+)(?:-(\d+))?$", runtime)
+        if not match:
+            continue
+        version = tuple(int(part or 0) for part in match.groups())
+        if version < (17, 0, 0) or (26, 3, 0) <= version < (26, 6, 0):
+            continue
+        for device in devices:
+            if "iPhone" in device["name"] and device.get("isAvailable"):
+                candidates.append({**device, "runtime": runtime, "version": version})
+    if not candidates:
+        raise ValueError("Install a compatible iPhone simulator (for example iOS 26.2 or 26.6+). "
+                         "iOS 26.3–26.5 has a known StoreKitTest connection failure. No tests were skipped.")
+    return max(candidates, key=lambda d: (d["version"], d.get("state") == "Booted"))
 
 
 def main() -> None:
@@ -34,18 +59,10 @@ def main() -> None:
             capture_output=True,
         )
         available = json.loads(result.stdout)["devices"]
-        candidates = [
-            d
-            for runtime, devices in available.items()
-            if "iOS" in runtime
-            for d in devices
-            if "iPhone" in d["name"] and d.get("isAvailable")
-        ]
-        if not candidates:
-            raise SystemExit("Install an iPhone simulator in Xcode Settings → Components, then retry.")
-        candidates.sort(key=lambda d: d.get("state") != "Booted")
-        device = candidates[0]["udid"]
-        print(f"Using {candidates[0]['name']} ({device})", flush=True)
+        print("Installed simulator runtimes: " + ", ".join(available), flush=True)
+        candidate = choose_simulator(available)
+        device = candidate["udid"]
+        print(f"Using {candidate['name']} ({device}), {candidate['runtime']}", flush=True)
     output = ROOT / "tests/generated" / ("ios-" + datetime.now(UTC).strftime("%Y%m%d-%H%M%S") + ".xcresult")
     output = args.result_bundle or output
     output.parent.mkdir(parents=True, exist_ok=True)

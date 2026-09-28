@@ -53,7 +53,10 @@ final class BJJWorkflowTests: XCTestCase {
         amount.typeText(XCUIKeyboardKey.delete.rawValue + XCUIKeyboardKey.delete.rawValue + "10")
         XCTAssertTrue(app.buttons["tips.confirm"].isEnabled)
         XCTAssertEqual(app.buttons["tips.confirm"].label, "Tip $10.00")
+        app.buttons["tips.keyboard.done"].tap()
         XCUIDevice.shared.orientation = .landscapeLeft
+        expectation(for: NSPredicate { _, _ in self.app.frame.width > self.app.frame.height }, evaluatedWith: app)
+        waitForExpectations(timeout: 10)
         let close = app.buttons["tips.close"].firstMatch
         expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: close)
         waitForExpectations(timeout: 10)

@@ -4,6 +4,7 @@ struct BJJTipSheet: View {
     @ObservedObject var store: BJJTipStore
     @Environment(\.dismiss) private var dismiss
     @State private var amount = ""
+    @FocusState private var amountFocused: Bool
     private var chosenAmount: Int? { BJJTipCatalog.parse(amount) }
     private var chosenProduct: BJJTipProduct? { chosenAmount.flatMap { store.product(amount: $0) } }
 
@@ -54,6 +55,7 @@ struct BJJTipSheet: View {
                 Text("Enter a whole-dollar amount from $1 to $10 USD. Each tip is one purchase confirmed by Apple.")
                 TextField("Amount in US dollars", text: $amount)
                     .keyboardType(.numberPad)
+                    .focused($amountFocused)
                     .accessibilityIdentifier("tips.amount")
                 if !amount.isEmpty && chosenAmount == nil {
                     Text("Enter a whole number from 1 to 10. Cents are not supported.").foregroundStyle(.secondary)
@@ -71,9 +73,16 @@ struct BJJTipSheet: View {
             }
             status
         }
+        .scrollDismissesKeyboard(.interactively)
         .navigationTitle("Custom tip")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar { closeButton }
+        .toolbar {
+            closeButton
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { amountFocused = false }.accessibilityIdentifier("tips.keyboard.done")
+            }
+        }
     }
     @ToolbarContentBuilder private var closeButton: some ToolbarContent {
         ToolbarItem(placement: .confirmationAction) {

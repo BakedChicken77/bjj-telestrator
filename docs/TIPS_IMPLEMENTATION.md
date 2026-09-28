@@ -95,6 +95,15 @@ python -m unittest discover -s tests/repository -v
 python scripts/test_ios.py
 ```
 
+The first native run compiled successfully and passed the 51 existing native
+unit tests, all deterministic tip tests, and all five UI workflows. The real
+StoreKit catalog test failed with `SKInternalErrorDomain Code=3` on iOS 26.4.1.
+This matches Apple's documented simulator test-service regression
+([Apple developer discussion](https://developer.apple.com/forums/thread/826971)).
+The runner now selects the newest installed runtime outside iOS 26.3–26.5
+(for example 26.2 or 26.6+). The integration assertion is retained; no purchase
+test is skipped. The catalog is explicitly loaded from the test bundle by URL.
+
 The required CI also exercises existing imports, drawing/cue timing, rotation,
 saving/reopening, real export and the unsigned iPhone archive. CI evidence is
 recorded in the PR. Physical VoiceOver, largest accessibility text, light/dark

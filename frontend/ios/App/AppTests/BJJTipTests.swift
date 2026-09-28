@@ -190,7 +190,8 @@ import StoreKitTest
         XCTAssertNil(relaunched.notice); XCTAssertTrue(client.purchases.isEmpty)
     }
     func testRealStoreKitCatalogAndRepeatableConsumables() async throws {
-        let session = try SKTestSession(configurationFileNamed: "FreshFrameTips")
+        let url = try XCTUnwrap(Bundle(for: BJJTipTests.self).url(forResource: "FreshFrameTips", withExtension: "storekit"))
+        let session = try SKTestSession(contentsOf: url)
         session.disableDialogs = true
         session.clearTransactions()
         defer { session.clearTransactions() }
