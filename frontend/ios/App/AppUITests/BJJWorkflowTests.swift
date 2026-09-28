@@ -52,6 +52,9 @@ final class BJJWorkflowTests: XCTestCase {
         XCTAssertTrue(app.buttons["Share / Save to Files"].exists)
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "native-ui-export-ready"; screenshot.lifetime = .keepAlways; add(screenshot)
+        app.buttons["export.done"].tap()
+        XCTAssertTrue(app.buttons["editor.done"].waitForExistence(timeout: 10))
+        app.buttons["editor.done"].tap()
     }
     func testNativeSheetsRemainDismissibleAfterRotation() throws {
         app.launch(); openReview()

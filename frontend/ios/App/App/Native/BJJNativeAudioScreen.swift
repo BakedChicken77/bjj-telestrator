@@ -146,7 +146,7 @@ struct BJJNativeExportPreview: View {
                     Button("Save to Photos", systemImage: "photo.badge.arrow.down") { Task { await savePhotos() } }.disabled(saving)
                 }.padding()
             }.navigationTitle("Export ready").navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { player.pause(); dismiss() }.disabled(saving) } }
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { player.pause(); dismiss() }.disabled(saving).accessibilityIdentifier("export.done") } }
                 .sheet(isPresented: $sharing) { BJJNativeShare(url: url) }
                 .alert("Export", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) { Button("OK") { message = nil } } message: { Text(message ?? "") }
                 .onDisappear { player.pause() }
