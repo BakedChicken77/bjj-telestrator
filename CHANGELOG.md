@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.7] - 2026-09-28
+
+### Maintenance preview
+- Update frontend and Capacitor dependencies after full native, browser, backend and archive validation.
+- Split high-frame-rate and variable-frame-rate conformance tests and reuse decoded frames to reduce simulator timing variability.
+- Add native end-handle cancellation coverage alongside paused drawing, timing edits, rotation, reopening and export checks.
+
 ## [2.0.6] - 2026-09-28
 
 ### Paused drawing and cue timing
