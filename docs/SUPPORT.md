@@ -18,6 +18,24 @@ Long-press a review to rename, duplicate, back up, or move it to Recently Delete
 - **Missing review:** Check search filters and Recently Deleted. Do not uninstall the app as a troubleshooting step: local projects can be removed.
 - **Backup:** Save an editable project backup to Files before deleting the app or moving to a different device. An exported MP4 is a finished video, not an editable project.
 
+## Optional support
+
+In versions offering tips, open **Support Fresh Frame** near Help & support.
+Choose **Tip $5** or **Custom tip** ($1–$10 USD, whole dollars). The displayed
+price comes from Apple, and each tip is a single purchase with Apple's
+confirmation. All editing and export features remain free. Tips are repeatable,
+not subscriptions or tax-deductible donations.
+
+Tips initially require the US App Store. An unavailable amount is never rounded
+or replaced. If prices cannot load, check your connection and use **Reload tip
+prices**. Canceling Apple's confirmation is safe. If Apple is awaiting approval,
+the purchase can complete later, even after you close the support screen.
+Purchase restrictions on the device are respected.
+
+Consumable tips do not have a Restore Purchases button or a cross-device tip
+history. For billing history or a refund request, use Apple's purchase history
+or [reportaproblem.apple.com](https://reportaproblem.apple.com/).
+
 ## Report a problem
 
 [Open a support issue](https://github.com/BakedChicken77/bjj-telestrator/issues/new) with your app version/build, iPhone model, iOS version, steps to reproduce, and any error message. GitHub issues are public; do not attach private footage, account information, or other personal data.

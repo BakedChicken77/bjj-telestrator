@@ -1,0 +1,169 @@
+{
+  "identifier": "6B43AC22-BAFE-4F45-AC0D-F6A7EB840EE0",
+  "nonRenewingSubscriptions": [],
+  "products": [
+    {
+      "displayPrice": "1.00",
+      "familyShareable": false,
+      "internalID": "d3eef208-dadb-54b1-bd6d-34b4ac989285",
+      "localizations": [
+        {
+          "description": "Optional support for development. No features are unlocked.",
+          "displayName": "Fresh Frame $1 Tip",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "com.bakedchicken77.bjjtelestrator.tip.usd1",
+      "referenceName": "Fresh Frame Tip USD 1",
+      "type": "Consumable"
+    },
+    {
+      "displayPrice": "2.00",
+      "familyShareable": false,
+      "internalID": "306de3c5-cf2a-51bf-b5ae-1cecd31c7d3e",
+      "localizations": [
+        {
+          "description": "Optional support for development. No features are unlocked.",
+          "displayName": "Fresh Frame $2 Tip",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "com.bakedchicken77.bjjtelestrator.tip.usd2",
+      "referenceName": "Fresh Frame Tip USD 2",
+      "type": "Consumable"
+    },
+    {
+      "displayPrice": "3.00",
+      "familyShareable": false,
+      "internalID": "cceead4c-d830-547a-93e5-0fe6dcf5dec2",
+      "localizations": [
+        {
+          "description": "Optional support for development. No features are unlocked.",
+          "displayName": "Fresh Frame $3 Tip",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "com.bakedchicken77.bjjtelestrator.tip.usd3",
+      "referenceName": "Fresh Frame Tip USD 3",
+      "type": "Consumable"
+    },
+    {
+      "displayPrice": "4.00",
+      "familyShareable": false,
+      "internalID": "817710ee-b515-5f22-9918-1e050d2d44f9",
+      "localizations": [
+        {
+          "description": "Optional support for development. No features are unlocked.",
+          "displayName": "Fresh Frame $4 Tip",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "com.bakedchicken77.bjjtelestrator.tip.usd4",
+      "referenceName": "Fresh Frame Tip USD 4",
+      "type": "Consumable"
+    },
+    {
+      "displayPrice": "5.00",
+      "familyShareable": false,
+      "internalID": "44b7ccbc-33fd-5852-affb-a1b95e1e549f",
+      "localizations": [
+        {
+          "description": "Optional support for development. No features are unlocked.",
+          "displayName": "Fresh Frame $5 Tip",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "com.bakedchicken77.bjjtelestrator.tip.five",
+      "referenceName": "Fresh Frame Tip USD 5",
+      "type": "Consumable"
+    },
+    {
+      "displayPrice": "6.00",
+      "familyShareable": false,
+      "internalID": "e2efb3d7-3f68-5d66-aa9f-02bb7afcbfc0",
+      "localizations": [
+        {
+          "description": "Optional support for development. No features are unlocked.",
+          "displayName": "Fresh Frame $6 Tip",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "com.bakedchicken77.bjjtelestrator.tip.usd6",
+      "referenceName": "Fresh Frame Tip USD 6",
+      "type": "Consumable"
+    },
+    {
+      "displayPrice": "7.00",
+      "familyShareable": false,
+      "internalID": "6a03146d-83e6-58ed-8b31-f957812b5bf0",
+      "localizations": [
+        {
+          "description": "Optional support for development. No features are unlocked.",
+          "displayName": "Fresh Frame $7 Tip",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "com.bakedchicken77.bjjtelestrator.tip.usd7",
+      "referenceName": "Fresh Frame Tip USD 7",
+      "type": "Consumable"
+    },
+    {
+      "displayPrice": "8.00",
+      "familyShareable": false,
+      "internalID": "971dfc57-e147-5de2-a2ce-a3388b21d239",
+      "localizations": [
+        {
+          "description": "Optional support for development. No features are unlocked.",
+          "displayName": "Fresh Frame $8 Tip",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "com.bakedchicken77.bjjtelestrator.tip.usd8",
+      "referenceName": "Fresh Frame Tip USD 8",
+      "type": "Consumable"
+    },
+    {
+      "displayPrice": "9.00",
+      "familyShareable": false,
+      "internalID": "8ce7776a-4e6a-543d-9c29-4e32e761be24",
+      "localizations": [
+        {
+          "description": "Optional support for development. No features are unlocked.",
+          "displayName": "Fresh Frame $9 Tip",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "com.bakedchicken77.bjjtelestrator.tip.usd9",
+      "referenceName": "Fresh Frame Tip USD 9",
+      "type": "Consumable"
+    },
+    {
+      "displayPrice": "10.00",
+      "familyShareable": false,
+      "internalID": "25b7b589-2420-571b-baba-23d7ba651962",
+      "localizations": [
+        {
+          "description": "Optional support for development. No features are unlocked.",
+          "displayName": "Fresh Frame $10 Tip",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "com.bakedchicken77.bjjtelestrator.tip.usd10",
+      "referenceName": "Fresh Frame Tip USD 10",
+      "type": "Consumable"
+    }
+  ],
+  "settings": {
+    "_applicationInternalID": "",
+    "_developerTeamID": "",
+    "_failTransactionsEnabled": false,
+    "_locale": "en_US",
+    "_storefront": "USA",
+    "_storeKitErrors": []
+  },
+  "subscriptionGroups": [],
+  "version": {
+    "major": 3,
+    "minor": 0
+  }
+}

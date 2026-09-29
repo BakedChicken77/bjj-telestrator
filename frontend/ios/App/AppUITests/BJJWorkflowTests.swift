@@ -28,6 +28,43 @@ final class BJJWorkflowTests: XCTestCase {
         expectation(for: ready, evaluatedWith: app.buttons["editor.export"])
         waitForExpectations(timeout: 30)
     }
+    func testOptionalTipsCustomValidationAndLandscapeDismissal() throws {
+        app.launchEnvironment["BJJ_UI_TEST_TIPS"] = "1"
+        app.launch()
+        let support = app.buttons["tips.open"]
+        XCTAssertTrue(support.waitForExistence(timeout: 60))
+        expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: support)
+        waitForExpectations(timeout: 30)
+        if !support.isHittable { app.swipeUp() }
+        support.tap()
+        let five = app.buttons["tips.five"]
+        XCTAssertTrue(five.waitForExistence(timeout: 10))
+        expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: five)
+        waitForExpectations(timeout: 10)
+        XCTAssertEqual(five.label, "Tip $5.00")
+        XCTAssertTrue(app.buttons["tips.custom"].exists)
+        let portrait = XCTAttachment(screenshot: app.screenshot())
+        portrait.name = "native-tips-portrait"; portrait.lifetime = .keepAlways; add(portrait)
+        app.buttons["tips.custom"].tap()
+        let amount = app.textFields["tips.amount"]
+        XCTAssertTrue(amount.waitForExistence(timeout: 10))
+        amount.tap(); amount.typeText("11")
+        XCTAssertFalse(app.buttons["tips.confirm"].isEnabled)
+        amount.typeText(XCUIKeyboardKey.delete.rawValue + XCUIKeyboardKey.delete.rawValue + "10")
+        XCTAssertTrue(app.buttons["tips.confirm"].isEnabled)
+        XCTAssertEqual(app.buttons["tips.confirm"].label, "Tip $10.00")
+        app.buttons["tips.keyboard.done"].tap()
+        XCUIDevice.shared.orientation = .landscapeLeft
+        expectation(for: NSPredicate { _, _ in self.app.frame.width > self.app.frame.height }, evaluatedWith: app)
+        waitForExpectations(timeout: 10)
+        let close = app.buttons["tips.close"].firstMatch
+        expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: close)
+        waitForExpectations(timeout: 10)
+        let landscape = XCTAttachment(screenshot: app.screenshot())
+        landscape.name = "native-tips-custom-landscape"; landscape.lifetime = .keepAlways; add(landscape)
+        close.tap()
+        XCTAssertTrue(support.waitForExistence(timeout: 10))
+    }
     func testDrawUndoReopenAndExport() throws {
         app.launch(); openReview()
         app.segmentedControls.buttons["Draw"].tap()
