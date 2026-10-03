@@ -301,7 +301,7 @@ final class BJJRenderer {
         guard let video = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) else {
             throw BJJError.invalid("Unable to prepare a video track.")
         }
-        try await timeline.insertVideo(media.video, range: media.videoRange, into: video)
+        try await timeline.insertVideo(media.video, range: media.videoRange, into: video, cancelled: { [self] in shouldStop() })
         var audioProject = project
         if let project, let options {
             var json = project.json

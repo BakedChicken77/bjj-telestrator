@@ -175,7 +175,7 @@ struct BJJNativeTransportState: Codable {
     var editRevision: Int?
     @Published var cueDraft: BJJJSON?
     @Published var inspectingCue = false
-    var draftOrder: [BJJJSON]?
+    @Published var draftOrder: [BJJJSON]?
     var gestureSnapshot: BJJJSON?
     var cueEditDirty: Bool {
         guard let cueDraft else { return false }

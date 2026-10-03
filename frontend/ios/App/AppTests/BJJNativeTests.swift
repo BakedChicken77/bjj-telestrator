@@ -157,6 +157,28 @@ import UniformTypeIdentifiers
         var wrong = hold; wrong["durationTicks"] = -1; json["reviewTimeline"] = ["version": 1, "holds": [wrong]]
         XCTAssertThrowsError(try BJJProject(json))
     }
+    func testPausedVFRFrameAndRangeExport() async throws {
+        let fixture = try XCTUnwrap(Bundle(for: BJJNativeTests.self).url(forResource: "media-timing-conformance", withExtension: "json"))
+        let cases = try XCTUnwrap(try store.readJSON(fixture)["cases"] as? [BJJJSON])
+        let item = try XCTUnwrap(cases.first { $0.s("name") == "variable-frame-rate" })
+        let original = root.appendingPathComponent("held-vfr.mp4")
+        try XCTUnwrap(Data(base64Encoded: item.s("movieBase64"))).write(to: original)
+        let project = try await BJJService(store: store).importFile(original, originalName: "held-vfr.mp4")
+        var json = project.json
+        json["requiredCapabilities"] = (project.json["requiredCapabilities"] as! [String]) + [BJJReviewTimeline.capability]
+        json["reviewTimeline"] = ["version": 1, "holds": [["id": UUID().uuidString.lowercased(), "sourceTicks": 48000, "durationTicks": 36000, "frozenPTS": 1.0]]]
+        json["reviewNarration"] = [BJJJSON]()
+        var settings = project.exportSettings; settings["fps"] = 30.0; json["exportSettings"] = settings
+        let configured = try store.save(BJJProject(json))
+        let media = try await BJJMedia.inspect(original, reference: project.source.s("asset"), originalName: "held-vfr.mp4")
+        let movie = root.appendingPathComponent("held-vfr-range.mp4")
+        try await BJJRenderer().render(media: media, project: configured, store: store, output: movie, options: BJJExportOptions(start: 1.1, end: 1.6)) { _ in }
+        let exported = try await BJJMedia.inspect(movie, reference: "exports/range.mp4", originalName: "range.mp4")
+        XCTAssertEqual(exported.videoRange.duration.seconds, 0.5, accuracy: 1 / 30.0)
+        let frames = try decodedTimingFrames(exported)
+        XCTAssertGreaterThan(frames.count, 10)
+        XCTAssertTrue(frames.allSatisfy { $0.rgb[1] > 200 && $0.rgb[2] < 40 }, "VFR hold must freeze the exact green frame without stretching multiple frames")
+    }
     func testPauseNarrationReceiptReopenUndoPreviewAndMP4() async throws {
         executionTimeAllowance = 300
         let service = try BJJService(store: store)
