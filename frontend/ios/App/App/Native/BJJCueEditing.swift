@@ -178,8 +178,13 @@ extension BJJNativeEditorSession {
         else { cancelCueEdit() }
     }
     func cancelCueEdit() {
-        previewCue = nil; cueDraft = nil; editRevision = nil
-        inspectingCue = false; draftOrder = nil; gestureSnapshot = nil
+        // Canvas layout/refresh calls this while idle. Re-publishing unchanged
+        // nil/false values would feed updateUIView back into SwiftUI forever.
+        if previewCue != nil { previewCue = nil }
+        if cueDraft != nil { cueDraft = nil }
+        if inspectingCue { inspectingCue = false }
+        if draftOrder != nil { draftOrder = nil }
+        editRevision = nil; gestureSnapshot = nil
     }
     func layer(_ id: String, forward: Bool) {
         var ordered = (draftOrder ?? project.annotations).enumerated().sorted {

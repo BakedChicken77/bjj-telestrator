@@ -1,6 +1,7 @@
 import XCTest
 import AVFoundation
 import CoreImage
+import Combine
 import CryptoKit
 import SwiftUI
 import UniformTypeIdentifiers
@@ -35,6 +36,19 @@ import UniformTypeIdentifiers
         XCTAssertEqual(try store.load(initial.id).annotations[0].n("startSec"), 16.0 / 30, accuracy: 0.000001)
         editor.history(redo: false)
         XCTAssertEqual(editor.project.annotations[0].n("startSec"), 1)
+    }
+    func testIdleCueCancellationDoesNotRepublishDuringCanvasRefresh() throws {
+        let initial = try project(), editor = try BJJNativeEditorSession(project: initial, store: store, preferences: nil)
+        defer { editor.close() }
+        var updates = 0
+        let subscription = editor.objectWillChange.sink { updates += 1 }
+        defer { subscription.cancel() }
+        for _ in 0..<20 { editor.cancelCueEdit(); editor.cancelCueGesture() }
+        XCTAssertEqual(updates, 0, "An idle canvas refresh must not trigger another SwiftUI update")
+        editor.select(initial.annotations[0].s("id")); editor.beginInspector(); editor.cancelCueEdit()
+        let completed = updates
+        for _ in 0..<20 { editor.cancelCueEdit(); editor.cancelCueGesture() }
+        XCTAssertEqual(updates, completed)
     }
     func testInspectorCanvasDraftCancelDeleteAndFailedSave() throws {
         let initial = try project(), editor = try BJJNativeEditorSession(project: initial, store: store, preferences: nil)
