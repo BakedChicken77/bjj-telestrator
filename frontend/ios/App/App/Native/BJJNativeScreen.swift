@@ -35,7 +35,7 @@ struct BJJNativeEditorScreen: View {
                 if showProperties, let cue = session.selectedCue {
                     let layout = landscape ? AnyLayout(HStackLayout(spacing: 0)) : AnyLayout(VStackLayout(spacing: 0))
                     layout {
-                        videoSurface.frame(height: landscape ? nil : geometry.size.height * (propertiesCollapsed ? 0.84 : 0.60))
+                        videoSurface.frame(height: landscape || propertiesCollapsed ? nil : geometry.size.height * 0.60)
                         VStack(spacing: 0) {
                             Button(propertiesCollapsed ? "Expand properties" : "Collapse properties", systemImage: propertiesCollapsed ? "chevron.up" : "chevron.down") { propertiesCollapsed.toggle() }
                                 .frame(minHeight: 44).accessibilityIdentifier("cue.properties.collapse")
@@ -116,6 +116,7 @@ struct BJJNativeEditorScreen: View {
     }
     private var videoSurface: some View {
         BJJNativeVideoSurface(session: session, reset: zoomReset)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .accessibilityIdentifier("editor.video")
             .background(.black)
             .allowsHitTesting(!session.preparingAudio && !session.recording)

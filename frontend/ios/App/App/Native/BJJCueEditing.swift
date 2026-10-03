@@ -190,7 +190,13 @@ extension BJJNativeEditorSession {
         guard ordered.indices.contains(next) else { return }
         ordered.swapAt(index, next)
         for i in ordered.indices { ordered[i]["zIndex"] = i; ordered[i]["updatedAt"] = BJJProject.now() }
-        if inspectingCue { draftOrder = ordered; return }
+        if inspectingCue {
+            let baseline = project.annotations.enumerated().sorted {
+                $0.element.n("zIndex") == $1.element.n("zIndex") ? $0.offset < $1.offset : $0.element.n("zIndex") < $1.element.n("zIndex")
+            }.map { $0.element.s("id") }
+            draftOrder = ordered.map { $0.s("id") } == baseline ? nil : ordered
+            return
+        }
         do { try commit(ordered) } catch { self.error = error.localizedDescription }
     }
 }

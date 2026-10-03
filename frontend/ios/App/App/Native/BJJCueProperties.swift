@@ -86,6 +86,7 @@ struct BJJCueProperties: View {
                 }
                 if let problem { Section { Text(problem).foregroundStyle(.red).accessibilityLabel("Cannot save: \(problem)") } }
             }
+            .accessibilityIdentifier("cue.properties.form")
             .navigationTitle("\(cue.s("type").capitalized) properties").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { close() }.accessibilityIdentifier("cue.properties.cancel") }

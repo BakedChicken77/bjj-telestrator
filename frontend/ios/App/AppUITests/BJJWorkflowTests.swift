@@ -155,7 +155,9 @@ final class BJJWorkflowTests: XCTestCase {
         app.buttons["cue.properties.cancel"].tap()
         label.tap()
         let delete = app.buttons["cue.properties.delete"]
-        for _ in 0..<8 { if delete.isHittable { break }; app.swipeUp() }
+        let form = app.descendants(matching: .any)["cue.properties.form"].firstMatch
+        XCTAssertTrue(form.exists)
+        for _ in 0..<10 { if delete.isHittable { break }; form.swipeUp() }
         XCTAssertTrue(delete.isHittable); delete.tap()
         XCTAssertFalse(label.exists)
         app.buttons["Undo"].tap()
