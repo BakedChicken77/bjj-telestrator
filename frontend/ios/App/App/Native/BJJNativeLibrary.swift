@@ -128,6 +128,7 @@ struct BJJNativeDeletedReview: Identifiable {
     }
     func importFile(_ url: URL, backup: Bool = false, openWhenReady: Bool = true) async {
         var imported: BJJProject?
+        var importedJobID: String?
         guard begin(backup ? "Restoring backup…" : "Copying video…", cancellable: true) else { return }
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
@@ -139,7 +140,7 @@ struct BJJNativeDeletedReview: Identifiable {
                 _ = try await service.packageJobs.importFile(id, source: url)
                 _ = try await waitPackage(id)
             } else {
-                let job = try service.mediaJobs.create(); mediaID = job.jobId
+                let job = try service.mediaJobs.create(); mediaID = job.jobId; importedJobID = job.jobId
                 let polling = pollMedia(job.jobId); defer { polling.cancel() }
                 do {
                     let (target, worker) = try service.mediaJobs.beginImport(job.jobId)
@@ -158,17 +159,23 @@ struct BJJNativeDeletedReview: Identifiable {
             }
         } catch { report(error) }
         await finish()
-        if openWhenReady, let imported { openImported(imported) }
+        if openWhenReady, let imported { openImported(imported, jobID: importedJobID) }
     }
-    private func openImported(_ project: BJJProject) {
-        do { session = try BJJNativeEditorSession(project: project, store: services().store, service: services()) }
+    private func openImported(_ project: BJJProject, jobID: String?) {
+        let began = ProcessInfo.processInfo.systemUptime
+        do {
+            session = try BJJNativeEditorSession(project: project, store: services().store, service: services())
+            session?.importJobID = jobID
+            if let jobID { try services().mediaJobs.recordMetric(jobID, "editor_open", seconds: ProcessInfo.processInfo.systemUptime - began) }
+        }
         catch { self.error = error.localizedDescription }
     }
     func importPhoto(_ item: NSItemProvider) async {
         var imported: BJJProject?
+        var importedJobID: String?
         guard begin("Downloading selected video…", cancellable: true) else { return }
         do {
-            let service = try services(), job = try service.mediaJobs.create(); mediaID = job.jobId
+            let service = try services(), job = try service.mediaJobs.create(); mediaID = job.jobId; importedJobID = job.jobId
             awaitingPhoto = true
             let downloadStart = ProcessInfo.processInfo.systemUptime
             let polling = pollMedia(job.jobId); defer { polling.cancel(); awaitingPhoto = false }
@@ -202,7 +209,7 @@ struct BJJNativeDeletedReview: Identifiable {
             } catch { service.mediaJobs.failure(job.jobId, error); throw error }
         } catch { report(error) }
         await finish()
-        if let imported { openImported(imported) }
+        if let imported { openImported(imported, jobID: importedJobID) }
     }
     private func report(_ error: Error) {
         if let mediaID, (try? service?.mediaJobs.get(mediaID).status) == "cancelled" { return }

@@ -139,11 +139,13 @@ struct BJJReviewTimeline {
                     return nil
                 }
                 guard let sample = pictureSample() else { throw reader.error ?? BJJError.invalid("The paused frame is unavailable.") }
-                let first = CMSampleBufferGetPresentationTimeStamp(sample)
-                var frameDuration = CMSampleBufferGetDuration(sample)
-                if !frameDuration.isNumeric || frameDuration.seconds <= 0 {
-                    if let next = pictureSample() { frameDuration = CMTimeSubtract(CMSampleBufferGetPresentationTimeStamp(next), first) }
-                    else { frameDuration = CMTimeSubtract(CMTimeRangeGetEnd(range), first) }
+                let first = CMSampleBufferGetOutputPresentationTimeStamp(sample)
+                var frameDuration = CMSampleBufferGetOutputDuration(sample)
+                if let next = pictureSample() {
+                    let interval = CMTimeSubtract(CMSampleBufferGetOutputPresentationTimeStamp(next), first)
+                    if interval.isNumeric && interval.seconds > 0 { frameDuration = interval }
+                } else if !frameDuration.isNumeric || frameDuration.seconds <= 0 {
+                    frameDuration = CMTimeSubtract(CMTimeRangeGetEnd(range), first)
                 }
                 reader.cancelReading()
                 guard frameDuration.seconds > 0 else { throw BJJError.invalid("Paused frame has no duration.") }

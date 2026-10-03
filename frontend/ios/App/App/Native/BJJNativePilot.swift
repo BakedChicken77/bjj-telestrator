@@ -212,6 +212,7 @@ struct BJJNativeTransportState: Codable {
     private var seekTask: Task<Void, Never>?
     private var seeking = false
     private let preferences: UserDefaults?
+    var importJobID: String?
     private var service: BJJService?
     private var exportCancelled = false
     private var jobID: String?
@@ -372,6 +373,9 @@ struct BJJNativeTransportState: Codable {
     }
     func prepareAudio() async {
         guard !closed, !recording, !preparingAudio else { return }
+        let preparationBegan = ProcessInfo.processInfo.systemUptime
+        let timingJobID = importJobID; importJobID = nil
+        defer { if let timingJobID { service?.mediaJobs.recordMetric(timingJobID, "audio_preview", seconds: ProcessInfo.processInfo.systemUptime - preparationBegan) } }
         pause(); preparingAudio = true; previewGeneration += 1
         let generation = previewGeneration
         let oldPosition = max(0, player.currentTime().seconds.isFinite ? player.currentTime().seconds : 0)

@@ -39,7 +39,7 @@ import UIKit
         defer { pausePreparing = false }
         do {
             let generator = AVAssetImageGenerator(asset: AVURLAsset(url: try store.asset(project.id, project.source.s("asset"))))
-            generator.requestedTimeToleranceBefore = CMTime(seconds: 1 / project.source.n("avgFrameRate"), preferredTimescale: 60000); generator.requestedTimeToleranceAfter = .zero
+            generator.requestedTimeToleranceBefore = .zero; generator.requestedTimeToleranceAfter = .zero
             let frame = try await generator.image(at: CMTime(seconds: pauseBoundary + ((project.source["videoStartSec"] as? NSNumber)?.doubleValue ?? 0), preferredTimescale: 48000))
             guard lifecycle.sessionID == token, recorder === self.recorder else { return }
             frozenPTS = max(0, frame.actualTime.seconds - ((project.source["videoStartSec"] as? NSNumber)?.doubleValue ?? 0))

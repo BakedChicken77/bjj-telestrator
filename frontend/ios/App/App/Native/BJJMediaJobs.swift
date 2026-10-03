@@ -135,7 +135,11 @@ final class BJJMediaWork {
         job.timings = work[id]?.metrics() ?? job.timings
         return job
     }
-    func recordMetric(_ id: String, _ key: String, seconds: Double) { work[id]?.metric(key, seconds: seconds) }
+    func recordMetric(_ id: String, _ key: String, seconds: Double) {
+        work[id]?.metric(key, seconds: seconds)
+        guard var job = jobs[id] else { return }
+        job.timings = work[id]?.metrics(); jobs[id] = job; try? persist(job)
+    }
     func create(_ project: BJJProject? = nil) throws -> BJJMediaJob {
         guard jobs.values.filter({ !$0.terminal }).count < 2 else { throw BJJError.domain("JOB_ACTIVE", "Finish or cancel the current video preparation first.") }
         if jobs.count >= 256, let oldest = jobs.values.filter({ $0.terminal }).min(by: { ($0.createdAt, $0.jobId) < ($1.createdAt, $1.jobId) }) {
