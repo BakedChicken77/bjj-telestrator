@@ -13,7 +13,7 @@ final class BJJWorkflowTests: XCTestCase {
     }
     override func tearDownWithError() throws {
         if let testRun, testRun.failureCount > 0 {
-            let screenshot = XCTAttachment(screenshot: XCUIDevice.shared.screenshot())
+            let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
             screenshot.name = "native-ui-failure"; screenshot.lifetime = .keepAlways; add(screenshot)
         }
         app.terminate()
@@ -48,7 +48,7 @@ final class BJJWorkflowTests: XCTestCase {
         waitForExpectations(timeout: 10)
         XCTAssertEqual(five.label, "Tip $5.00")
         XCTAssertTrue(app.buttons["tips.custom"].exists)
-        let portrait = XCTAttachment(screenshot: XCUIDevice.shared.screenshot())
+        let portrait = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         portrait.name = "native-tips-portrait"; portrait.lifetime = .keepAlways; add(portrait)
         app.buttons["tips.custom"].tap()
         let amount = app.textFields["tips.amount"]
@@ -65,7 +65,7 @@ final class BJJWorkflowTests: XCTestCase {
         let close = app.buttons["tips.close"].firstMatch
         expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: close)
         waitForExpectations(timeout: 10)
-        let landscape = XCTAttachment(screenshot: XCUIDevice.shared.screenshot())
+        let landscape = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         landscape.name = "native-tips-custom-landscape"; landscape.lifetime = .keepAlways; add(landscape)
         close.tap()
         XCTAssertTrue(support.waitForExistence(timeout: 10))
@@ -95,7 +95,7 @@ final class BJJWorkflowTests: XCTestCase {
         XCTAssertTrue(export.waitForExistence(timeout: 10)); export.tap()
         XCTAssertTrue(app.navigationBars["Export ready"].waitForExistence(timeout: 60), app.debugDescription)
         XCTAssertTrue(app.buttons["Share / Save to Files"].exists)
-        let screenshot = XCTAttachment(screenshot: XCUIDevice.shared.screenshot())
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "native-ui-export-ready"; screenshot.lifetime = .keepAlways; add(screenshot)
         app.buttons["export.done"].tap()
         XCTAssertTrue(app.buttons["editor.done"].waitForExistence(timeout: 10))
@@ -119,7 +119,7 @@ final class BJJWorkflowTests: XCTestCase {
             .press(forDuration: 0.1, thenDragTo: start.coordinate(withNormalizedOffset: CGVector(dx: 2, dy: 0.5)))
         XCTAssertNotEqual(start.value as? String, oldValue)
         let editedValue = start.value as? String
-        let portrait = XCTAttachment(screenshot: XCUIDevice.shared.screenshot())
+        let portrait = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         portrait.name = "native-cue-range-portrait"; portrait.lifetime = .keepAlways; add(portrait)
         XCUIDevice.shared.orientation = .landscapeLeft
         expectation(for: NSPredicate { _, _ in self.app.frame.width > self.app.frame.height }, evaluatedWith: app)
@@ -129,7 +129,7 @@ final class BJJWorkflowTests: XCTestCase {
         waitForExpectations(timeout: 10)
         XCTAssertEqual(start.value as? String, editedValue, "Rotation must preserve the draft")
         XCTAssertLessThanOrEqual(canvas.frame.maxX, start.frame.minX)
-        let landscape = XCTAttachment(screenshot: XCUIDevice.shared.screenshot())
+        let landscape = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         landscape.name = "native-cue-range-landscape"; landscape.lifetime = .keepAlways; add(landscape)
         save.tap()
         XCUIDevice.shared.orientation = .portrait
