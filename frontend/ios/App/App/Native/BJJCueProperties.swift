@@ -6,13 +6,14 @@ struct BJJCueProperties: View {
     @ObservedObject var session: BJJNativeEditorSession
     @Environment(\.dismiss) private var dismiss
     private var cue: BJJJSON {
-        get { session.cueDraft ?? session.selectedCue ?? [:] }
+        get { session.cueDraft ?? session.selectedCue ?? initialCue }
         nonmutating set { session.stageCue(newValue) }
     }
     @State private var problem: String?
+    private let initialCue: BJJJSON
     private let onClose: (() -> Void)?
     init(session: BJJNativeEditorSession, cue: BJJJSON, onClose: (() -> Void)? = nil) {
-        self.onClose = onClose; self.session = session
+        self.onClose = onClose; self.session = session; initialCue = cue
     }
     private var geometry: BJJJSON { cue["geometry"] as! BJJJSON }
     var body: some View {

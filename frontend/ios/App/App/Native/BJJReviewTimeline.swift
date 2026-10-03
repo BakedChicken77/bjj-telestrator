@@ -124,13 +124,21 @@ struct BJJReviewTimeline {
                 guard let asset = source.asset else { throw BJJError.invalid("The paused video asset is unavailable.") }
                 let reader = try AVAssetReader(asset: asset)
                 reader.timeRange = CMTimeRange(start: CMTimeMaximum(range.start, CMTimeSubtract(pts, CMTime(seconds: 0.0001, preferredTimescale: 1000000000))), end: CMTimeRangeGetEnd(range))
-                let output = AVAssetReaderTrackOutput(track: source, outputSettings: nil)
+                let output = AVAssetReaderTrackOutput(track: source, outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
                 reader.add(output)
-                guard reader.startReading(), let sample = output.copyNextSampleBuffer() else { throw reader.error ?? BJJError.invalid("Cannot decode the paused frame.") }
+                guard reader.startReading() else { throw reader.error ?? BJJError.invalid("Cannot decode the paused frame.") }
+                func pictureSample() -> CMSampleBuffer? {
+                    while let sample = output.copyNextSampleBuffer() {
+                        if CMSampleBufferGetImageBuffer(sample) != nil { return sample }
+                        // Core Media can return marker buffers without a picture.
+                    }
+                    return nil
+                }
+                guard let sample = pictureSample() else { throw reader.error ?? BJJError.invalid("The paused frame is unavailable.") }
                 let first = CMSampleBufferGetPresentationTimeStamp(sample)
                 var frameDuration = CMSampleBufferGetDuration(sample)
                 if !frameDuration.isNumeric || frameDuration.seconds <= 0 {
-                    if let next = output.copyNextSampleBuffer() { frameDuration = CMTimeSubtract(CMSampleBufferGetPresentationTimeStamp(next), first) }
+                    if let next = pictureSample() { frameDuration = CMTimeSubtract(CMSampleBufferGetPresentationTimeStamp(next), first) }
                     else { frameDuration = CMTimeSubtract(CMTimeRangeGetEnd(range), first) }
                 }
                 reader.cancelReading()
