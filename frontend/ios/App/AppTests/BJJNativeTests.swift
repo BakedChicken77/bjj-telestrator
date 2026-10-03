@@ -171,6 +171,21 @@ import UniformTypeIdentifiers
         var wrong = hold; wrong["durationTicks"] = -1; json["reviewTimeline"] = ["version": 1, "holds": [wrong]]
         XCTAssertThrowsError(try BJJProject(json))
     }
+    func testSourceEndTrimKeepsRegistryAndActualWAVDurationEqual() throws {
+        let initial = try project(), id = UUID().uuidString.lowercased(), asset = "voiceover/\(UUID().uuidString.lowercased()).wav"
+        let path = try store.safeURL(initial.id, asset)
+        try tone(path, frequency: 880, duration: 0.75, pcm16: true)
+        try BJJNativeRecording.trimUnregisteredTake(path, frames: 24000)
+        let audio = try AVAudioFile(forReading: path)
+        XCTAssertEqual(audio.length, 24000); XCTAssertEqual(audio.fileFormat.streamDescription.pointee.mBitsPerChannel, 16)
+        let clip: BJJJSON = ["id": id, "asset": asset, "startSec": 3.5, "durationSec": 0.5, "endSec": 4.0,
+            "gain": 1.0, "muted": false, "timingOffsetMs": 0.0, "recordedAt": BJJProject.now(), "codec": "pcm_s16le", "sampleRate": 48000, "channels": 1]
+        try store.registerClip(initial.id, clip: clip)
+        let recovered = try store.loadRecoveringRecordings(initial.id)
+        XCTAssertEqual(recovered.voiceovers[0].n("durationSec"), Double(audio.length) / audio.fileFormat.sampleRate)
+        XCTAssertThrowsError(try BJJNativeRecording.trimUnregisteredTake(path, frames: 0))
+        XCTAssertEqual(try AVAudioFile(forReading: path).length, 24000)
+    }
     func testPausedVFRFrameAndRangeExport() async throws {
         let fixture = try XCTUnwrap(Bundle(for: BJJNativeTests.self).url(forResource: "media-timing-conformance", withExtension: "json"))
         let cases = try XCTUnwrap(try store.readJSON(fixture)["cases"] as? [BJJJSON])

@@ -153,7 +153,14 @@ import UIKit
         reset(); url = nil
         guard let capture, let path, let document, let storage else { finished?(nil, nil, reason); return }
         do {
-            let audio = try AVAudioFile(forReading: path)
+            var audio = try AVAudioFile(forReading: path)
+            if holds.isEmpty && !document.pauseAware {
+                let maximum = Int64((max(0, document.duration - startSec) * audio.fileFormat.sampleRate).rounded(.down))
+                if audio.length > maximum {
+                    try Self.trimUnregisteredTake(path, frames: maximum)
+                    audio = try AVAudioFile(forReading: path)
+                }
+            }
             let duration = Double(audio.length) / audio.fileFormat.sampleRate
             guard duration >= 0.05 else { try? FileManager.default.removeItem(at: path); finished?(nil, nil, "The take was too short to save."); return }
             let id = path.deletingPathExtension().lastPathComponent
@@ -180,6 +187,26 @@ import UIKit
             }
             _ = capture // retain until the file has closed and its metadata was read
         } catch { finished?(nil, error, "The take could not be committed. Its audio file was preserved.") }
+    }
+    /// A delayed source-end callback may capture a few extra microphone samples.
+    /// Trim only an ordinary, unregistered take; pause-aware takes retain every
+    /// sample. Registry duration must match the actual WAV for portable backups.
+    static func trimUnregisteredTake(_ path: URL, frames: Int64) throws {
+        let temporary = path.deletingLastPathComponent().appendingPathComponent("trim-\(UUID().uuidString).wav")
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        try autoreleasepool {
+            let source = try AVAudioFile(forReading: path)
+            guard frames > 0, frames <= source.length else { throw BJJError.invalid("The take has no valid source-time audio.") }
+            let destination = try AVAudioFile(forWriting: temporary, settings: source.fileFormat.settings)
+            let buffer = AVAudioPCMBuffer(pcmFormat: source.processingFormat, frameCapacity: 65536)!
+            var remaining = frames
+            while remaining > 0 {
+                try source.read(into: buffer, frameCount: AVAudioFrameCount(min(remaining, 65536)))
+                guard buffer.frameLength > 0 else { throw BJJError.invalid("The captured audio ended unexpectedly.") }
+                try destination.write(from: buffer); remaining -= Int64(buffer.frameLength)
+            }
+        }
+        _ = try FileManager.default.replaceItemAt(path, withItemAt: temporary)
     }
     private func reset() {
         clockTimer?.invalidate(); clockTimer = nil; pauseStart = nil; pausePreparing = false
