@@ -132,6 +132,79 @@ import SwiftUI
         XCTAssertEqual(try redPixels(output, time: 29.0 / 30), 0)
         XCTAssertGreaterThan(try redPixels(output, time: 1), 20)
     }
+    func testReviewTimelineBoundariesPlacementsAndCompatibility() throws {
+        let hold: BJJJSON = ["id": UUID().uuidString.lowercased(), "sourceTicks": 4 * 48000, "durationTicks": 5 * 48000, "frozenPTS": 4.0]
+        let timeline = BJJReviewTimeline(sourceDuration: 10, holds: [hold])
+        XCTAssertEqual(timeline.duration, 15)
+        XCTAssertEqual(timeline.source(at: 3.9), 3.9)
+        XCTAssertEqual(timeline.source(at: 4), 4)
+        XCTAssertEqual(timeline.source(at: 8.999), 4)
+        XCTAssertEqual(timeline.source(at: 9), 4)
+        XCTAssertEqual(timeline.source(at: 14), 9)
+        XCTAssertEqual(timeline.output(before: 4), 4)
+        XCTAssertEqual(timeline.output(after: 4), 9)
+        let placements = timeline.placements(start: 3, duration: 8)
+        XCTAssertEqual(placements.count, 3)
+        XCTAssertEqual(placements.map { $0.n("durationTicks") }, [48000, 240000, 96000])
+        XCTAssertEqual(placements.compactMap { timeline.position($0) }, [3, 4, 9])
+        let initial = try project()
+        var json = initial.json; json["reviewTimeline"] = timeline.json
+        XCTAssertThrowsError(try BJJProject(json), "Marker prevents older editors silently changing clocks")
+        json["requiredCapabilities"] = (initial.json["requiredCapabilities"] as! [String]) + [BJJReviewTimeline.capability]
+        XCTAssertNoThrow(try BJJProject(json))
+        var wrong = hold; wrong["durationTicks"] = -1; json["reviewTimeline"] = ["version": 1, "holds": [wrong]]
+        XCTAssertThrowsError(try BJJProject(json))
+    }
+    func testPauseNarrationReceiptReopenUndoPreviewAndMP4() async throws {
+        executionTimeAllowance = 300
+        let service = try BJJService(store: store)
+        let initial = try await service.importFile(try await sourceVideo(audio: true), originalName: "pause.mp4")
+        let id = UUID().uuidString.lowercased(), holdID = UUID().uuidString.lowercased()
+        let hold: BJJJSON = ["id": holdID, "sourceTicks": 48000, "durationTicks": 240000, "frozenPTS": 1.0]
+        let timeline = BJJReviewTimeline(sourceDuration: 4, holds: [hold])
+        let asset = "voiceover/\(id).wav"
+        try tone(store.safeURL(initial.id, asset), frequency: 880, duration: 7)
+        let take: BJJJSON = ["id": id, "asset": asset, "durationSec": 7.0, "sampleCount": 336000,
+            "gain": 1.0, "muted": false, "recordedAt": BJJProject.now(), "codec": "pcm_f32le", "sampleRate": 48000,
+            "channels": 1, "placements": timeline.placements(start: 0.5, duration: 7)]
+        let receipt: BJJJSON = ["kind": "review-narration-v1", "operationId": UUID().uuidString.lowercased(), "baseRevision": initial.revision, "take": take, "holds": [hold]]
+        try store.registerReviewReceipt(initial.id, receipt: receipt)
+        XCTAssertFalse(try store.load(initial.id).pauseAware)
+        let recovered = try BJJStore(root: root).loadRecoveringRecordings(initial.id)
+        XCTAssertEqual(recovered.outputDuration, 9)
+        XCTAssertEqual(recovered.duration, 4)
+        XCTAssertEqual(recovered.reviewNarration.count, 1)
+        XCTAssertEqual(try store.loadRecoveringRecordings(initial.id).revision, recovered.revision)
+        let plan = try BJJRenderPlan(store: store, project: recovered)
+        XCTAssertEqual(plan.json["version"] as? Int, 3)
+        XCTAssertEqual(plan.json["assets"] as? [BJJJSON] != nil, true)
+        let mix = root.appendingPathComponent("pause-mix.caf")
+        let preview = try await BJJAudioComposition.preview(project: recovered, store: store, target: mix)
+        let previewDuration = try await preview.asset.load(.duration)
+        XCTAssertEqual(previewDuration.seconds, 9, accuracy: 0.04)
+        let previewEnergy = try await audioEnergy(mix, from: 2, to: 5)
+        XCTAssertGreaterThan(previewEnergy, 0.05)
+        let media = try await BJJMedia.inspect(store.asset(initial.id, initial.source.s("asset")), reference: initial.source.s("asset"), originalName: "pause")
+        let output = root.appendingPathComponent("pause-export.mp4")
+        try await BJJRenderer().render(media: media, project: recovered, store: store, output: output) { _ in }
+        let exported = try await BJJMedia.inspect(output, reference: "exports/check.mp4", originalName: "check")
+        XCTAssertEqual(exported.videoRange.duration.seconds, 9, accuracy: 0.04)
+        let outputEnergy = try await audioEnergy(output, from: 2, to: 5)
+        XCTAssertGreaterThan(outputEnergy, 0.05)
+        let editor = try BJJNativeEditorSession(project: recovered, store: store, preferences: nil)
+        defer { editor.close() }
+        editor.updateAudio(removing: id)
+        XCTAssertEqual(editor.project.reviewTimeline.holds.count, 1, "Take removal retains project-owned pauses")
+        // Avoid racing preview regeneration with the next editing transaction.
+        for _ in 0..<100 { if !editor.preparingAudio { break }; try await Task.sleep(nanoseconds: 10_000_000) }
+        editor.history(redo: false)
+        XCTAssertEqual(editor.project.reviewNarration.count, 1)
+        for _ in 0..<100 { if !editor.preparingAudio { break }; try await Task.sleep(nanoseconds: 10_000_000) }
+        editor.removeNarrationPause(holdID)
+        XCTAssertEqual(editor.project.outputDuration, 4)
+        XCTAssertFalse((editor.project.reviewNarration[0]["placements"] as! [BJJJSON]).contains { $0["holdId"] as? String == holdID })
+        XCTAssertNoThrow(try store.asset(initial.id, asset))
+    }
     func testNativeNarrationPreviewRangeExportAndImmutableRetry() async throws {
         executionTimeAllowance = 300
         let service = try BJJService(store: store)

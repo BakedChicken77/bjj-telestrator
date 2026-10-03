@@ -207,6 +207,13 @@ struct BJJProject {
             try BJJValidate.number(clip["sampleRate"], "sample rate", 1...384000, integer: true)
             try BJJValidate.number(clip["channels"], "channels", 1...8, integer: true)
         }
+        let timeline = try BJJReviewTimeline(value, sourceDuration: duration, capable: (value["requiredCapabilities"] as! [String]).contains(BJJReviewTimeline.capability))
+        let narration = try BJJValidate.objects(value["reviewNarration"] ?? [BJJJSON](), "review narration", maximum: 200)
+        guard narration.count + (value["voiceovers"] as! [BJJJSON]).count <= 200 else { throw BJJError.invalid("This review already has 200 takes.") }
+        for clip in narration {
+            guard ids.insert(try BJJValidate.uuid(clip["id"])).inserted else { throw BJJError.invalid("Duplicate narration identifier.") }
+            try timeline.validateTake(clip)
+        }
         json = value
     }
 
@@ -306,7 +313,7 @@ final class BJJStore {
         if (json["schemaVersion"] as? Int) != BJJProjectMigrations.currentVersion {
             _ = try asset(id, validated.source["asset"] as! String)
             _ = try asset(id, validated.proxy["asset"] as! String)
-            for clip in validated.voiceovers { _ = try asset(id, clip["asset"] as! String) }
+            for clip in validated.allTakes { _ = try asset(id, clip["asset"] as! String) }
             let backup = url.deletingLastPathComponent().appendingPathComponent("project.pre-migration-v1.json")
             let original = try Data(contentsOf: url)
             if FileManager.default.fileExists(atPath: backup.path) {
@@ -408,6 +415,11 @@ final class BJJStore {
         var merged = input.json
         var clips = input.voiceovers
         for (id, value) in pending {
+            if let receipt = value as? BJJJSON, receipt["kind"] as? String == "review-narration-v1" {
+                merged = try BJJReviewReceipt.apply(receipt, to: merged)
+                if acknowledgeRecordings { pending.removeValue(forKey: id) }
+                continue
+            }
             if clips.contains(where: { $0["id"] as? String == id }) {
                 if acknowledgeRecordings { pending.removeValue(forKey: id) }
             } else if previous?.voiceovers.contains(where: { $0["id"] as? String == id }) != true {
@@ -475,12 +487,15 @@ final class BJJStore {
     }
     func validateRecordings(_ project: BJJProject) throws {
         let registry = try recordings(project.id)
-        for clip in project.voiceovers {
+        for clip in project.allTakes {
             guard let original = registry[clip["id"] as! String] as? BJJJSON else { throw BJJError.invalid("Unknown voiceover asset.") }
             for field in ["id", "asset", "durationSec", "recordedAt", "codec", "sampleRate", "channels"] {
                 guard NSDictionary(dictionary: ["value": clip[field]!]).isEqual(to: ["value": original[field]!]) else {
                     throw BJJError.invalid("Recorded media metadata cannot be changed.")
                 }
+            }
+            if let count = clip["sampleCount"] {
+                guard NSDictionary(dictionary: ["value": count]).isEqual(to: ["value": original["sampleCount"] ?? NSNull()]) else { throw BJJError.invalid("Recorded sample count cannot change.") }
             }
             _ = try asset(project.id, clip["asset"] as! String)
         }
@@ -492,6 +507,16 @@ final class BJJStore {
     private func pendingRecordings(_ id: String) throws -> BJJJSON {
         let url = try directory(id).appendingPathComponent("voiceover/pending.json")
         return FileManager.default.fileExists(atPath: url.path) ? try readJSON(url) : [:]
+    }
+    func registerReviewReceipt(_ id: String, receipt: BJJJSON) throws {
+        lock.lock(); defer { lock.unlock() }
+        let current = try load(id)
+        _ = try BJJReviewReceipt.apply(receipt, to: current.json)
+        let take = try BJJValidate.object(receipt["take"], "recorded take")
+        var registry = try recordings(id); registry[take.s("id")] = take
+        try writeJSON(registry, to: safeURL(id, "voiceover/assets.json"))
+        var pending = try pendingRecordings(id); pending[take.s("id")] = receipt
+        try writeJSON(pending, to: safeURL(id, "voiceover/pending.json"))
     }
     func registerClip(_ id: String, clip: BJJJSON) throws {
         lock.lock(); defer { lock.unlock() }

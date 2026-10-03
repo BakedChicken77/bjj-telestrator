@@ -292,22 +292,22 @@ final class BJJRenderer {
     func render(media: BJJMedia, project: BJJProject?, store: BJJStore, output: URL,
                 proxy: Bool = false, options: BJJExportOptions? = nil, progress: @escaping (Double) -> Void) async throws {
         if let options, let project { try options.validate(project) }
+        let timeline = project?.reviewTimeline ?? BJJReviewTimeline(sourceDuration: media.videoRange.duration.seconds)
         let start = options?.start ?? 0
-        let duration = CMTime(seconds: (options?.end ?? media.videoRange.duration.seconds) - start, preferredTimescale: 60000)
+        let duration = CMTime(seconds: (options?.end ?? timeline.duration) - start, preferredTimescale: 60000)
         let fps = min(60, project?.exportSettings.n("fps") ?? min(30, media.fps))
         let size = Self.outputSize(media.orientedSize, maximum: proxy ? 1920 : options.map { CGFloat($0.maximum) })
         let composition = AVMutableComposition()
         guard let video = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) else {
             throw BJJError.invalid("Unable to prepare a video track.")
         }
-        try video.insertTimeRange(media.videoRange, of: media.video, at: .zero)
+        try await timeline.insertVideo(media.video, range: media.videoRange, into: video)
         var audioProject = project
         if let project, let options {
-            var document = project.json
-            document["voiceovers"] = project.voiceovers.filter {
-                $0.n("startSec") + $0.n("timingOffsetMs") / 1000 < options.end && $0.n("endSec") + $0.n("timingOffsetMs") / 1000 > options.start
-            }
-            audioProject = try BJJProject(document)
+            var json = project.json
+            json["voiceovers"] = project.voiceovers.filter { BJJTakeDisplay.start($0, project: project) < options.end && BJJTakeDisplay.end($0, project: project) > options.start }
+            if project.pauseAware { json["reviewNarration"] = project.reviewNarration.filter { BJJTakeDisplay.start($0, project: project) < options.end && BJJTakeDisplay.end($0, project: project) > options.start } }
+            audioProject = try BJJProject(json)
         }
         let audio = try await BJJAudioComposition.build(media: media, project: audioProject, store: store, composition: composition)
         let mixScale = audio.scale
@@ -320,7 +320,7 @@ final class BJJRenderer {
         videoComposition.renderSize = size
         videoComposition.frameDuration = CMTime(seconds: 1 / fps, preferredTimescale: 60000)
         let instruction = AVMutableVideoCompositionInstruction()
-        instruction.timeRange = CMTimeRange(start: .zero, duration: media.videoRange.duration)
+        instruction.timeRange = CMTimeRange(start: .zero, duration: CMTime(seconds: timeline.duration, preferredTimescale: 48000))
         let layer = AVMutableVideoCompositionLayerInstruction(assetTrack: video)
         layer.setTransform(media.transform.concatenating(CGAffineTransform(scaleX: size.width / media.orientedSize.width,
                                                                           y: size.height / media.orientedSize.height)), at: .zero)
@@ -411,7 +411,7 @@ final class BJJRenderer {
                             complete(.failure(BJJError.invalid("Not enough memory to render this resolution."))); return
                         }
                         var image = CIImage(cvPixelBuffer: source)
-                        if let overlayImage = overlay.image(at: pts.seconds) { image = overlayImage.composited(over: image) }
+                        if let overlayImage = overlay.image(at: timeline.source(at: pts.seconds)) { image = overlayImage.composited(over: image) }
                         context.render(image, to: destination, bounds: CGRect(origin: .zero, size: size), colorSpace: deliverySpace)
                         guard adaptor.append(destination, withPresentationTime: CMTimeSubtract(pts, CMTime(seconds: start, preferredTimescale: 60000))) else {
                             complete(.failure(writer.error ?? BJJError.invalid("Unable to encode a video frame."))); return

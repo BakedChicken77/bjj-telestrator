@@ -52,7 +52,7 @@ enum BJJAssets {
     static func required(_ project: BJJProject, proxy: Bool = false) -> [String: (String, BJJJSON)] {
         var result = [project.source.s("asset"): ("source", project.source)]
         if proxy { result[project.proxy.s("asset")] = ("proxy", project.proxy) }
-        for clip in project.voiceovers {
+        for clip in project.allTakes {
             result[clip.s("asset")] = ("voiceover", clip.filter { ["durationSec", "codec", "sampleRate", "channels", "recordedAt"].contains($0.key) })
         }
         return result
@@ -102,7 +102,7 @@ enum BJJAssets {
     static func exportEstimate(_ project: BJJProject) -> BJJJSON {
         let size = BJJRenderer.outputSize(CGSize(width: project.source.n("displayWidth"), height: project.source.n("displayHeight")))
         let bitrate = min(60_000_000, max(1_000_000, Double(size.width * size.height) * project.exportSettings.n("fps") * 0.12 * pow(2, (23 - project.exportSettings.n("crf")) / 6)))
-        let output = Int64(ceil(project.duration * (bitrate + 192000) / 8))
+        let output = Int64(ceil(project.outputDuration * (bitrate + 192000) / 8))
         // AVFoundation streams frames/audio; allow output relocation plus metadata.
         return estimate("export", output: output, working: output + 32 * mib)
     }

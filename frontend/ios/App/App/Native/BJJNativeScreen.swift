@@ -146,9 +146,9 @@ struct BJJNativeEditorScreen: View {
         HStack(spacing: 12) {
             Button(session.playing ? "Pause" : "Play", systemImage: session.playing ? "pause.fill" : "play.fill") { session.togglePlayback() }
                 .labelStyle(.iconOnly).font(.title2).frame(width: 44, height: 44)
-            Slider(value: Binding(get: { session.time }, set: { session.seek($0) }), in: 0...session.project.duration)
+            Slider(value: Binding(get: { session.outputTime }, set: { session.seekOutput($0) }), in: 0...session.project.outputDuration)
                 .accessibilityLabel("Video position").accessibilityValue("\(Int(session.time)) seconds")
-            Text(String(format: "%02d:%02d", Int(session.time) / 60, Int(session.time) % 60))
+            Text(String(format: "%02d:%02d", Int(session.outputTime) / 60, Int(session.outputTime) % 60))
                 .monospacedDigit().font(.caption)
             Button("Fit video", systemImage: "arrow.down.right.and.arrow.up.left") { zoomReset += 1 }
                 .labelStyle(.iconOnly).frame(width: 44, height: 44)
@@ -160,6 +160,8 @@ struct BJJNativeEditorScreen: View {
                 HStack {
                     Label("Recording at 1×", systemImage: "mic.fill").foregroundStyle(.red)
                     ProgressView(value: Double(max(0, min(1, (session.recordingLevel + 60) / 60))))
+                    Button(session.recordingVideoPaused ? "Resume video" : "Pause video", systemImage: session.recordingVideoPaused ? "play.fill" : "pause.fill") { Task { await session.toggleRecordingVideo() } }
+                        .accessibilityIdentifier("narration.video.pause")
                     Button("Stop", systemImage: "stop.fill") { session.stopRecording() }.buttonStyle(.borderedProminent).tint(.red)
                 }
                 Text(session.audioRoute).font(.caption).foregroundStyle(.secondary)
