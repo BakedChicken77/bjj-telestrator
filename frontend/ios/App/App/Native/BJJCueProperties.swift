@@ -5,12 +5,14 @@ import SwiftUI
 struct BJJCueProperties: View {
     @ObservedObject var session: BJJNativeEditorSession
     @Environment(\.dismiss) private var dismiss
-    @State private var cue: BJJJSON
+    private var cue: BJJJSON {
+        get { session.cueDraft ?? session.selectedCue ?? [:] }
+        nonmutating set { session.stageCue(newValue) }
+    }
     @State private var problem: String?
     private let onClose: (() -> Void)?
-    private let revision: Int
     init(session: BJJNativeEditorSession, cue: BJJJSON, onClose: (() -> Void)? = nil) {
-        self.onClose = onClose; self.session = session; _cue = State(initialValue: cue); revision = session.project.revision
+        self.onClose = onClose; self.session = session
     }
     private var geometry: BJJJSON { cue["geometry"] as! BJJJSON }
     var body: some View {
@@ -73,6 +75,14 @@ struct BJJCueProperties: View {
                         Button("Make 10% larger") { resize(1.1) }; Button("Make 10% smaller") { resize(0.9) }
                     }
                 }
+                Section("Cue actions") {
+                    Button("Forward one layer") { session.layer(cue.s("id"), forward: true) }
+                    Button("Backward one layer") { session.layer(cue.s("id"), forward: false) }
+                    Button("Delete cue", role: .destructive) {
+                        do { try session.deleteInspector(); close() }
+                        catch { problem = error.localizedDescription }
+                    }.accessibilityIdentifier("cue.properties.delete")
+                }
                 if let problem { Section { Text(problem).foregroundStyle(.red).accessibilityLabel("Cannot save: \(problem)") } }
             }
             .navigationTitle("\(cue.s("type").capitalized) properties").navigationBarTitleDisplayMode(.inline)
@@ -80,15 +90,14 @@ struct BJJCueProperties: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { close() }.accessibilityIdentifier("cue.properties.cancel") }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        do { try session.updateCue(cue, expectedRevision: revision); close() }
+                        do { try session.saveInspector(); close() }
                         catch { problem = error.localizedDescription }
                     }.accessibilityIdentifier("cue.properties.save")
                 }
                 ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("Done") { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) } }
             }
         }
-        .onAppear { session.previewCue = cue }
-        .onDisappear { session.cancelCueEdit() }
+
     }
     private func close() { session.cancelCueEdit(); if let onClose { onClose() } else { dismiss() } }
     private func changeBoundary(_ start: Bool, _ seconds: Double) {

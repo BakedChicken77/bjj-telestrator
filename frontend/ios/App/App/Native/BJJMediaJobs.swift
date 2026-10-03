@@ -15,6 +15,8 @@ struct BJJMediaJob: Codable {
     var errorCode: String?
     var error: String?
     var projectRevision: Int?
+    var timings: [String: Double]?
+    var mediaProfile: [String: String]?
     let createdAt: String
     var terminal: Bool { ["completed", "failed", "cancelled"].contains(status) }
     func json() throws -> BJJJSON {
@@ -31,10 +33,15 @@ final class BJJMediaWork {
     private let lock = NSLock()
     private var copied: Int64 = 0, total: Int64 = 0
     private var fraction: Double = 0
+    private var timings: [String: Double] = [:]
+    func metric(_ key: String, seconds: Double) { lock.lock(); timings[key] = max(0, seconds); lock.unlock() }
+    func metrics() -> [String: Double] { lock.lock(); defer { lock.unlock() }; return timings }
     func copying(_ count: Int64, _ size: Int64) { lock.lock(); copied = count; total = size; lock.unlock() }
     func rendering(_ value: Double) { lock.lock(); fraction = max(0, min(1, value)); lock.unlock() }
     func snapshot() -> (Int64, Int64, Double) { lock.lock(); defer { lock.unlock() }; return (copied, total, fraction) }
     static func copy(_ input: URL, _ target: URL, store: BJJStore, work: BJJMediaWork) throws {
+        let began = ProcessInfo.processInfo.systemUptime
+        defer { work.metric("copy", seconds: ProcessInfo.processInfo.systemUptime - began) }
         let size = Int64(try input.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0)
         guard size > 0, size <= 4 * 1024 * 1024 * 1024 else { throw BJJError.domain("MEDIA_UNSUPPORTED", "Choose a nonempty video smaller than 4 GiB.") }
         try store.checkSpace(required: (BJJAssets.estimate("import", output: 0, incoming: size)["requiredBytes"] as! NSNumber).int64Value)
@@ -125,8 +132,10 @@ final class BJJMediaWork {
                 job.copiedBytes = state.0; job.totalBytes = state.1; job.progress = min(1, Double(state.0) / Double(state.1))
             } else if job.stage == "preparing_preview" { job.progress = state.2 }
         }
+        job.timings = work[id]?.metrics() ?? job.timings
         return job
     }
+    func recordMetric(_ id: String, _ key: String, seconds: Double) { work[id]?.metric(key, seconds: seconds) }
     func create(_ project: BJJProject? = nil) throws -> BJJMediaJob {
         guard jobs.values.filter({ !$0.terminal }).count < 2 else { throw BJJError.domain("JOB_ACTIVE", "Finish or cancel the current video preparation first.") }
         if jobs.count >= 256, let oldest = jobs.values.filter({ $0.terminal }).min(by: { ($0.createdAt, $0.jobId) < ($1.createdAt, $1.jobId) }) {
@@ -154,6 +163,7 @@ final class BJJMediaWork {
         let cancelled = (try? work[id]?.cancellation.check()) == nil
         let code = cancelled ? "JOB_CANCELLED" : ((error as? BJJError)?.code ?? ((error as? CocoaError)?.code == .fileWriteOutOfSpace ? "STORAGE_LOW" : "MEDIA_FAILED"))
         try? update(id) {
+            $0.timings = work[id]?.metrics()
             $0.status = cancelled ? "cancelled" : "failed"; $0.errorCode = code
             $0.error = cancelled ? "Video preparation was cancelled." : ((error as? BJJError)?.localizedDescription ?? "Video preparation failed. Check storage and choose a complete supported source. Existing projects were preserved.")
         }
@@ -206,6 +216,8 @@ final class BJJMediaWork {
     }
     private func prepareMedia(_ id: String, sourceReference: String, originalName: String, snapshot: BJJProject?) async throws -> BJJProject {
         let job = try get(id), worker = work[id]!
+        let began = ProcessInfo.processInfo.systemUptime
+        var stageStart = began
         let temporary = try store.safeURL(job.projectId, "temp/media-\(id).mp4")
         let proxyRef = "proxy/\(UUID().uuidString.lowercased()).mp4", encoder = BJJRenderer()
         let candidate = try store.safeURL(job.projectId, proxyRef)
@@ -229,7 +241,11 @@ final class BJJMediaWork {
                 }
                 return try BJJAssets.digest(source, cancellation: worker.cancellation)
             }
+            worker.metric("source_hash_before", seconds: ProcessInfo.processInfo.systemUptime - stageStart)
+            stageStart = ProcessInfo.processInfo.systemUptime
             let media = try await BJJMedia.inspect(source, reference: sourceReference, originalName: originalName)
+            worker.metric("inspect", seconds: ProcessInfo.processInfo.systemUptime - stageStart)
+            try update(id) { $0.mediaProfile = ["codec": media.json.s("codec"), "durationSec": String(media.videoRange.duration.seconds), "dimensions": "\(Int(media.orientedSize.width))x\(Int(media.orientedSize.height))", "fps": String(media.fps), "hdr": String(BJJColor.isHDR(media.json))] }
             if let snapshot {
                 guard abs(media.videoRange.duration.seconds - snapshot.duration) <= 0.001,
                       abs(media.videoRange.start.seconds - ((snapshot.source["videoStartSec"] as? NSNumber)?.doubleValue ?? 0)) <= 0.001,
@@ -240,7 +256,10 @@ final class BJJMediaWork {
             try store.checkSpace(required: (BJJAssets.proxyEstimate(media.videoRange.duration.seconds)["requiredBytes"] as! NSNumber).int64Value)
             try worker.cancellation.check()
             try update(id) { $0.stage = "preparing_preview"; $0.progress = 0 }
+            stageStart = ProcessInfo.processInfo.systemUptime
             try await encoder.render(media: media, project: nil, store: store, output: temporary, proxy: true) { worker.rendering($0 / media.videoRange.duration.seconds) }
+            worker.metric("proxy_encode", seconds: ProcessInfo.processInfo.systemUptime - stageStart)
+            stageStart = ProcessInfo.processInfo.systemUptime
             try update(id) { $0.stage = "validating"; $0.progress = nil }
             let preview = try await BJJMedia.inspect(temporary, reference: proxyRef, originalName: originalName)
             let expected = BJJRenderer.outputSize(media.orientedSize, maximum: 1920)
@@ -250,9 +269,13 @@ final class BJJMediaWork {
                   preview.json["hasAudio"] as? Bool != true || preview.json.s("audioCodec") == "aac" else {
                 throw BJJError.domain("MEDIA_VALIDATION_FAILED", "The preview failed its orientation, timing, codec or audio check. The previous project was preserved.")
             }
+            worker.metric("proxy_validation", seconds: ProcessInfo.processInfo.systemUptime - stageStart)
+            stageStart = ProcessInfo.processInfo.systemUptime
             guard try await BJJAssets.offMain({ try BJJAssets.digest(source, cancellation: worker.cancellation) }) == hash else {
                 throw BJJError.domain("ASSET_CHANGED", "The original changed during preparation. Restore its original file.")
             }
+            worker.metric("source_hash_after", seconds: ProcessInfo.processInfo.systemUptime - stageStart)
+            stageStart = ProcessInfo.processInfo.systemUptime
             var proxy = preview.json; proxy["durationSec"] = media.videoRange.duration.seconds
             // No await between cancellation/revision check and atomic publication.
             let saved = try store.locked {
@@ -274,7 +297,9 @@ final class BJJMediaWork {
                 try FileManager.default.moveItem(at: temporary, to: candidate)
                 return try store.save(BJJProject(json), creating: snapshot == nil, replacingProxy: snapshot != nil)
             }
-            try update(id) { $0.status = "completed"; $0.stage = "ready"; $0.progress = 1; $0.projectRevision = saved.revision }
+            worker.metric("publish", seconds: ProcessInfo.processInfo.systemUptime - stageStart)
+            worker.metric("prepare_total", seconds: ProcessInfo.processInfo.systemUptime - began)
+            try update(id) { $0.timings = worker.metrics(); $0.status = "completed"; $0.stage = "ready"; $0.progress = 1; $0.projectRevision = saved.revision }
             return saved
         }
     }

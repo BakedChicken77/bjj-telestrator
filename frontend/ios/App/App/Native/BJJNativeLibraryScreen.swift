@@ -12,6 +12,7 @@ struct BJJNativeHome: View {
     }
     @Environment(\.scenePhase) private var scenePhase
     @State private var search = ""
+    @State private var previousReviews = false
     @State private var photos = false
     @State private var files = false
     @State private var backupImport = false
@@ -25,52 +26,35 @@ struct BJJNativeHome: View {
     }
     var body: some View {
         NavigationStack {
-            List {
-                Section {
-                    Menu {
-                        Button("Choose from Photos", systemImage: "photo.on.rectangle") { photos = true }
-                        Button("Choose from Files", systemImage: "folder") { backupImport = false; files = true }
-                        Button("Restore project backup", systemImage: "arrow.down.doc") { backupImport = true; files = true }
-                    } label: { Label("New review", systemImage: "plus.circle.fill").font(.headline).frame(minHeight: 44) }
-                    Text("Draw on your videos, record commentary, and share your perspective.")
-                        .font(.footnote).foregroundStyle(.secondary)
+            VStack(spacing: 0) {
+                ZStack {
+                    Color.black
+                    VStack(spacing: 24) {
+                        Image("FreshFrameLogo").resizable().scaledToFit().frame(width: 144, height: 144).accessibilityHidden(true)
+                        Text("Your next perspective starts here.").font(.headline).foregroundStyle(.white)
+                        Menu {
+                            Button("Choose from Photos", systemImage: "photo.on.rectangle") { photos = true }
+                            Button("Choose from Files", systemImage: "folder") { backupImport = false; files = true }
+                            Button("Previous reviews", systemImage: "clock") { previousReviews = true }
+                        } label: { Label("Select a video", systemImage: "plus.circle.fill").frame(minHeight: 44) }
+                            .buttonStyle(.borderedProminent).accessibilityIdentifier("home.selectVideo")
+                    }.padding()
                 }
-                ForEach([true, false], id: \.self) { native in
-                    let items = filtered.filter { $0.preview == native }
-                    if !items.isEmpty {
-                        Section(native ? "Your reviews" : "Earlier reviews · open a protected copy") {
-                            ForEach(items, id: \.key) { review in
-                                Button { Task { await library.open(review) } } label: {
-                                    BJJNativeLibraryRow(library: library, review: review)
-                                }
-                                .accessibilityIdentifier("review.\(review.id)")
-                                .contextMenu {
-                                    if native && review.problem == nil {
-                                        Button("Rename", systemImage: "pencil") { name = review.name; renaming = review }
-                                        Button("Duplicate", systemImage: "plus.square.on.square") { Task { await library.change(review, action: "Duplicate") } }
-                                        Button("Back up", systemImage: "square.and.arrow.up") { Task { await library.change(review, action: "Back up") } }
-                                        Button("Move to Recently Deleted", systemImage: "trash", role: .destructive) { trash = review }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                if filtered.isEmpty && !library.busy {
-                    ContentUnavailableView(search.isEmpty ? "Start a review" : "No matching reviews", systemImage: "film",
-                                           description: Text(search.isEmpty ? "Choose a video from Photos or Files." : "Try a different name."))
-                }
-                Section {
-                    Button("Recently Deleted", systemImage: "trash") { recentlyDeleted = true }.frame(minHeight: 44)
-                    Button("Support Fresh Frame", systemImage: "heart") { support = true }
-                        .frame(minHeight: 44).accessibilityIdentifier("tips.open")
-                    Link("Help & support", destination: URL(string: "https://github.com/BakedChicken77/bjj-telestrator/blob/main/docs/SUPPORT.md")!)
-                    Link("Privacy policy", destination: URL(string: "https://github.com/BakedChicken77/bjj-telestrator/blob/main/docs/PRIVACY.md")!)
-                }
+                HStack {
+                    Button("Previous reviews", systemImage: "clock") { previousReviews = true }.accessibilityIdentifier("home.reviews")
+                    Spacer()
+                    Button("Support Fresh Frame", systemImage: "heart") { support = true }.accessibilityIdentifier("tips.open")
+                }.frame(minHeight: 44).padding().background(.bar)
             }
             .disabled(library.busy)
             .navigationTitle("Fresh Frame")
-            .searchable(text: $search, prompt: "Find a review")
+            .sheet(isPresented: $previousReviews) {
+                NavigationStack {
+                    reviewList.searchable(text: $search, prompt: "Find a review")
+                        .navigationTitle("Previous reviews")
+                        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { previousReviews = false } } }
+                }
+            }
             .refreshable { await library.refresh() }
             .task {
                 #if DEBUG
@@ -128,6 +112,52 @@ struct BJJNativeHome: View {
             } message: { Text(library.error ?? "") }
             .onChange(of: scenePhase) { _, phase in if phase == .background { library.suspend() } }
         }
+    }
+    private var reviewList: some View {
+        List {
+                Section {
+                    Menu {
+                        Button("Choose from Photos", systemImage: "photo.on.rectangle") { previousReviews = false; photos = true }
+                        Button("Choose from Files", systemImage: "folder") { previousReviews = false; backupImport = false; files = true }
+                        Button("Restore project backup", systemImage: "arrow.down.doc") { previousReviews = false; backupImport = true; files = true }
+                    } label: { Label("New review", systemImage: "plus.circle.fill").font(.headline).frame(minHeight: 44) }
+                    Text("Draw on your videos, record commentary, and share your perspective.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+                ForEach([true, false], id: \.self) { native in
+                    let items = filtered.filter { $0.preview == native }
+                    if !items.isEmpty {
+                        Section(native ? "Your reviews" : "Earlier reviews · open a protected copy") {
+                            ForEach(items, id: \.key) { review in
+                                Button { previousReviews = false; Task { await library.open(review) } } label: {
+                                    BJJNativeLibraryRow(library: library, review: review)
+                                }
+                                .accessibilityIdentifier("review.\(review.id)")
+                                .contextMenu {
+                                    if native && review.problem == nil {
+                                        Button("Rename", systemImage: "pencil") { name = review.name; renaming = review }
+                                        Button("Duplicate", systemImage: "plus.square.on.square") { Task { await library.change(review, action: "Duplicate") } }
+                                        Button("Back up", systemImage: "square.and.arrow.up") { Task { await library.change(review, action: "Back up") } }
+                                        Button("Move to Recently Deleted", systemImage: "trash", role: .destructive) { trash = review }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                if filtered.isEmpty && !library.busy {
+                    ContentUnavailableView(search.isEmpty ? "Start a review" : "No matching reviews", systemImage: "film",
+                                           description: Text(search.isEmpty ? "Choose a video from Photos or Files." : "Try a different name."))
+                }
+                Section {
+                    Button("Recently Deleted", systemImage: "trash") { previousReviews = false; recentlyDeleted = true }.frame(minHeight: 44)
+                    Button("Support Fresh Frame", systemImage: "heart") { previousReviews = false; support = true }
+                        .frame(minHeight: 44).accessibilityIdentifier("tips.open")
+                    Link("Help & support", destination: URL(string: "https://github.com/BakedChicken77/bjj-telestrator/blob/main/docs/SUPPORT.md")!)
+                    Link("Privacy policy", destination: URL(string: "https://github.com/BakedChicken77/bjj-telestrator/blob/main/docs/PRIVACY.md")!)
+                }
+            }
+
     }
     private var deletedList: some View {
         NavigationStack {

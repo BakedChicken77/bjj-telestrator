@@ -28,6 +28,7 @@ struct BJJNativeDeletedReview: Identifiable {
     private var mediaID: String?
     private var packageID: String?
     private var photoLoad: Progress?
+    private var awaitingPhoto = false
     private var refreshGeneration = 0
     private let images = NSCache<NSString, UIImage>()
     init(root: URL = BJJNativePilot.previewRoot(), originalRoot: URL? = nil) {
@@ -112,13 +113,18 @@ struct BJJNativeDeletedReview: Identifiable {
         Task { [weak self] in
             while !Task.isCancelled {
                 guard let self, self.mediaID == id, let job = try? self.service?.mediaJobs.get(id) else { return }
+                if self.awaitingPhoto {
+                    self.progress = self.photoLoad?.fractionCompleted; self.activity = "Downloading selected video…"
+                    try? await Task.sleep(nanoseconds: 200_000_000); continue
+                }
                 self.progress = job.progress
                 self.activity = job.stage == "copying" ? "Copying video…" : job.stage == "preparing_preview" ? "Preparing video…" : "Checking video…"
                 try? await Task.sleep(nanoseconds: 200_000_000)
             }
         }
     }
-    func importFile(_ url: URL, backup: Bool = false) async {
+    func importFile(_ url: URL, backup: Bool = false, openWhenReady: Bool = true) async {
+        var imported: BJJProject?
         guard begin(backup ? "Restoring backup…" : "Copying video…", cancellable: true) else { return }
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
@@ -144,17 +150,25 @@ struct BJJNativeDeletedReview: Identifiable {
                         }
                         if let failure { throw failure }; if let coordination { throw coordination }
                     }
-                    _ = try await service.mediaJobs.finishImport(job.jobId, originalName: url.lastPathComponent)
+                    imported = try await service.mediaJobs.finishImport(job.jobId, originalName: url.lastPathComponent)
                 } catch { service.mediaJobs.failure(job.jobId, error); throw error }
             }
         } catch { report(error) }
         await finish()
+        if openWhenReady, let imported { openImported(imported) }
+    }
+    private func openImported(_ project: BJJProject) {
+        do { session = try BJJNativeEditorSession(project: project, store: services().store, service: services()) }
+        catch { self.error = error.localizedDescription }
     }
     func importPhoto(_ item: NSItemProvider) async {
+        var imported: BJJProject?
         guard begin("Downloading selected video…", cancellable: true) else { return }
         do {
             let service = try services(), job = try service.mediaJobs.create(); mediaID = job.jobId
-            let polling = pollMedia(job.jobId); defer { polling.cancel() }
+            awaitingPhoto = true
+            let downloadStart = ProcessInfo.processInfo.systemUptime
+            let polling = pollMedia(job.jobId); defer { polling.cancel(); awaitingPhoto = false }
             do {
                 let (target, worker) = try service.mediaJobs.beginImport(job.jobId)
                 let store = service.store
@@ -170,10 +184,13 @@ struct BJJNativeDeletedReview: Identifiable {
                         } catch { continuation.resume(throwing: error) }
                     }
                 }
-                _ = try await service.mediaJobs.finishImport(job.jobId, originalName: item.suggestedName ?? "New review.mov")
+                awaitingPhoto = false
+                service.mediaJobs.recordMetric(job.jobId, "provider_and_copy", seconds: ProcessInfo.processInfo.systemUptime - downloadStart)
+                imported = try await service.mediaJobs.finishImport(job.jobId, originalName: item.suggestedName ?? "New review.mov")
             } catch { service.mediaJobs.failure(job.jobId, error); throw error }
         } catch { report(error) }
         await finish()
+        if let imported { openImported(imported) }
     }
     private func report(_ error: Error) {
         if let mediaID, (try? service?.mediaJobs.get(mediaID).status) == "cancelled" { return }

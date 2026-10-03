@@ -35,6 +35,44 @@ import SwiftUI
         editor.history(redo: false)
         XCTAssertEqual(editor.project.annotations[0].n("startSec"), 1)
     }
+    func testInspectorCanvasDraftCancelDeleteAndFailedSave() throws {
+        let initial = try project(), editor = try BJJNativeEditorSession(project: initial, store: store, preferences: nil)
+        defer { editor.close() }
+        let original = initial.annotations[0], id = original.s("id")
+        editor.select(id); editor.beginInspector()
+        var styled = original; styled["strokeOpacity"] = 0.4
+        editor.stageCue(styled)
+        editor.beginCueEdit()
+        editor.previewCue = BJJCueGeometry.move(styled, delta: CGPoint(x: 0.1, y: 0.1), size: editor.pictureSize)
+        editor.finishCueEdit()
+        XCTAssertEqual(editor.project.revision, initial.revision)
+        XCTAssertEqual(editor.undoCount, 0)
+        XCTAssertEqual(editor.cueDraft?.n("strokeOpacity"), 0.4)
+        let completed = try XCTUnwrap(editor.previewCue)
+        editor.beginCueEdit(); editor.previewCue = original; editor.cancelCueGesture()
+        XCTAssertEqual(editor.previewCue! as NSDictionary, completed as NSDictionary)
+        var invalid = completed; invalid["endSec"] = 0
+        editor.stageCue(invalid)
+        XCTAssertThrowsError(try editor.saveInspector())
+        XCTAssertTrue(editor.inspectingCue); XCTAssertNotNil(editor.cueDraft)
+        editor.stageCue(completed); try editor.saveInspector()
+        XCTAssertEqual(editor.undoCount, 1)
+        editor.history(redo: false)
+        XCTAssertEqual(editor.project.annotations[0] as NSDictionary, original as NSDictionary)
+        editor.select(id); editor.beginInspector(); editor.stageCue(styled)
+        try editor.deleteInspector()
+        XCTAssertTrue(editor.project.annotations.isEmpty)
+        editor.history(redo: false)
+        XCTAssertEqual(editor.project.annotations[0] as NSDictionary, original as NSDictionary)
+        editor.select(id); editor.beginInspector(); try editor.saveInspector()
+        XCTAssertEqual(editor.project.revision, initial.revision + 4) // no-op Save writes nothing
+        editor.select(id); editor.beginInspector(); editor.stageCue(styled)
+        var external = editor.project.json; external["projectName"] = "Concurrent edit"
+        _ = try store.save(BJJProject(external))
+        XCTAssertThrowsError(try editor.saveInspector())
+        XCTAssertTrue(editor.inspectingCue); XCTAssertEqual(editor.cueDraft?.n("strokeOpacity"), 0.4)
+        editor.cancelCueEdit()
+    }
     func testNewNativeCuesRemainVisibleAtFractionalPausedTimes() throws {
         let initial = try project()
         let points = [CGPoint(x: 0.2, y: 0.3), CGPoint(x: 0.7, y: 0.8)]
@@ -238,7 +276,7 @@ import SwiftUI
         executionTimeAllowance = 300
         let source = root.appendingPathComponent("cue-edit-source.mp4"); try await silentVideo(source)
         let library = BJJNativeLibrary(root: root.appendingPathComponent("edits"), originalRoot: root.appendingPathComponent("originals"))
-        await library.importFile(source)
+        await library.importFile(source, openWhenReady: false)
         await library.open(try XCTUnwrap(library.reviews.first))
         let editor = try XCTUnwrap(library.session); defer { editor.close() }
         for tool in BJJNativeTool.allCases {
@@ -267,7 +305,7 @@ import SwiftUI
         try await silentVideo(source)
         let hash = try BJJAssets.digest(source)
         let library = BJJNativeLibrary(root: root.appendingPathComponent("native"), originalRoot: root.appendingPathComponent("original"))
-        await library.importFile(source)
+        await library.importFile(source, openWhenReady: false)
         XCTAssertNil(library.error); XCTAssertFalse(library.busy)
         var review = try XCTUnwrap(library.reviews.first { $0.preview })
         let thumbnail = await library.thumbnail(review)
@@ -363,7 +401,7 @@ import SwiftUI
         let source = root.appendingPathComponent("library-layout.mp4")
         try await silentVideo(source)
         let library = BJJNativeLibrary(root: root.appendingPathComponent("native"), originalRoot: root.appendingPathComponent("original"))
-        await library.importFile(source)
+        await library.importFile(source, openWhenReady: false)
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let previous = scene.windows.first { $0.isKeyWindow }
         let container = UIViewController()

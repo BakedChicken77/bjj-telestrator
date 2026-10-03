@@ -173,6 +173,14 @@ struct BJJNativeTransportState: Codable {
     @Published var selectedID: String?
     @Published var previewCue: BJJJSON?
     var editRevision: Int?
+    @Published var cueDraft: BJJJSON?
+    @Published var inspectingCue = false
+    var draftOrder: [BJJJSON]?
+    var gestureSnapshot: BJJJSON?
+    var cueEditDirty: Bool {
+        guard let cueDraft else { return false }
+        return !NSDictionary(dictionary: cueDraft).isEqual(to: selectedCue ?? [:]) || draftOrder != nil
+    }
     @Published var tool: BJJNativeTool = .arrow
     @Published var color = "#FF453A"
     @Published var text = "Cue"
@@ -324,12 +332,11 @@ struct BJJNativeTransportState: Codable {
     }
     func commitDocument(_ json: BJJJSON) throws {
         guard !exporting, !recording, !preparingAudio else { throw BJJError.invalid("Finish the current operation before editing.") }
-        cancelCueEdit()
         let previous = documentState
         let saved = try store.save(BJJProject(json))
         let audioChanged = !NSDictionary(dictionary: ["voiceovers": project.voiceovers, "settings": project.settings]).isEqual(to: ["voiceovers": saved.voiceovers, "settings": saved.settings])
         undoStack.append(previous); if undoStack.count > 50 { undoStack.removeFirst() }
-        redoStack.removeAll(); project = saved; syncHistory()
+        redoStack.removeAll(); project = saved; cancelCueEdit(); syncHistory()
         if audioChanged { Task { await self.prepareAudio() } }
     }
     func commit(_ annotations: [BJJJSON]) throws {
@@ -388,7 +395,7 @@ struct BJJNativeTransportState: Codable {
         catch { self.error = error.localizedDescription }
     }
     func history(redo: Bool) {
-        guard !exporting, !recording, !preparingAudio else { return }; cancelCueEdit()
+        guard !exporting, !recording, !preparingAudio, !inspectingCue else { return }; cancelCueEdit()
         guard let state = redo ? redoStack.last : undoStack.last else { return }
         do {
             var json = project.json

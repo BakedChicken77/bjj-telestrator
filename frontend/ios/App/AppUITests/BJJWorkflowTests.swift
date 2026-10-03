@@ -20,6 +20,7 @@ final class BJJWorkflowTests: XCTestCase {
         XCUIDevice.shared.orientation = .portrait
     }
     private func openReview() {
+        if app.buttons["home.reviews"].waitForExistence(timeout: 10) { app.buttons["home.reviews"].tap() }
         let review = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "review.")).firstMatch
         XCTAssertTrue(review.waitForExistence(timeout: 60), app.debugDescription)
         review.tap()
