@@ -149,7 +149,8 @@ import UniformTypeIdentifiers
         XCTAssertEqual(placements.map { $0.n("durationTicks") }, [48000, 240000, 96000])
         XCTAssertEqual(placements.compactMap { timeline.position($0) }, [3, 4, 9])
         let initial = try project()
-        var json = initial.json; json["reviewTimeline"] = timeline.json
+        var endHold = hold; endHold["frozenPTS"] = 4 - 1 / 30.0
+        var json = initial.json; json["reviewTimeline"] = BJJReviewTimeline(sourceDuration: 4, holds: [endHold]).json
         XCTAssertThrowsError(try BJJProject(json), "Marker prevents older editors silently changing clocks")
         json["requiredCapabilities"] = (initial.json["requiredCapabilities"] as! [String]) + [BJJReviewTimeline.capability]
         XCTAssertNoThrow(try BJJProject(json))
@@ -463,6 +464,13 @@ import UniformTypeIdentifiers
             XCTAssertGreaterThanOrEqual(try BJJValidate.number(timings[stage], stage, 0...86400), 0)
         }
         XCTAssertEqual((job["mediaProfile"] as? BJJJSON)?["codec"] as? String, "avc1")
+        editor.close(); library.session = nil
+        await library.shareImportDiagnostics()
+        let timingReport = try XCTUnwrap(library.shareURL)
+        let report = try library.services().store.readJSON(timingReport)
+        let imports = try BJJValidate.objects(report["imports"], "timing records", maximum: 256)
+        XCTAssertEqual(imports.count, 1); XCTAssertNil(imports[0]["projectId"]); XCTAssertNil(imports[0]["jobId"])
+        library.endShare(); XCTAssertFalse(FileManager.default.fileExists(atPath: timingReport.path))
     }
     func testNativeLibraryShowsUnsupportedOriginalWithoutMutatingIt() async throws {
         let project = try project()

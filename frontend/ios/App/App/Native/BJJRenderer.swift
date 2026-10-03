@@ -310,6 +310,7 @@ final class BJJRenderer {
             audioProject = try BJJProject(json)
         }
         let audio = try await BJJAudioComposition.build(media: media, project: audioProject, store: store, composition: composition)
+        defer { for path in audio.temporaryFiles { try? FileManager.default.removeItem(at: path) } }
         let mixScale = audio.scale
         let videoComposition = AVMutableVideoComposition()
         // AVFoundation converts HDR inputs to these SDR properties BEFORE its

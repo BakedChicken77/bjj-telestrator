@@ -60,7 +60,7 @@ struct BJJReviewTimeline {
             previous = source
             try BJJValidate.number(hold["durationTicks"], "pause duration", 1...(86400 * Self.rate), integer: true)
             let pts = try BJJValidate.number(hold["frozenPTS"], "frozen frame", 0...sourceDuration)
-            guard abs(pts - source / Self.rate) <= 1 else { throw BJJError.invalid("Frozen frame is outside the pause boundary.") }
+            guard pts < sourceDuration, abs(pts - source / Self.rate) <= 1 else { throw BJJError.invalid("Frozen frame is outside the pause boundary.") }
         }
         guard duration <= 86400 else { throw BJJError.invalid("The output review cannot exceed 24 hours.") }
     }
@@ -116,6 +116,7 @@ struct BJJReviewTimeline {
     /// Insert playing spans and exactly ONE decoded sample per hold. Scaling this
     /// one sample repeats a frame, rather than slowing a multi-frame video range.
     func insertVideo(_ source: AVAssetTrack, range: CMTimeRange, into track: AVMutableCompositionTrack) async throws {
+        if holds.isEmpty { try track.insertTimeRange(range, of: source, at: .zero); return }
         for span in spans {
             let at = CMTime(seconds: span.output, preferredTimescale: 48000)
             if let hold = span.hold {
@@ -170,7 +171,8 @@ enum BJJReviewReceipt {
         let holds = (old + added).enumerated().sorted {
             $0.element.n("sourceTicks") == $1.element.n("sourceTicks") ? $0.offset < $1.offset : $0.element.n("sourceTicks") < $1.element.n("sourceTicks")
         }.map { $0.element }
-        json["reviewTimeline"] = ["version": 1, "holds": holds]
+        var timeline = json["reviewTimeline"] as? BJJJSON ?? [:]
+        timeline["version"] = 1; timeline["holds"] = holds; json["reviewTimeline"] = timeline
         takes.append(take); json["reviewNarration"] = takes
         return try BJJProject(json).json
     }

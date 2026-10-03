@@ -236,7 +236,7 @@ final class BJJMediaWork {
             let source = try BJJAssets.file(store, job.projectId, sourceReference)
             let hash = try await BJJAssets.offMain { [store] in
                 if let snapshot {
-                    var json = snapshot.json; json["voiceovers"] = [BJJJSON]()
+                    var json = snapshot.json; json["voiceovers"] = [BJJJSON](); if snapshot.pauseAware { json["reviewNarration"] = [BJJJSON]() }
                     return try BJJAssets.manifest(store, BJJProject(json), cancellation: worker.cancellation)[0].s("sha256")
                 }
                 return try BJJAssets.digest(source, cancellation: worker.cancellation)
@@ -245,7 +245,7 @@ final class BJJMediaWork {
             stageStart = ProcessInfo.processInfo.systemUptime
             let media = try await BJJMedia.inspect(source, reference: sourceReference, originalName: originalName)
             worker.metric("inspect", seconds: ProcessInfo.processInfo.systemUptime - stageStart)
-            try update(id) { $0.mediaProfile = ["codec": media.json.s("codec"), "durationSec": String(media.videoRange.duration.seconds), "dimensions": "\(Int(media.orientedSize.width))x\(Int(media.orientedSize.height))", "fps": String(media.fps), "hdr": String(BJJColor.isHDR(media.json))] }
+            try update(id) { $0.mediaProfile = ["sourceSHA256": hash, "codec": media.json.s("codec"), "durationSec": String(media.videoRange.duration.seconds), "dimensions": "\(Int(media.orientedSize.width))x\(Int(media.orientedSize.height))", "fps": String(media.fps), "hdr": String(BJJColor.isHDR(media.json))] }
             if let snapshot {
                 guard abs(media.videoRange.duration.seconds - snapshot.duration) <= 0.001,
                       abs(media.videoRange.start.seconds - ((snapshot.source["videoStartSec"] as? NSNumber)?.doubleValue ?? 0)) <= 0.001,

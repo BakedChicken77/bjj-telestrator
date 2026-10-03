@@ -118,6 +118,7 @@ struct BJJNativeEditorScreen: View {
         BJJNativeVideoSurface(session: session, reset: zoomReset)
             .accessibilityIdentifier("editor.video")
             .background(.black)
+            .allowsHitTesting(!session.preparingAudio && !session.recording)
             .accessibilityLabel("Video and annotations")
             .accessibilityHint("Choose Draw to add or select cues. Tap a cue label to edit it.")
     }
@@ -158,7 +159,7 @@ struct BJJNativeEditorScreen: View {
         VStack(spacing: 8) {
             if session.recording {
                 HStack {
-                    Label("Recording at 1×", systemImage: "mic.fill").foregroundStyle(.red)
+                    Label(session.recordingVideoPaused ? "Recording · video paused" : "Recording at 1×", systemImage: "mic.fill").foregroundStyle(.red)
                     ProgressView(value: Double(max(0, min(1, (session.recordingLevel + 60) / 60))))
                     Button(session.recordingVideoPaused ? "Resume video" : "Pause video", systemImage: session.recordingVideoPaused ? "play.fill" : "pause.fill") { Task { await session.toggleRecordingVideo() } }
                         .accessibilityIdentifier("narration.video.pause")

@@ -203,6 +203,7 @@ struct BJJNativeTransportState: Codable {
     @Published var exportURL: URL?
     private let capture = BJJNativeRecording()
     private var previewFiles: [URL] = []
+    private var playbackTimeline: BJJReviewTimeline
     private var previewGeneration = 0
     private var undoStack: [BJJJSON] = []
     private var redoStack: [BJJJSON] = []
@@ -218,6 +219,7 @@ struct BJJNativeTransportState: Codable {
     private var seekGeneration = 0
     init(project: BJJProject, store: BJJStore, service: BJJService? = nil, preferences: UserDefaults? = .standard) throws {
         self.project = project; self.store = store; id = project.id
+        playbackTimeline = BJJReviewTimeline(sourceDuration: project.duration)
         self.service = service; self.preferences = preferences; loopEnd = project.duration
         player = AVPlayer(url: try store.asset(project.id, project.proxy.s("asset")))
         player.volume = (project.settings["originalAudioMuted"] as? Bool) == true ? 0 : Float(min(1, project.settings.n("originalAudioGain")))
@@ -226,7 +228,7 @@ struct BJJNativeTransportState: Codable {
                 guard let self, !self.closed, !self.seeking else { return }
                 if self.recording { self.recordingLevel = self.capture.level; self.capture.checkClock() }
                 let seconds = value.seconds
-                if seconds.isFinite { self.outputTime = min(self.project.outputDuration, max(0, seconds)); self.time = self.project.reviewTimeline.source(at: self.outputTime) }
+                if seconds.isFinite { self.outputTime = min(self.project.outputDuration, max(0, seconds)); self.time = self.playbackTimeline.source(at: self.outputTime) }
                 self.playing = self.player.rate != 0
                 if self.loopEnabled, self.playing, self.time >= self.loopEnd {
                     self.seek(self.loopStart, resume: true)
@@ -284,6 +286,7 @@ struct BJJNativeTransportState: Codable {
         if target == time { seekOutput(outputTime, resume: true) } else { seek(target, resume: true) }
     }
     func seek(_ seconds: Double, resume: Bool = false) {
+        guard seconds.isFinite else { return }
         seekOutput(project.reviewTimeline.output(before: min(project.duration, max(0, seconds))), resume: resume)
     }
     func seekOutput(_ seconds: Double, resume: Bool = false) {
@@ -302,7 +305,7 @@ struct BJJNativeTransportState: Codable {
                     self.seeking = false
                     if finished {
                         let resolved = self.player.currentTime().seconds
-                        if resolved.isFinite { self.outputTime = min(self.project.outputDuration, max(0, resolved)); self.time = self.project.reviewTimeline.source(at: self.outputTime) }
+                        if resolved.isFinite { self.outputTime = min(self.project.outputDuration, max(0, resolved)); self.time = self.playbackTimeline.source(at: self.outputTime) }
                         if resume { self.player.playImmediately(atRate: self.speed); self.playing = true }
                     }
                     self.savePosition()
@@ -370,7 +373,15 @@ struct BJJNativeTransportState: Codable {
     func prepareAudio() async {
         guard !closed, !recording, !preparingAudio else { return }
         pause(); preparingAudio = true; previewGeneration += 1
-        let generation = previewGeneration, position = time
+        let generation = previewGeneration
+        let oldPosition = max(0, player.currentTime().seconds.isFinite ? player.currentTime().seconds : 0)
+        let oldSpan = playbackTimeline.span(at: oldPosition)
+        let sourcePosition = time
+        var position = project.reviewTimeline.output(before: sourcePosition)
+        if let oldSpan, abs(oldSpan.source - sourcePosition) < 0.001, let id = oldSpan.hold?["id"] as? String,
+           let span = project.reviewTimeline.spans.first(where: { $0.hold?["id"] as? String == id }) {
+            position = span.output + min(span.duration, oldPosition - oldSpan.output)
+        }
         player.isMuted = true
         defer { preparingAudio = false }
         do {
@@ -378,8 +389,9 @@ struct BJJNativeTransportState: Codable {
             previewFiles.append(path)
             let item = try await BJJAudioComposition.preview(project: project, store: store, target: path)
             guard !closed, generation == previewGeneration else { try? FileManager.default.removeItem(at: path); return }
+            playbackTimeline = project.reviewTimeline
             player.replaceCurrentItem(with: item); player.volume = 1; player.isMuted = false
-            seek(position)
+            seekOutput(position)
             // The previous item is no longer using these files.
             for old in previewFiles where old != path { try? FileManager.default.removeItem(at: old) }
             previewFiles = [path]
@@ -406,7 +418,8 @@ struct BJJNativeTransportState: Codable {
     func removeNarrationPause(_ id: String) {
         do {
             var json = project.json
-            json["reviewTimeline"] = BJJReviewTimeline(sourceDuration: project.duration, holds: project.reviewTimeline.holds.filter { $0.s("id") != id }).json
+            var timeline = project.json["reviewTimeline"] as? BJJJSON ?? [:]
+            timeline["holds"] = project.reviewTimeline.holds.filter { $0.s("id") != id }; json["reviewTimeline"] = timeline
             json["reviewNarration"] = project.reviewNarration.map { take -> BJJJSON in
                 var take = take; take["placements"] = (take["placements"] as! [BJJJSON]).filter { $0["holdId"] as? String != id }; return take
             }

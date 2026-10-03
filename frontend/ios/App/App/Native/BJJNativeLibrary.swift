@@ -236,10 +236,30 @@ struct BJJNativeDeletedReview: Identifiable {
         } catch { report(error) }
         await finish()
     }
+    private var diagnosticURL: URL?
+    func shareImportDiagnostics() async {
+        guard begin("Preparing timing report…") else { return }
+        do {
+            let store = try services().store
+            let report = try await BJJAssets.offMain { () throws -> BJJJSON in
+                let folder = store.root.appendingPathComponent("media-jobs")
+                let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+                let records = files.filter { $0.pathExtension == "json" }.sorted { $0.path < $1.path }.prefix(256).compactMap { file -> BJJJSON? in
+                    guard let job = (try? store.readJSON(file))?["job"] as? BJJJSON else { return nil }
+                    return job.filter { ["operation", "status", "stage", "copiedBytes", "totalBytes", "timings", "mediaProfile", "createdAt", "errorCode"].contains($0.key) }
+                }
+                return ["version": 1, "createdAt": BJJProject.now(), "appVersion": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown", "osVersion": ProcessInfo.processInfo.operatingSystemVersionString, "imports": records]
+            }
+            let path = FileManager.default.temporaryDirectory.appendingPathComponent("FreshFrame-import-timing-\(UUID().uuidString).json")
+            try store.writeJSON(report, to: path); diagnosticURL = path; shareURL = path
+        } catch { self.error = error.localizedDescription }
+        await finish()
+    }
     private var sharedPackage: String?
     func endShare() {
         if let sharedPackage { service?.packageJobs.releaseOutput(sharedPackage) }
-        sharedPackage = nil; shareURL = nil
+        if let diagnosticURL { try? FileManager.default.removeItem(at: diagnosticURL) }
+        diagnosticURL = nil; sharedPackage = nil; shareURL = nil
     }
     private func waitPackage(_ id: String) async throws -> Bool {
         let service = try services()

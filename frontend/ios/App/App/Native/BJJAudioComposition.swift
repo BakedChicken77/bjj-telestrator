@@ -5,6 +5,7 @@ struct BJJAudioComposition {
     let tracks: [AVCompositionTrack]
     let parameters: [AVAudioMixInputParameters]
     let scale: Double
+    let temporaryFiles: [URL]
     var output: AVAssetReaderAudioMixOutput? {
         guard !tracks.isEmpty else { return nil }
         let result = AVAssetReaderAudioMixOutput(audioTracks: tracks, audioSettings: [
@@ -73,7 +74,25 @@ struct BJJAudioComposition {
                 }
             }
         }
-        return BJJAudioComposition(tracks: audioTracks, parameters: audioParameters, scale: mixScale)
+        var temporaryFiles: [URL] = []
+        if !timeline.holds.isEmpty, !audioTracks.isEmpty, let project {
+            let path = try store.safeURL(project.id, "temp/silence-\(UUID().uuidString).caf")
+            do {
+                try await BJJAssets.offMain {
+                    let format = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 1)!
+                    let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 4800)!
+                    buffer.frameLength = 4800; buffer.floatChannelData![0].initialize(repeating: 0, count: 4800)
+                    let file = try AVAudioFile(forWriting: path, settings: format.settings); try file.write(from: buffer)
+                }
+                let silence = AVURLAsset(url: path)
+                guard let source = try await silence.loadTracks(withMediaType: .audio).first else { throw BJJError.invalid("Cannot prepare review silence.") }
+                let range = try await source.load(.timeRange), target = try track(gain: 0)
+                try target.insertTimeRange(range, of: source, at: .zero)
+                target.scaleTimeRange(CMTimeRange(start: .zero, duration: range.duration), toDuration: CMTime(seconds: timeline.duration, preferredTimescale: 48000))
+                temporaryFiles.append(path)
+            } catch { try? FileManager.default.removeItem(at: path); throw error }
+        }
+        return BJJAudioComposition(tracks: audioTracks, parameters: audioParameters, scale: mixScale, temporaryFiles: temporaryFiles)
     }
 
     /// Decode the same normalized mix and limiter used by export. Stream into PCM
@@ -83,6 +102,7 @@ struct BJJAudioComposition {
                                               reference: project.source.s("asset"), originalName: project.name)
         let composition = AVMutableComposition()
         let audio = try await build(media: media, project: project, store: store, composition: composition)
+        defer { for path in audio.temporaryFiles { try? FileManager.default.removeItem(at: path) } }
         let proxy = AVURLAsset(url: try store.asset(project.id, project.proxy.s("asset")))
         let videoComposition = AVMutableComposition()
         guard let sourceVideo = try await proxy.loadTracks(withMediaType: .video).first,
