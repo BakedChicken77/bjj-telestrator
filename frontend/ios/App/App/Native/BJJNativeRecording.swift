@@ -15,6 +15,7 @@ import UIKit
     private var pausedDuration = 0.0
     private var clockTimer: Timer?
     private var pausePreparing = false
+    private var lastSpaceCheck = -5.0
     var videoPaused: Bool { pauseStart != nil || pausePreparing }
     var liveElapsed: Double { recorder?.currentTime ?? 0 }
     func toggleVideoPause() async throws {
@@ -27,6 +28,7 @@ import UIKit
             }
             pauseStart = nil; player.playImmediately(atRate: 1); return
         }
+        guard project.reviewTimeline.holds.count + newHolds.count < 2000 else { throw BJJError.invalid("This review already has 2,000 narration pauses.") }
         let output = player.currentTime().seconds
         guard project.reviewTimeline.span(at: output)?.hold == nil else { throw BJJError.invalid("Video is already paused. Keep narrating or let playback resume.") }
         player.pause(); pauseStart = recorder.currentTime
@@ -113,7 +115,7 @@ import UIKit
             start = max(0, player.currentTime().seconds - capture.currentTime)
             capture.isMeteringEnabled = true; capture.delegate = self; recorder = capture
             try lifecycle.advance(token, from: .prepared, to: .recording)
-            newHolds = []; pausedDuration = 0; pauseStart = nil
+            newHolds = []; pausedDuration = 0; pauseStart = nil; lastSpaceCheck = -5
             clockTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
                 Task { @MainActor in self?.checkClock() }
             }
@@ -125,10 +127,11 @@ import UIKit
     func checkClock() {
         guard lifecycle.phase == .recording, let player, let recorder else { return }
         meterChanged?(level)
-        if recorder.currentTime >= min(3600, 86400 - project!.outputDuration) {
+        if recorder.currentTime >= 3600 || project!.outputDuration + pausedDuration + (pauseStart.map { recorder.currentTime - $0 } ?? 0) >= 86400 {
             stop(reason: "The take reached its one-hour recording limit."); return
         }
-        if Int(recorder.currentTime) % 5 == 0, let store {
+        if recorder.currentTime - lastSpaceCheck >= 5, let store {
+            lastSpaceCheck = recorder.currentTime
             do { try store.checkSpace(required: 100_000_000) }
             catch { stop(reason: "Recording stopped because storage is low. The valid take was preserved."); return }
         }
@@ -171,7 +174,7 @@ import UIKit
                     "codec": "pcm_s16le", "sampleRate": 48000, "channels": 1,
                     "placements": timeline.placements(start: startSec, duration: min(duration, timeline.duration - startSec))]
                 let receipt: BJJJSON = ["kind": "review-narration-v1", "operationId": UUID().uuidString.lowercased(),
-                    "baseRevision": document.revision, "take": take, "holds": holds]
+                    "baseRevision": document.revision, "baseProject": document.json, "take": take, "holds": holds]
                 try storage.registerReviewReceipt(document.id, receipt: receipt)
                 finished?(receipt, nil, reason)
             }

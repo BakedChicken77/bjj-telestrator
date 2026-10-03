@@ -80,7 +80,10 @@ struct BJJNativeDeletedReview: Identifiable {
             let service = try services(), originalRoot = originalRoot
             let store = service.store
             let project = try await BJJAssets.offMain {
-                if review.preview { return try store.loadRecoveringRecordings(review.id) }
+                if review.preview {
+                    do { return try store.loadRecoveringRecordings(review.id) }
+                    catch let error as BJJError where error.code == "PROJECT_CONFLICT" { return try store.recoverConflictingReviewReceipt(review.id) }
+                }
                 guard let originalRoot else { throw BJJError.invalid("The original library is unavailable.") }
                 return try BJJNativePilot.copy(review.id, from: BJJStore(root: originalRoot), to: store)
             }
@@ -113,7 +116,7 @@ struct BJJNativeDeletedReview: Identifiable {
         Task { [weak self] in
             while !Task.isCancelled {
                 guard let self, self.mediaID == id, let job = try? self.service?.mediaJobs.get(id) else { return }
-                if self.awaitingPhoto {
+                if self.awaitingPhoto && job.totalBytes == nil {
                     self.progress = self.photoLoad?.fractionCompleted; self.activity = "Downloading selected video…"
                     try? await Task.sleep(nanoseconds: 200_000_000); continue
                 }
@@ -173,15 +176,24 @@ struct BJJNativeDeletedReview: Identifiable {
                 let (target, worker) = try service.mediaJobs.beginImport(job.jobId)
                 let store = service.store
                 try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                    let completion = BJJPhotoImportCompletion(continuation)
+                    Task {
+                        while !completion.finished {
+                            do { try worker.cancellation.check() }
+                            catch { completion.finish(.failure(error)); return }
+                            try? await Task.sleep(nanoseconds: 200_000_000)
+                        }
+                    }
                     photoLoad = item.loadFileRepresentation(forTypeIdentifier: UTType.movie.identifier) { url, providerError in
+                        worker.metric("provider_wait", seconds: ProcessInfo.processInfo.systemUptime - downloadStart)
                         // Provider URLs expire on return from this callback. Stream into our
                         // owned source here; never load a whole video into memory.
                         do {
                             try worker.cancellation.check()
                             guard let url else { throw providerError ?? BJJError.invalid("The video could not download from Photos. Download it there and try again.") }
                             try BJJMediaWork.copy(url, target, store: store, work: worker)
-                            continuation.resume()
-                        } catch { continuation.resume(throwing: error) }
+                            completion.finish(.success(()))
+                        } catch { completion.finish(.failure(error)) }
                     }
                 }
                 awaitingPhoto = false
@@ -265,5 +277,18 @@ struct BJJNativePhotoPicker: UIViewControllerRepresentable {
         let selected: (NSItemProvider?) -> Void
         init(selected: @escaping (NSItemProvider?) -> Void) { self.selected = selected }
         func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) { selected(results.first?.itemProvider) }
+    }
+}
+
+/// Providers may finish after Cancel, or never invoke their callback after their
+/// Progress is cancelled. Settle once; the worker token fences every late copy.
+private final class BJJPhotoImportCompletion: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Void, Error>?
+    init(_ continuation: CheckedContinuation<Void, Error>) { self.continuation = continuation }
+    var finished: Bool { lock.lock(); defer { lock.unlock() }; return continuation == nil }
+    func finish(_ result: Result<Void, Error>) {
+        lock.lock(); let pending = continuation; continuation = nil; lock.unlock()
+        pending?.resume(with: result)
     }
 }

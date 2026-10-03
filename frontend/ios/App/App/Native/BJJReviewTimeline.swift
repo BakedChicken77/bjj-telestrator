@@ -71,7 +71,9 @@ struct BJJReviewTimeline {
         spans.compactMap { span in
             let first = max(start, span.output), last = min(start + duration, span.end)
             guard last - first >= 1 / Self.rate else { return nil }
-            var p: BJJJSON = ["audioStartTicks": ((first - start) * Self.rate).rounded(), "durationTicks": ((last - first) * Self.rate).rounded()]
+            let audioFirst = ((first - start) * Self.rate).rounded(), audioLast = ((last - start) * Self.rate).rounded()
+            guard audioLast > audioFirst else { return nil }
+            var p: BJJJSON = ["audioStartTicks": audioFirst, "durationTicks": audioLast - audioFirst]
             if let hold = span.hold { p["holdId"] = hold.s("id"); p["offsetTicks"] = ((first - span.output) * Self.rate).rounded() }
             else { p["sourceTicks"] = ((span.source + first - span.output) * Self.rate).rounded() }
             return p

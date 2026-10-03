@@ -508,10 +508,30 @@ final class BJJStore {
         let url = try directory(id).appendingPathComponent("voiceover/pending.json")
         return FileManager.default.fileExists(atPath: url.path) ? try readJSON(url) : [:]
     }
+    func recoverConflictingReviewReceipt(_ id: String) throws -> BJJProject {
+        try locked {
+            var pending = try pendingRecordings(id)
+            guard let entry = pending.sorted(by: { $0.key < $1.key }).first(where: { ($0.value as? BJJJSON)?["kind"] as? String == "review-narration-v1" }),
+                  let receipt = entry.value as? BJJJSON, let base = receipt["baseProject"] as? BJJJSON else {
+                throw BJJError.domain("PROJECT_CONFLICT", "A preserved take needs manual recovery. Its audio and original review remain intact.")
+            }
+            let operation = try BJJValidate.uuid(receipt["operationId"])
+            let draft = try BJJProject(BJJReviewReceipt.apply(receipt, to: base))
+            let copy = try recoverCopy(draft, copyID: operation)
+            // Idempotent copy ID settles crashes between copy publication and receipt acknowledgement.
+            try writeJSON(receipt, to: recoveryDirectory(id).appendingPathComponent("recording-\(operation).json"))
+            pending.removeValue(forKey: entry.key)
+            try writeJSON(pending, to: safeURL(id, "voiceover/pending.json"))
+            return copy
+        }
+    }
     func registerReviewReceipt(_ id: String, receipt: BJJJSON) throws {
         lock.lock(); defer { lock.unlock() }
         let current = try load(id)
-        _ = try BJJReviewReceipt.apply(receipt, to: current.json)
+        let base = receipt["baseProject"] as? BJJJSON ?? current.json
+        let baseProject = try BJJProject(base)
+        guard baseProject.id == id, NSDictionary(dictionary: baseProject.source).isEqual(to: current.source) else { throw BJJError.invalid("Recording receipt does not match its source.") }
+        _ = try BJJReviewReceipt.apply(receipt, to: base)
         let take = try BJJValidate.object(receipt["take"], "recorded take")
         var registry = try recordings(id); registry[take.s("id")] = take
         try writeJSON(registry, to: safeURL(id, "voiceover/assets.json"))

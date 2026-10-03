@@ -13,6 +13,7 @@ struct BJJNativeHome: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var search = ""
     @State private var previousReviews = false
+    @State private var pendingReview: BJJNativeReview?
     @State private var photos = false
     @State private var files = false
     @State private var backupImport = false
@@ -48,7 +49,9 @@ struct BJJNativeHome: View {
             }
             .disabled(library.busy)
             .navigationTitle("Fresh Frame")
-            .sheet(isPresented: $previousReviews) {
+            .sheet(isPresented: $previousReviews, onDismiss: {
+                if let review = pendingReview { pendingReview = nil; Task { await library.open(review) } }
+            }) {
                 NavigationStack {
                     reviewList.searchable(text: $search, prompt: "Find a review")
                         .navigationTitle("Previous reviews")
@@ -97,13 +100,13 @@ struct BJJNativeHome: View {
                 TextField("Review name", text: $name)
                 Button("Cancel", role: .cancel) { renaming = nil }
                 Button("Save") {
-                    if let review = renaming { Task { await library.change(review, action: "Rename", name: name) } }
+                    if let review = renaming { previousReviews = false; Task { await library.change(review, action: "Rename", name: name) } }
                     renaming = nil
                 }.disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || name.count > 160)
             }
             .confirmationDialog("Move review to Recently Deleted?", isPresented: Binding(get: { trash != nil }, set: { if !$0 { trash = nil } }), titleVisibility: .visible) {
                 Button("Move to Recently Deleted", role: .destructive) {
-                    if let review = trash { Task { await library.change(review, action: "Move to Recently Deleted") } }
+                    if let review = trash { previousReviews = false; Task { await library.change(review, action: "Move to Recently Deleted") } }
                     trash = nil
                 }
             } message: { Text("You can restore this review later. Original reviews remain unchanged.") }
@@ -129,16 +132,16 @@ struct BJJNativeHome: View {
                     if !items.isEmpty {
                         Section(native ? "Your reviews" : "Earlier reviews · open a protected copy") {
                             ForEach(items, id: \.key) { review in
-                                Button { previousReviews = false; Task { await library.open(review) } } label: {
+                                Button { pendingReview = review; previousReviews = false } label: {
                                     BJJNativeLibraryRow(library: library, review: review)
                                 }
                                 .accessibilityIdentifier("review.\(review.id)")
                                 .contextMenu {
                                     if native && review.problem == nil {
-                                        Button("Rename", systemImage: "pencil") { name = review.name; renaming = review }
-                                        Button("Duplicate", systemImage: "plus.square.on.square") { Task { await library.change(review, action: "Duplicate") } }
-                                        Button("Back up", systemImage: "square.and.arrow.up") { Task { await library.change(review, action: "Back up") } }
-                                        Button("Move to Recently Deleted", systemImage: "trash", role: .destructive) { trash = review }
+                                        Button("Rename", systemImage: "pencil") { previousReviews = false; name = review.name; renaming = review }
+                                        Button("Duplicate", systemImage: "plus.square.on.square") { previousReviews = false; Task { await library.change(review, action: "Duplicate") } }
+                                        Button("Back up", systemImage: "square.and.arrow.up") { previousReviews = false; Task { await library.change(review, action: "Back up") } }
+                                        Button("Move to Recently Deleted", systemImage: "trash", role: .destructive) { previousReviews = false; trash = review }
                                     }
                                 }
                             }

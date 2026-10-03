@@ -132,6 +132,32 @@ final class BJJWorkflowTests: XCTestCase {
         app.buttons["cue.properties.cancel"].tap()
         app.buttons["editor.done"].tap()
     }
+    func testInspectorCollapseCanvasCancelDeleteAndUndo() throws {
+        app.launch(); openReview()
+        app.segmentedControls.buttons["Draw"].tap()
+        let canvas = app.otherElements["editor.video"]
+        canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.4))
+            .press(forDuration: 0.1, thenDragTo: canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.6)))
+        let label = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "cue.strip.")).firstMatch
+        XCTAssertTrue(label.waitForExistence(timeout: 10)); label.tap()
+        let collapse = app.buttons["cue.properties.collapse"]
+        XCTAssertTrue(collapse.waitForExistence(timeout: 10))
+        let before = canvas.frame.height
+        collapse.tap(); XCTAssertGreaterThan(canvas.frame.height, before)
+        collapse.tap()
+        canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            .press(forDuration: 0.1, thenDragTo: canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.55)))
+        XCTAssertTrue(app.buttons["cue.properties.save"].exists)
+        app.buttons["cue.properties.cancel"].tap()
+        label.tap()
+        let delete = app.buttons["cue.properties.delete"]
+        for _ in 0..<8 { if delete.isHittable { break }; app.swipeUp() }
+        XCTAssertTrue(delete.isHittable); delete.tap()
+        XCTAssertFalse(label.exists)
+        app.buttons["Undo"].tap()
+        XCTAssertTrue(label.waitForExistence(timeout: 10))
+        app.buttons["editor.done"].tap()
+    }
     func testCueEndHandleCancellationPreservesSavedTiming() throws {
         app.launch(); openReview()
         app.segmentedControls.buttons["Draw"].tap()

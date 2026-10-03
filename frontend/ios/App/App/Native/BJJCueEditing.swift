@@ -108,6 +108,12 @@ enum BJJCueGeometry {
 
 extension BJJNativeEditorSession {
     var selectedCue: BJJJSON? { project.annotations.first { $0.s("id") == selectedID } }
+    var displayCues: [BJJJSON] {
+        (draftOrder ?? project.annotations).map { cue in
+            guard let previewCue, previewCue.s("id") == cue.s("id") else { return cue }
+            var preview = previewCue; preview["zIndex"] = cue["zIndex"]; return preview
+        }
+    }
     var pictureSize: CGSize { CGSize(width: project.source.n("displayWidth"), height: project.source.n("displayHeight")) }
     func select(_ id: String?, seekToCue: Bool = false) {
         cancelCueEdit(); pause(); selectedID = id; selecting = true; drawing = true
@@ -158,7 +164,10 @@ extension BJJNativeEditorSession {
         cancelCueEdit(); editRevision = project.revision; previewCue = selectedCue
     }
     func finishCueEdit() {
-        if inspectingCue { if let previewCue { stageCue(previewCue) }; gestureSnapshot = nil; return }
+        if inspectingCue {
+            if let previewCue { var staged = cueDraft ?? previewCue; staged["geometry"] = previewCue["geometry"]; stageCue(staged) }
+            gestureSnapshot = nil; return
+        }
         let cue = previewCue, revision = editRevision
         guard let cue, let revision else { return }
         do { try updateCue(cue, expectedRevision: revision) }

@@ -102,15 +102,13 @@ struct BJJCueProperties: View {
     private func close() { session.cancelCueEdit(); if let onClose { onClose() } else { dismiss() } }
     private func changeBoundary(_ start: Bool, _ seconds: Double) {
         cue = BJJCueTiming.adjust(cue, start: start, seconds: seconds, duration: session.project.duration, fps: session.project.exportSettings.n("fps"))
-        session.previewCue = cue
         let position = start ? cue.n("startSec") : max(cue.n("startSec"), cue.n("endSec") - 1 / session.project.exportSettings.n("fps"))
         session.seek(position)
     }
-    private func move(_ x: CGFloat, _ y: CGFloat) { cue = BJJCueGeometry.move(cue, delta: CGPoint(x: x, y: y), size: session.pictureSize); session.previewCue = cue }
+    private func move(_ x: CGFloat, _ y: CGFloat) { cue = BJJCueGeometry.move(cue, delta: CGPoint(x: x, y: y), size: session.pictureSize) }
     private func resize(_ factor: CGFloat) {
         let b = BJJCueGeometry.bounds(cue, size: session.pictureSize)
         cue = BJJCueGeometry.resize(cue, corner: 3, to: CGPoint(x: b.minX + b.width * factor, y: b.minY + b.height * factor), size: session.pictureSize)
-        session.previewCue = cue
     }
     private func set(_ key: String, _ value: Any, nested: Bool) {
         if nested { var g = geometry; g[key] = value; cue["geometry"] = g } else { cue[key] = value }

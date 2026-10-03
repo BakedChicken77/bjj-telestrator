@@ -3,6 +3,7 @@ import AVFoundation
 import CoreImage
 import CryptoKit
 import SwiftUI
+import UniformTypeIdentifiers
 @testable import App
 
 @MainActor final class BJJNativeTests: XCTestCase {
@@ -158,14 +159,16 @@ import SwiftUI
     func testPauseNarrationReceiptReopenUndoPreviewAndMP4() async throws {
         executionTimeAllowance = 300
         let service = try BJJService(store: store)
-        let initial = try await service.importFile(try await sourceVideo(audio: true), originalName: "pause.mp4")
+        var initial = try await service.importFile(try await sourceVideo(audio: true, moving: true), originalName: "pause.mp4")
+        var initialJSON = initial.json; initialJSON["annotations"] = [annotation(start: 0.75, end: 1.25)]
+        initial = try store.save(BJJProject(initialJSON))
         let id = UUID().uuidString.lowercased(), holdID = UUID().uuidString.lowercased()
         let hold: BJJJSON = ["id": holdID, "sourceTicks": 48000, "durationTicks": 240000, "frozenPTS": 1.0]
         let timeline = BJJReviewTimeline(sourceDuration: 4, holds: [hold])
         let asset = "voiceover/\(id).wav"
-        try tone(store.safeURL(initial.id, asset), frequency: 880, duration: 7)
+        try tone(store.safeURL(initial.id, asset), frequency: 880, duration: 7, pcm16: true)
         let take: BJJJSON = ["id": id, "asset": asset, "durationSec": 7.0, "sampleCount": 336000,
-            "gain": 1.0, "muted": false, "recordedAt": BJJProject.now(), "codec": "pcm_f32le", "sampleRate": 48000,
+            "gain": 1.0, "muted": false, "recordedAt": BJJProject.now(), "codec": "pcm_s16le", "sampleRate": 48000,
             "channels": 1, "placements": timeline.placements(start: 0.5, duration: 7)]
         let receipt: BJJJSON = ["kind": "review-narration-v1", "operationId": UUID().uuidString.lowercased(), "baseRevision": initial.revision, "take": take, "holds": [hold]]
         try store.registerReviewReceipt(initial.id, receipt: receipt)
@@ -189,8 +192,30 @@ import SwiftUI
         try await BJJRenderer().render(media: media, project: recovered, store: store, output: output) { _ in }
         let exported = try await BJJMedia.inspect(output, reference: "exports/check.mp4", originalName: "check")
         XCTAssertEqual(exported.videoRange.duration.seconds, 9, accuracy: 0.04)
+        let frames = try decodedTimingFrames(exported)
+        let held = frames.filter { $0.time >= 1.2 && $0.time < 5.8 }
+        let frozen = try XCTUnwrap(held.first)
+        XCTAssertGreaterThan(held.count, 100)
+        XCTAssertTrue(held.allSatisfy { zip($0.rgb, frozen.rgb).allSatisfy { abs($0 - $1) <= 3 } }, "One decoded frame must repeat throughout the hold")
+        XCTAssertTrue(held.allSatisfy { $0.redPixels > 500 }, "Source-time cue remains visible during the hold")
+        XCTAssertEqual(try redPixels(output, time: 6.5), 0, "Cue timing resumes in source seconds")
+        let resumed = try XCTUnwrap(frames.first { $0.time >= 7 })
+        XCTAssertGreaterThan(abs(resumed.rgb[2] - frozen.rgb[2]), 10, "Video must resume instead of extending the frozen frame")
         let outputEnergy = try await audioEnergy(output, from: 2, to: 5)
         XCTAssertGreaterThan(outputEnergy, 0.05)
+        let duplicate = try BJJProjectVersions(store: store).duplicate(recovered.id, revision: recovered.revision)
+        XCTAssertEqual(duplicate.reviewNarration.count, 1); XCTAssertEqual(duplicate.outputDuration, 9)
+        XCTAssertNotEqual(duplicate.reviewTimeline.holds[0].s("id"), holdID)
+        let backup = root.appendingPathComponent("pause.bjjproj")
+        try BJJProjectPackage.backup(store, project: recovered, output: backup, includeProxy: true, work: BJJPackageWork())
+        let restored = try await BJJProjectPackage.restore(store, source: backup, staging: root.appendingPathComponent("pause-restore"), id: UUID().uuidString.lowercased(), work: BJJPackageWork())
+        XCTAssertEqual(restored.outputDuration, 9); XCTAssertEqual(restored.reviewNarration.count, 1)
+        XCTAssertNotEqual(restored.reviewTimeline.holds[0].s("id"), holdID)
+        var muted = recovered.json, mutedTake = take; mutedTake["muted"] = true; muted["reviewNarration"] = [mutedTake]
+        let mutedMix = root.appendingPathComponent("muted-pause.caf")
+        _ = try await BJJAudioComposition.preview(project: BJJProject(muted), store: store, target: mutedMix)
+        let heldOriginalEnergy = try await audioEnergy(mutedMix, from: 2, to: 5)
+        XCTAssertLessThan(heldOriginalEnergy, 0.005, "Original video audio must be silent during holds")
         let editor = try BJJNativeEditorSession(project: recovered, store: store, preferences: nil)
         defer { editor.close() }
         editor.updateAudio(removing: id)
@@ -407,6 +432,37 @@ import SwiftUI
             let project = try store.load(review.id)
             XCTAssertEqual(try BJJAssets.digest(store.asset(project.id, project.source.s("asset"))), hash)
         }
+    }
+    func testPhotoProviderCancellationSettlesWithoutCallback() async throws {
+        let library = BJJNativeLibrary(root: root.appendingPathComponent("cancelled-photo"), originalRoot: root.appendingPathComponent("originals"))
+        let provider = NSItemProvider()
+        provider.registerFileRepresentation(forTypeIdentifier: UTType.movie.identifier, fileOptions: [], visibility: .all) { _ in
+            // Model a cloud provider that never calls its handler after Cancel.
+            Progress(totalUnitCount: 1)
+        }
+        let operation = Task { await library.importPhoto(provider) }
+        for _ in 0..<100 {
+            if library.busy && library.canCancel { break }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertTrue(library.busy); library.cancel()
+        await operation.value
+        XCTAssertFalse(library.busy); XCTAssertNil(library.error); XCTAssertTrue(library.reviews.isEmpty)
+    }
+    func testImportDiagnosticsAndAutomaticEditorOpening() async throws {
+        let source = root.appendingPathComponent("direct-open.mp4"); try await silentVideo(source)
+        let library = BJJNativeLibrary(root: root.appendingPathComponent("direct-open"), originalRoot: root.appendingPathComponent("originals"))
+        await library.importFile(source)
+        let editor = try XCTUnwrap(library.session); defer { editor.close() }
+        XCTAssertFalse(library.busy); XCTAssertNil(library.error)
+        let jobs = library.root.appendingPathComponent("media-jobs")
+        let record = try XCTUnwrap(FileManager.default.contentsOfDirectory(at: jobs, includingPropertiesForKeys: nil).first { $0.pathExtension == "json" })
+        let job = try BJJValidate.object(try library.services().store.readJSON(record)["job"], "job")
+        let timings = try BJJValidate.object(job["timings"], "timings")
+        for stage in ["copy", "source_hash_before", "inspect", "proxy_encode", "proxy_validation", "source_hash_after", "publish", "prepare_total"] {
+            XCTAssertGreaterThanOrEqual(try BJJValidate.number(timings[stage], stage, 0...86400), 0)
+        }
+        XCTAssertEqual((job["mediaProfile"] as? BJJJSON)?["codec"] as? String, "avc1")
     }
     func testNativeLibraryShowsUnsupportedOriginalWithoutMutatingIt() async throws {
         let project = try project()
@@ -1355,12 +1411,12 @@ import SwiftUI
         XCTAssertEqual(try String(contentsOf: protected, encoding: .utf8), "must remain")
         XCTAssertTrue(NSDictionary(dictionary: try store.load(retained.id).json).isEqual(to: retained.json))
     }
-    private func tone(_ url: URL, frequency: Double, duration: Double) throws {
+    private func tone(_ url: URL, frequency: Double, duration: Double, pcm16: Bool = false) throws {
         let format = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 1)!
         let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(duration * 48000))!
         buffer.frameLength = buffer.frameCapacity
         for i in 0..<Int(buffer.frameLength) { buffer.floatChannelData![0][i] = Float(0.2 * sin(2 * .pi * frequency * Double(i) / 48000)) }
-        let file = try AVAudioFile(forWriting: url, settings: format.settings)
+        let file = try AVAudioFile(forWriting: url, settings: pcm16 ? AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 48000, channels: 1, interleaved: true)!.settings : format.settings)
         try file.write(from: buffer)
     }
     private func clip(_ p: BJJProject) throws -> BJJJSON {
@@ -1389,7 +1445,7 @@ import SwiftUI
         _ = try store.save(BJJProject(undo))
         XCTAssertEqual(try store.load(p.id).voiceovers.count, 1)
     }
-    private func silentVideo(_ url: URL, rotated: Bool = false) async throws {
+    private func silentVideo(_ url: URL, rotated: Bool = false, moving: Bool = false) async throws {
         let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: [AVVideoCodecKey: AVVideoCodecType.h264,
             AVVideoWidthKey: 320, AVVideoHeightKey: 180])
@@ -1410,7 +1466,7 @@ import SwiftUI
             let stride = CVPixelBufferGetBytesPerRow(frame)
             for y in 0..<180 { for x in 0..<320 {
                 let p = y * stride + x * 4
-                bytes[p] = 80; bytes[p + 1] = 45; bytes[p + 2] = 20; bytes[p + 3] = 255
+                bytes[p] = moving ? UInt8(80 + i) : 80; bytes[p + 1] = 45; bytes[p + 2] = 20; bytes[p + 3] = 255
             } }
             CVPixelBufferUnlockBaseAddress(frame, [])
             guard adaptor.append(frame, withPresentationTime: CMTime(value: Int64(i), timescale: 30)) else { throw writer.error! }
@@ -1419,9 +1475,9 @@ import SwiftUI
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in writer.finishWriting { continuation.resume() } }
         guard writer.status == .completed else { throw writer.error! }
     }
-    private func sourceVideo(rotated: Bool = false, audio: Bool = false) async throws -> URL {
+    private func sourceVideo(rotated: Bool = false, audio: Bool = false, moving: Bool = false) async throws -> URL {
         let video = root.appendingPathComponent("\(UUID().uuidString).mp4")
-        try await silentVideo(video, rotated: rotated)
+        try await silentVideo(video, rotated: rotated, moving: moving)
         guard audio else { return video }
         let wave = root.appendingPathComponent("tone.wav"); try tone(wave, frequency: 440, duration: 4)
         let composition = AVMutableComposition()

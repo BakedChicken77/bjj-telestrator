@@ -108,7 +108,7 @@ struct BJJNativeEditorScreen: View {
                     }.padding(24).frame(maxWidth: 320).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
                 }
             }
-            .task { await session.prepareThumbnails(); await session.prepareAudio() }
+            .task { await session.prepareAudio(); await session.prepareThumbnails() }
             .onChange(of: scenePhase) { _, phase in if phase == .background { session.stopRecording(); session.cancelCueGesture(); session.pause() } else if phase != .active && !session.recording { session.cancelCueGesture(); session.pause() } }
             .interactiveDismissDisabled(session.recording || session.exporting || session.preparingAudio)
             .onDisappear { session.close() }
@@ -365,13 +365,14 @@ final class BJJNativeCanvas: UIView, UIGestureRecognizerDelegate {
         guard size.width > 1, size.height > 1 else { return }
         do {
             let previewKey = session.previewCue.flatMap { try? JSONSerialization.data(withJSONObject: $0, options: [.sortedKeys]).base64EncodedString() } ?? ""
-            if renderRevision != session.project.revision || renderSize != size || previewSignature != previewKey {
-                previewSignature = previewKey
-                let cues = session.project.annotations.map { cue in session.previewCue?.s("id") == cue.s("id") ? session.previewCue! : cue }
+            let orderKey = session.displayCues.map { "\($0.s("id")):\($0.n("zIndex"))" }.joined(separator: ",")
+            if renderRevision != session.project.revision || renderSize != size || previewSignature != previewKey + orderKey {
+                previewSignature = previewKey + orderKey
+                let cues = session.displayCues
                 renderer = try BJJOverlay(annotations: cues, size: size, fps: session.project.exportSettings.n("fps"))
                 renderRevision = session.project.revision; renderSize = size; signature = "invalid"
             }
-            let visible = session.project.annotations.map { session.previewCue?.s("id") == $0.s("id") ? session.previewCue! : $0 }.filter { BJJProject.visible($0, time: session.time, fps: session.project.exportSettings.n("fps")) }.map { $0.s("id") }.joined(separator: ",")
+            let visible = session.displayCues.filter { BJJProject.visible($0, time: session.time, fps: session.project.exportSettings.n("fps")) }.map { $0.s("id") }.joined(separator: ",")
             if signature != visible {
                 signature = visible
                 if let image = renderer?.image(at: session.time), let cg = imageContext.createCGImage(image, from: image.extent) {
@@ -406,6 +407,7 @@ final class BJJNativeCanvas: UIView, UIGestureRecognizerDelegate {
                     let handles = BJJCueGeometry.handles(cue, size: picture.bounds.size)
                     handleIndex = handles.indices.min(by: { distance(handles[$0], point) < distance(handles[$1], point) })
                     if let i = handleIndex, distance(handles[i], point) > 22 / scale { handleIndex = nil }
+                    if session.inspectingCue { handleIndex = nil }
                     if handleIndex != nil || BJJCueGeometry.hit(cue, point: point, size: picture.bounds.size, tolerance: 22 / scale) { gestureCue = cue }
                 }
                 if gestureCue == nil && !session.inspectingCue { session.select(candidates(at: point).first?.s("id")); gestureCue = session.selectedCue }
