@@ -205,6 +205,7 @@ import UniformTypeIdentifiers
         let exported = try await BJJMedia.inspect(movie, reference: "exports/range.mp4", originalName: "range.mp4")
         XCTAssertEqual(exported.videoRange.duration.seconds, 0.5, accuracy: 1 / 30.0)
         let frames = try decodedTimingFrames(exported)
+        print("Held VFR range frames: \(frames.count); first: \(frames.prefix(3)); last: \(frames.suffix(3))")
         XCTAssertGreaterThan(frames.count, 10)
         XCTAssertTrue(frames.allSatisfy { $0.rgb[1] > 200 && $0.rgb[2] < 40 }, "VFR hold must freeze the exact green frame without stretching multiple frames")
     }
@@ -237,6 +238,20 @@ import UniformTypeIdentifiers
         let preview = try await BJJAudioComposition.preview(project: recovered, store: store, target: mix)
         let previewDuration = try await preview.asset.load(.duration)
         XCTAssertEqual(previewDuration.seconds, 9, accuracy: 0.04)
+        let generator = AVAssetImageGenerator(asset: preview.asset)
+        generator.requestedTimeToleranceBefore = .zero; generator.requestedTimeToleranceAfter = .zero
+        func previewPixel(_ seconds: Double) throws -> [UInt8] {
+            let image = try generator.copyCGImage(at: CMTime(seconds: seconds, preferredTimescale: 60000), actualTime: nil)
+            var bytes = [UInt8](repeating: 0, count: 4)
+            bytes.withUnsafeMutableBytes { pointer in
+                let context = CGContext(data: pointer.baseAddress, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+                    space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+                context.draw(image, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+            }
+            return bytes
+        }
+        XCTAssertEqual(try previewPixel(2), try previewPixel(4), "Preview must repeat the same picture throughout the hold")
+        XCTAssertNotEqual(try previewPixel(4), try previewPixel(7), "Preview must resume source motion after the hold")
         let previewEnergy = try await audioEnergy(mix, from: 2, to: 5)
         XCTAssertGreaterThan(previewEnergy, 0.05)
         let media = try await BJJMedia.inspect(store.asset(initial.id, initial.source.s("asset")), reference: initial.source.s("asset"), originalName: "pause")
@@ -246,6 +261,7 @@ import UniformTypeIdentifiers
         XCTAssertEqual(exported.videoRange.duration.seconds, 9, accuracy: 0.04)
         let frames = try decodedTimingFrames(exported)
         let held = frames.filter { $0.time >= 1.2 && $0.time < 5.8 }
+        print("Paused review output frames: \(frames.count); first: \(frames.prefix(3)); last: \(frames.suffix(3)); held: \(held.prefix(3))")
         let frozen = try XCTUnwrap(held.first)
         XCTAssertGreaterThan(held.count, 100)
         XCTAssertTrue(held.allSatisfy { zip($0.rgb, frozen.rgb).allSatisfy { abs($0 - $1) <= 3 } }, "One decoded frame must repeat throughout the hold")

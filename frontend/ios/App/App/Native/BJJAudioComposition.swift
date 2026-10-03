@@ -109,7 +109,9 @@ struct BJJAudioComposition {
               let video = videoComposition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) else {
             throw BJJError.invalid("The preview video is unavailable.")
         }
-        try await project.reviewTimeline.insertVideo(sourceVideo, range: CMTimeRange(start: .zero, duration: CMTime(seconds: project.duration, preferredTimescale: 48000)), into: video)
+        // The CFR proxy may not contain the original VFR frame's precise PTS.
+        // Repeat its picture covering that instant; export resolves the original.
+        try await project.reviewTimeline.insertVideo(sourceVideo, range: CMTimeRange(start: .zero, duration: CMTime(seconds: project.duration, preferredTimescale: 48000)), into: video, exactFrame: false)
         video.preferredTransform = try await sourceVideo.load(.preferredTransform)
         if let output = audio.output {
             try store.checkSpace(required: Int64(project.outputDuration * 48000 * 8) + 100_000_000)

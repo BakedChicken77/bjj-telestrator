@@ -320,6 +320,7 @@ final class BJJRenderer {
         videoComposition.colorYCbCrMatrix = AVVideoYCbCrMatrix_ITU_R_709_2
         videoComposition.renderSize = size
         videoComposition.frameDuration = CMTime(seconds: 1 / fps, preferredTimescale: 60000)
+        videoComposition.sourceTrackIDForFrameTiming = kCMPersistentTrackID_Invalid
         let instruction = AVMutableVideoCompositionInstruction()
         instruction.timeRange = CMTimeRange(start: .zero, duration: CMTime(seconds: timeline.duration, preferredTimescale: 48000))
         let layer = AVMutableVideoCompositionLayerInstruction(assetTrack: video)
@@ -394,16 +395,47 @@ final class BJJRenderer {
             monitor.resume()
             var videoEnded = false
             var lastProgress = -1.0
+            // A scaled one-picture edit can yield one long-duration buffer, even
+            // with a video composition frameDuration. Sample its OUTPUT clock on
+            // the export grid explicitly, retaining at most two decoded pictures.
+            // Ordinary exports retain their established reader/writer path.
+            var currentPicture: CMSampleBuffer?
+            var nextPicture: CMSampleBuffer?
+            var outputFrame: Int64 = 0
+            func picture() -> CMSampleBuffer? {
+                while !self.shouldStop(), let sample = videoOutput.copyNextSampleBuffer() {
+                    if CMSampleBufferGetImageBuffer(sample) != nil { return sample }
+                }
+                return nil
+            }
             videoInput.requestMediaDataWhenReady(on: DispatchQueue(label: "bjj.encode.video")) { [self] in
                 while videoInput.isReadyForMoreMediaData && !videoEnded && !shouldStop() {
                     autoreleasepool {
-                        guard let sample = videoOutput.copyNextSampleBuffer() else {
+                        let decoded: CMSampleBuffer?
+                        let pts: CMTime
+                        if !timeline.holds.isEmpty {
+                            let elapsed = Double(outputFrame) / fps
+                            if elapsed >= duration.seconds - 0.0000001 {
+                                videoEnded = true; videoInput.markAsFinished(); endedStream(); return
+                            }
+                            pts = CMTime(seconds: start + elapsed, preferredTimescale: 60000)
+                            if currentPicture == nil { currentPicture = picture(); nextPicture = picture() }
+                            while let next = nextPicture,
+                                  CMSampleBufferGetOutputPresentationTimeStamp(next).seconds <= pts.seconds + 0.0000001 {
+                                currentPicture = next; nextPicture = picture()
+                            }
+                            decoded = currentPicture
+                        } else {
+                            decoded = videoOutput.copyNextSampleBuffer()
+                            pts = decoded.map { CMSampleBufferGetPresentationTimeStamp($0) } ?? .invalid
+                        }
+                        guard let sample = decoded else {
                             videoEnded = true
                             if reader.status == .failed { complete(.failure(reader.error ?? BJJError.invalid("Video decoding failed."))) }
+                            else if !timeline.holds.isEmpty { complete(.failure(BJJError.invalid("The paused review has no decoded picture."))) }
                             else { videoInput.markAsFinished(); endedStream() }
                             return
                         }
-                        let pts = CMSampleBufferGetPresentationTimeStamp(sample)
                         guard let source = CMSampleBufferGetImageBuffer(sample), let pool = adaptor.pixelBufferPool else {
                             complete(.failure(BJJError.invalid("A decoded video frame is unavailable."))); return
                         }
@@ -417,6 +449,7 @@ final class BJJRenderer {
                         guard adaptor.append(destination, withPresentationTime: CMTimeSubtract(pts, CMTime(seconds: start, preferredTimescale: 60000))) else {
                             complete(.failure(writer.error ?? BJJError.invalid("Unable to encode a video frame."))); return
                         }
+                        outputFrame += 1
                         if pts.seconds - lastProgress >= 0.2 { lastProgress = pts.seconds; progress(max(0, pts.seconds - start)) }
                     }
                 }

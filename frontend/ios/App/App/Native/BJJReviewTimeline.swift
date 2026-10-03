@@ -115,7 +115,7 @@ struct BJJReviewTimeline {
     }
     /// Insert playing spans and exactly ONE decoded sample per hold. Scaling this
     /// one sample repeats a frame, rather than slowing a multi-frame video range.
-    func insertVideo(_ source: AVAssetTrack, range: CMTimeRange, into track: AVMutableCompositionTrack, cancelled: @escaping () -> Bool = { false }) async throws {
+    func insertVideo(_ source: AVAssetTrack, range: CMTimeRange, into track: AVMutableCompositionTrack, exactFrame: Bool = true, cancelled: @escaping () -> Bool = { false }) async throws {
         if cancelled() { throw BJJError.cancelled }
         if holds.isEmpty { try track.insertTimeRange(range, of: source, at: .zero); return }
         for span in spans {
@@ -126,23 +126,24 @@ struct BJJReviewTimeline {
                 guard let asset = source.asset else { throw BJJError.invalid("The paused video asset is unavailable.") }
                 let reader = try AVAssetReader(asset: asset)
                 defer { reader.cancelReading() }
-                reader.timeRange = CMTimeRange(start: CMTimeMaximum(range.start, CMTimeSubtract(pts, CMTime(seconds: 0.0001, preferredTimescale: 1000000000))), end: CMTimeRangeGetEnd(range))
+                reader.timeRange = CMTimeRange(start: pts, end: CMTimeRangeGetEnd(range))
                 let output = AVAssetReaderTrackOutput(track: source, outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
                 reader.add(output)
                 guard reader.startReading() else { throw reader.error ?? BJJError.invalid("Cannot decode the paused frame.") }
                 func pictureSample() -> CMSampleBuffer? {
                     while let sample = output.copyNextSampleBuffer() {
                         if cancelled() { return nil }
-                        if CMSampleBufferGetImageBuffer(sample) != nil { return sample }
+                        if CMSampleBufferGetImageBuffer(sample) != nil,
+                           !exactFrame || CMSampleBufferGetPresentationTimeStamp(sample).seconds >= pts.seconds - 0.0000001 { return sample }
                         // Core Media can return marker buffers without a picture.
                     }
                     return nil
                 }
                 guard let sample = pictureSample() else { throw reader.error ?? BJJError.invalid("The paused frame is unavailable.") }
-                let first = CMSampleBufferGetOutputPresentationTimeStamp(sample)
+                let first = CMSampleBufferGetPresentationTimeStamp(sample)
                 var frameDuration = CMSampleBufferGetOutputDuration(sample)
                 if let next = pictureSample() {
-                    let interval = CMTimeSubtract(CMSampleBufferGetOutputPresentationTimeStamp(next), first)
+                    let interval = CMTimeSubtract(CMSampleBufferGetPresentationTimeStamp(next), first)
                     if interval.isNumeric && interval.seconds > 0 { frameDuration = interval }
                 } else if !frameDuration.isNumeric || frameDuration.seconds <= 0 {
                     frameDuration = CMTimeSubtract(CMTimeRangeGetEnd(range), first)
