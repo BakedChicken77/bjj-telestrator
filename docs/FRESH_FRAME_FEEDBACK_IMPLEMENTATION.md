@@ -1,6 +1,18 @@
 # Fresh Frame TestFlight feedback implementation
 
-Implementation branch: `feature/testflight-feedback-update`, draft PR #37. Baseline: `d661fa683021a8df5f5bd9b212ab1f6ce55d1b9e`. This change has not been merged or released. The original feedback package and detailed implementation plan remain the acceptance sources; the feedback IDs below refer to that package.
+Implementation branch: `feature/testflight-feedback-update`, draft PR #37. Baseline: `d661fa683021a8df5f5bd9b212ab1f6ce55d1b9e`. Internal TestFlight 2.1.0 (31.1) was published with explicit authorization; the PR remains unmerged, with no production release. The original feedback package and detailed implementation plan remain the acceptance sources; the feedback IDs below refer to that package.
+
+## October 4 device feedback and import status follow-up
+
+Steve reports that paused narration works on the physical iPhone. This confirms the basic device workflow, not the entire route/interruption/frame-alignment matrix. He also reports approximately 90 seconds to import a 103-second video, with the first “processing” stage dominating. No timing report or recording of that import is available yet; attributing the delay to iCloud remains a hypothesis.
+
+Confirmed source finding: the native `BJJNativePhotoPicker` used automatic representation selection, unlike the legacy plugin's `.current` setting. Apple recommends `.current` to avoid transcoding where possible. The picker now requests the current representation, retaining the existing native HEVC/HDR validation, preview and export pipeline. It does not promise byte-identical camera originals for edited/Cinematic Photos assets. No encoding, hash or validation safeguards were removed.
+
+The app-owned provider-wait label is now “Getting video from Photos…” with an explicit explanation that Photos may be downloading from iCloud or preparing the video, and copying has not started. The provider's real aggregate progress is shown only when determinate; byte-copy progress then replaces it, followed by preparation/checking. Cancellation cannot be overwritten by polling. The app cannot rename Apple's own picker-owned processing UI. NSItemProvider's aggregate progress is not proof of iCloud activity; no filename, delay or progress-fraction heuristic claims it is. A guaranteed cloud-specific PhotoKit path would require asset access/permission and a larger import redesign; we retain the privacy-preserving selected-item picker without a new library-access prompt.
+
+Sources: [Apple representation guidance](https://developer.apple.com/documentation/photosui/phpickerconfiguration-c.class/preferredassetrepresentationmode), [provider temporary-file contract](https://developer.apple.com/documentation/foundation/nsitemprovider/loadfilerepresentation(fortypeidentifier:completionhandler:)), [Photos picker progress](https://developer.apple.com/videos/play/wwdc2021/10046/), [PhotoKit cloud progress handler](https://developer.apple.com/documentation/photos/phvideorequestoptions/progresshandler).
+
+Validation: native tests assert `.current`, single selection, determinate/unknown progress and provider-wait messaging with cancellation settlement. Run full macOS CI before distribution. On iPhone compare 31.1 against this change with the same 103-second video and local versus genuinely cloud-only copies, three runs per condition; record screen timing before picker dismissal separately from `provider_wait`, `copy`, `proxy_encode` and editor readiness. Reports now include app build. Keep cold/warm results separate—an already-downloaded repeat cannot demonstrate an import optimization. Test HEVC/H.264, HDR, edited video, offline cloud failure, Cancel and retry. Confirm no false iCloud assertion for local video and successful preview/export. No measured speedup is claimed until these comparisons are available.
 
 ## Changes and completion gates
 
@@ -61,4 +73,4 @@ No simulator result proves microphone hardware, cloud-provider latency, touch er
 
 ## Remaining release gates
 
-Physical iPhone validation, controlled import benchmarks and exact final-commit CI evidence must be collected. Import optimization depends on those measurements. No merge, tag, build publication or App Store Connect change is part of this implementation branch.
+Remaining physical iPhone validation, controlled import benchmarks and exact final-commit CI evidence must be collected. Further import optimization depends on those measurements. Additional publication requires release authorization; code updates alone do not authorize merging, tagging or production submission.
