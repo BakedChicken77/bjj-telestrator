@@ -30,8 +30,13 @@ struct BJJNativeHome: View {
             VStack(spacing: 0) {
                 ZStack {
                     Color.black
+                    GeometryReader { geometry in
+                    ScrollView {
                     VStack(spacing: 24) {
-                        Image("FreshFrameLogo").resizable().scaledToFit().frame(width: 144, height: 144).accessibilityHidden(true)
+                        Image("FreshFrameLogo").resizable().scaledToFit()
+                            .frame(width: min(geometry.size.width * 0.82, max(48, geometry.size.height - 180)),
+                                   height: min(geometry.size.width * 0.82, max(48, geometry.size.height - 180)))
+                            .accessibilityHidden(true)
                         Text("Your next perspective starts here.").font(.headline).foregroundStyle(.white)
                         Menu {
                             Button("Choose from Photos", systemImage: "photo.on.rectangle") { photos = true }
@@ -39,7 +44,10 @@ struct BJJNativeHome: View {
                             Button("Previous reviews", systemImage: "clock") { previousReviews = true }
                         } label: { Label("Select a video", systemImage: "plus.circle.fill").frame(minHeight: 44) }
                             .buttonStyle(.borderedProminent).accessibilityIdentifier("home.selectVideo")
-                    }.padding()
+                    }.padding().frame(maxWidth: .infinity)
+                        .frame(minHeight: geometry.size.height)
+                    }
+                    }
                 }
                 HStack {
                     Button("Previous reviews", systemImage: "clock") { previousReviews = true }.accessibilityIdentifier("home.reviews")

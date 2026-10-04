@@ -601,7 +601,50 @@ import UniformTypeIdentifiers
         let report = try library.services().store.readJSON(timingReport)
         let imports = try BJJValidate.objects(report["imports"], "timing records", maximum: 256)
         XCTAssertEqual(imports.count, 1); XCTAssertNil(imports[0]["projectId"]); XCTAssertNil(imports[0]["jobId"])
+        let bytes = try source.resourceValues(forKeys: [.fileSizeKey]).fileSize!
+        XCTAssertEqual((imports[0]["copiedBytes"] as? NSNumber)?.intValue, bytes)
+        XCTAssertEqual((imports[0]["totalBytes"] as? NSNumber)?.intValue, bytes)
+        XCTAssertEqual(imports[0]["appVersion"] as? String, Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String)
+        XCTAssertEqual(imports[0]["appBuild"] as? String, Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String)
+        let restarted = try BJJMediaJobs(store: library.services().store)
+        let restored = try restarted.get(job.s("jobId"))
+        XCTAssertEqual(restored.copiedBytes, Int64(bytes))
+        XCTAssertEqual(restored.totalBytes, Int64(bytes))
+        XCTAssertNotNil(restored.timings?["copy"])
+        XCTAssertEqual(restored.appBuild, imports[0]["appBuild"] as? String)
         library.endShare(); XCTAssertFalse(FileManager.default.fileExists(atPath: timingReport.path))
+    }
+    func testFailedAndCancelledImportsPersistPartialCopyDiagnostics() throws {
+        let manager = try BJJMediaJobs(store: store)
+        for cancelled in [false, true] {
+            let job = try manager.create()
+            let (_, worker) = try manager.beginImport(job.jobId)
+            worker.copying(512, 1024); worker.metric("provider_wait", seconds: 2)
+            if cancelled { _ = try manager.cancel(job.jobId) }
+            manager.failure(job.jobId, cancelled ? BJJError.cancelled : BJJError.invalid("Test failure"))
+            let restored = try BJJMediaJobs(store: store).get(job.jobId)
+            XCTAssertEqual(restored.status, cancelled ? "cancelled" : "failed")
+            XCTAssertEqual(restored.copiedBytes, 512); XCTAssertEqual(restored.totalBytes, 1024)
+            XCTAssertEqual(restored.timings?["provider_wait"], 2)
+            XCTAssertEqual(restored.appBuild, job.appBuild)
+        }
+    }
+    func testHistoricalMediaDiagnosticsKeepUnknownBuildAndSavedTimings() throws {
+        let manager = try BJJMediaJobs(store: store)
+        let job = try manager.create()
+        _ = try manager.cancel(job.jobId)
+        let path = store.root.appendingPathComponent("media-jobs/\(job.jobId).json")
+        var record = try store.readJSON(path)
+        var historical = try BJJValidate.object(record["job"], "job")
+        historical.removeValue(forKey: "appVersion"); historical.removeValue(forKey: "appBuild")
+        historical["timings"] = ["provider_wait": 7.0]
+        record["job"] = historical; try store.writeJSON(record, to: path)
+        let restarted = try BJJMediaJobs(store: store)
+        let restored = try restarted.get(job.jobId)
+        XCTAssertNil(restored.appVersion); XCTAssertNil(restored.appBuild)
+        XCTAssertEqual(restored.timings?["provider_wait"], 7)
+        restarted.recordMetric(job.jobId, "editor_open", seconds: 0.1)
+        XCTAssertEqual(try restarted.get(job.jobId).timings?["provider_wait"], 7)
     }
     func testNativeLibraryShowsUnsupportedOriginalWithoutMutatingIt() async throws {
         let project = try project()

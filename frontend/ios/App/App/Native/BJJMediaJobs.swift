@@ -17,6 +17,9 @@ struct BJJMediaJob: Codable {
     var projectRevision: Int?
     var timings: [String: Double]?
     var mediaProfile: [String: String]?
+    // Optional so historical records remain readable without inventing provenance.
+    var appVersion: String?
+    var appBuild: String?
     let createdAt: String
     var terminal: Bool { ["completed", "failed", "cancelled"].contains(status) }
     func json() throws -> BJJJSON {
@@ -132,13 +135,23 @@ final class BJJMediaWork {
                 job.copiedBytes = state.0; job.totalBytes = state.1; job.progress = min(1, Double(state.0) / Double(state.1))
             } else if job.stage == "preparing_preview" { job.progress = state.2 }
         }
-        job.timings = work[id]?.metrics() ?? job.timings
+        if let metrics = work[id]?.metrics() {
+            job.timings = (job.timings ?? [:]).merging(metrics) { _, new in new }
+        }
         return job
     }
     func recordMetric(_ id: String, _ key: String, seconds: Double) {
         work[id]?.metric(key, seconds: seconds)
         guard var job = jobs[id] else { return }
-        job.timings = work[id]?.metrics(); jobs[id] = job; try? persist(job)
+        captureDiagnostics(&job)
+        job.timings = (job.timings ?? [:]).merging([key: max(0, seconds)]) { _, new in new }
+        jobs[id] = job; try? persist(job)
+    }
+    private func captureDiagnostics(_ job: inout BJJMediaJob) {
+        guard let worker = work[job.jobId] else { return }
+        let state = worker.snapshot()
+        if state.1 > 0 { job.copiedBytes = state.0; job.totalBytes = state.1 }
+        job.timings = (job.timings ?? [:]).merging(worker.metrics()) { _, new in new }
     }
     func create(_ project: BJJProject? = nil) throws -> BJJMediaJob {
         guard jobs.values.filter({ !$0.terminal }).count < 2 else { throw BJJError.domain("JOB_ACTIVE", "Finish or cancel the current video preparation first.") }
@@ -147,13 +160,16 @@ final class BJJMediaWork {
             jobs.removeValue(forKey: oldest.jobId); work.removeValue(forKey: oldest.jobId)
         }
         let job = BJJMediaJob(jobId: UUID().uuidString.lowercased(), projectId: project?.id ?? UUID().uuidString.lowercased(),
-                              operation: project == nil ? "import" : "repair", stage: project == nil ? "copying" : "inspecting", createdAt: BJJProject.now())
+                              operation: project == nil ? "import" : "repair", stage: project == nil ? "copying" : "inspecting",
+                              appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
+                              appBuild: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String,
+                              createdAt: BJJProject.now())
         try persist(job); jobs[job.jobId] = job; work[job.jobId] = BJJMediaWork()
         return job
     }
     private func update(_ id: String, _ change: (inout BJJMediaJob) -> Void) throws {
         guard var job = jobs[id], !job.terminal else { return }
-        change(&job); jobs[id] = job; activityChanged?(); try persist(job)
+        change(&job); captureDiagnostics(&job); jobs[id] = job; activityChanged?(); try persist(job)
         BJJDiagnostics.shared.record(.mediaStage, operation: id, phase: job.terminal ? job.status : job.stage)
     }
     @discardableResult func cancel(_ id: String) throws -> BJJMediaJob {
