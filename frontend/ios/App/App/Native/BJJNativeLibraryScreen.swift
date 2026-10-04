@@ -111,6 +111,7 @@ struct BJJNativeHome: View {
                 }
             } message: { Text("You can restore this review later. Original reviews remain unchanged.") }
             .alert("Review needs attention", isPresented: Binding(get: { library.error != nil }, set: { if !$0 { library.error = nil } })) {
+                Button("Share diagnostics") { library.error = nil; Task { await library.shareImportDiagnostics() } }
                 Button("OK") { library.error = nil }
             } message: { Text(library.error ?? "") }
             .onChange(of: scenePhase) { _, phase in if phase == .background { library.suspend() } }
@@ -158,6 +159,9 @@ struct BJJNativeHome: View {
                     Button("Support Fresh Frame", systemImage: "heart") { closeLibrary { support = true } }
                         .frame(minHeight: 44).accessibilityIdentifier("tips.open")
                     Button("Share import timing report", systemImage: "clock.arrow.circlepath") { closeLibrary { Task { await library.shareImportDiagnostics() } } }
+                    Button("Share diagnostic report", systemImage: "square.and.arrow.up") { closeLibrary { Task { await library.shareImportDiagnostics() } } }
+                    Button("Clear diagnostic logs", systemImage: "trash") { BJJDiagnostics.shared.clear() }
+                    Text("Diagnostic logs stay on this iPhone for up to 7 days (500 events). Reports include import timings, app events and error codes, but no video, audio, filenames or annotation text. Nothing is uploaded automatically.").font(.footnote)
                     Link("Help & support", destination: URL(string: "https://github.com/BakedChicken77/bjj-telestrator/blob/main/docs/SUPPORT.md")!)
                     Link("Privacy policy", destination: URL(string: "https://github.com/BakedChicken77/bjj-telestrator/blob/main/docs/PRIVACY.md")!)
                 }

@@ -1,6 +1,6 @@
 # Fresh Frame privacy policy
 
-Effective September 28, 2026
+Effective October 4, 2026
 
 Fresh Frame is a video review app published by Steve Long. It was previously named BJJ Telestrator.
 
@@ -17,6 +17,8 @@ You choose whether to export an MP4, share a file, or save an editable project b
 Reviews remain on your device until you remove them. Reviews moved to Recently Deleted can be restored. Deleting the app can delete its local files, so export project backups first if you want to keep editable reviews.
 
 ## Support and diagnostics
+
+Fresh Frame keeps a local rolling diagnostic log of at most 500 recent events, filtering out events older than seven days when the log is accessed. Events include app version/build, timestamps, a random session identifier, operation identifiers, workflow stages, numeric measurements and sanitized error codes. The log does not contain video/audio, filenames, paths, annotation text, account credentials or purchase receipts. It is excluded from device backups and is never uploaded automatically. Use **Previous reviews → Share diagnostic report** to share it, or **Clear diagnostic logs** to remove the event history. Import timing records are separate local job records and remain available in reports; they include media format/dimensions, timings and source checksums, but no filenames or media content.
 
 If you contact us or voluntarily send a diagnostic report, we receive the information you choose to provide and use it to investigate your request. Do not include private footage or personal information in public GitHub issues. Apple may separately process purchase, download, and diagnostic information under its own privacy settings and policies.
 

@@ -184,7 +184,7 @@ struct BJJNativeTransportState: Codable {
     @Published var tool: BJJNativeTool = .arrow
     @Published var color = "#FF453A"
     @Published var text = "Cue"
-    @Published var error: String?
+    @Published var error: String? { didSet { if error != nil { BJJDiagnostics.shared.record(.editorError) } } }
     @Published var thumbnails: [UIImage] = []
     @Published var exporting = false
     @Published var exportProgress = 0.0
@@ -219,6 +219,7 @@ struct BJJNativeTransportState: Codable {
     private var closed = false
     private var seekGeneration = 0
     init(project: BJJProject, store: BJJStore, service: BJJService? = nil, preferences: UserDefaults? = .standard) throws {
+        BJJDiagnostics.shared.record(.editorOpen)
         self.project = project; self.store = store; id = project.id
         playbackTimeline = BJJReviewTimeline(sourceDuration: project.duration)
         self.service = service; self.preferences = preferences; loopEnd = project.duration
@@ -278,6 +279,7 @@ struct BJJNativeTransportState: Codable {
         savePosition()
     }
     func togglePlayback() {
+        BJJDiagnostics.shared.record(.playback)
         guard !recording, !preparingAudio else { return }
         if playing { pause(); return }
         drawing = false
@@ -346,6 +348,7 @@ struct BJJNativeTransportState: Codable {
         guard !exporting, !recording, !preparingAudio else { throw BJJError.invalid("Finish the current operation before editing.") }
         let previous = documentState
         let saved = try store.save(BJJProject(json))
+        BJJDiagnostics.shared.record(.editSaved, value: Double(saved.revision))
         let audioChanged = !NSDictionary(dictionary: ["takes": project.allTakes, "holds": project.reviewTimeline.holds, "settings": project.settings]).isEqual(to: ["takes": saved.allTakes, "holds": saved.reviewTimeline.holds, "settings": saved.settings])
         undoStack.append(previous); if undoStack.count > 50 { undoStack.removeFirst() }
         redoStack.removeAll(); project = saved; cancelCueEdit(); syncHistory()
@@ -372,6 +375,7 @@ struct BJJNativeTransportState: Codable {
         } catch { self.error = error.localizedDescription }
     }
     func prepareAudio() async {
+        BJJDiagnostics.shared.record(.audioPreview)
         guard !closed, !recording, !preparingAudio else { return }
         let preparationBegan = ProcessInfo.processInfo.systemUptime
         let timingJobID = importJobID; importJobID = nil
@@ -405,12 +409,14 @@ struct BJJNativeTransportState: Codable {
         guard !closed, !recording, !preparingAudio, !exporting else { return }
         cancelCueEdit(); pause(); drawing = false; speed = 1; loopEnabled = false
         recording = true
+        BJJDiagnostics.shared.record(.recordingStart)
         do {
             try await capture.begin(project: project, store: store, player: player)
             guard !closed, recording else { capture.stop(); return }
             audioRoute = capture.route; playing = true
         } catch {
             recording = false; pause()
+            BJJDiagnostics.shared.record(.recordingError, error: error)
             if !(error is CancellationError), (error as? BJJError)?.code != "CANCELLED" { self.error = error.localizedDescription }
         }
     }
@@ -453,6 +459,7 @@ struct BJJNativeTransportState: Codable {
         catch { self.error = error.localizedDescription }
     }
     func history(redo: Bool) {
+        BJJDiagnostics.shared.record(.history, value: redo ? 1 : 0)
         guard !exporting, !recording, !preparingAudio, !inspectingCue else { return }; cancelCueEdit()
         guard let state = redo ? redoStack.last : undoStack.last else { return }
         do {
@@ -513,6 +520,7 @@ struct BJJNativeTransportState: Codable {
     }
     func cancelExport() { exportCancelled = true; if let jobID { _ = try? service?.cancel(jobID) } }
     func close() {
+        BJJDiagnostics.shared.record(.editorClose)
         guard !closed else { return }
         capture.stop(); closed = true; previewGeneration += 1; cancelCueEdit(); pause(); cancelExport(); releaseExport()
         if let observer { player.removeTimeObserver(observer); self.observer = nil }

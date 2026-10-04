@@ -89,7 +89,7 @@ struct BJJExportJob: Codable {
                 job.outputAvailable = job.status == "completed" && job.filename.map { $0 == URL(fileURLWithPath: $0).lastPathComponent && FileManager.default.fileExists(atPath: exportFolder.appendingPathComponent($0).path) } == true
                 jobs[job.jobId] = job
                 try persist(job)
-            } catch { logger.error("Unreadable export metadata: \(error.localizedDescription, privacy: .public)") }
+            } catch { BJJDiagnostics.shared.record(.exportError, error: error); logger.error("Unreadable export metadata: \(error.localizedDescription, privacy: .private)") }
         }
         guard cleanTemporary else { return }
         let temp = folder.appendingPathComponent("temp")
@@ -98,6 +98,7 @@ struct BJJExportJob: Codable {
         }
     }
     private func persist(_ job: BJJExportJob) throws {
+        BJJDiagnostics.shared.record(.exportStage, operation: job.jobId, phase: job.status)
         let url = try store.safeURL(job.projectId, "exports/\(job.jobId).json")
         try JSONEncoder().encode(job).write(to: url, options: .atomic)
     }
@@ -272,12 +273,13 @@ struct BJJExportJob: Codable {
                 logger.info("Export completed: \(id, privacy: .public)")
             } catch {
                 if jobs[id]?.status != "cancelled" {
+                    BJJDiagnostics.shared.record(.exportError, operation: id, error: error)
                     jobs[id]?.status = "failed"; jobs[id]?.outputAvailable = false
                     let domain = error as? BJJError
                     let lowSpace = (error as NSError).code == NSFileWriteOutOfSpaceError
                     jobs[id]?.errorCode = lowSpace ? "STORAGE_LOW" : domain?.code ?? "EXPORT_FAILED"
                     jobs[id]?.error = lowSpace ? "Storage filled during export. Free space and retry this revision." : domain?.localizedDescription ?? "Export failed. Check source media and available storage, then retry this revision."
-                    logger.error("Export failed: \(id, privacy: .public), \(error.localizedDescription, privacy: .public)")
+                    logger.error("Export failed: \(id, privacy: .public), \(error.localizedDescription, privacy: .private)")
                 }
             }
             if let job = jobs[id] { try? persist(job) }

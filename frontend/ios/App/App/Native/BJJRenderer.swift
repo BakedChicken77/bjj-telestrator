@@ -27,6 +27,9 @@ enum BJJColor {
 }
 
 struct BJJMedia {
+    static func needsCompatibleCopy(subtype: String, atoms: [String: Any]) -> Bool {
+        atoms["dvcC"] != nil || atoms["dvvC"] != nil || ["dvh1", "dvhe"].contains(subtype)
+    }
     let asset: AVURLAsset
     let video: AVAssetTrack
     let videoRange: CMTimeRange
@@ -60,8 +63,9 @@ struct BJJMedia {
         let extensions = (CMFormatDescriptionGetExtensions(format) as NSDictionary?) ?? NSDictionary()
         let atoms = extensions[kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms] as? [String: Any] ?? [:]
         let subtype = fourCC(CMFormatDescriptionGetMediaSubType(format))
-        if atoms["dvcC"] != nil || atoms["dvvC"] != nil || ["dvh1", "dvhe"].contains(subtype) {
-            throw BJJError.domain("MEDIA_UNSUPPORTED", "This Dolby Vision variant needs a Photos-rendered SDR copy. Its original was preserved.")
+        if needsCompatibleCopy(subtype: subtype, atoms: atoms) {
+            BJJDiagnostics.shared.record(.dolbyRejected, value: Double(CMFormatDescriptionGetMediaSubType(format)))
+            throw BJJError.domain("MEDIA_DOLBY_UNSUPPORTED", "This video is still in an unsupported Dolby Vision format. Try importing it from Photos, which requests a compatible copy. If Photos cannot convert it, choose an SDR copy and share a diagnostic report from Previous reviews. Your original video was not changed.")
         }
         let seconds = range.duration.seconds
         guard seconds.isFinite, seconds >= 0.05, seconds <= 86400,

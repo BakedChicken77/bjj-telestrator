@@ -530,9 +530,15 @@ import UniformTypeIdentifiers
         XCTAssertEqual(library.activity, "Cancelling…")
         XCTAssertFalse(library.busy); XCTAssertNil(library.error); XCTAssertTrue(library.reviews.isEmpty)
     }
-    func testPhotoPickerAvoidsCompatibilityConversionAndReportsHonestProgress() {
+    func testPhotoPickerRequestsCompatibleVideoAndReportsHonestProgress() {
+        XCTAssertTrue(BJJMedia.needsCompatibleCopy(subtype: "hvc1", atoms: ["dvcC": Data([1])]))
+        XCTAssertTrue(BJJMedia.needsCompatibleCopy(subtype: "hev1", atoms: ["dvvC": Data([1])]))
+        XCTAssertTrue(BJJMedia.needsCompatibleCopy(subtype: "dvh1", atoms: [:]))
+        XCTAssertTrue(BJJMedia.needsCompatibleCopy(subtype: "dvhe", atoms: [:]))
+        XCTAssertFalse(BJJMedia.needsCompatibleCopy(subtype: "hvc1", atoms: [:]))
+        XCTAssertFalse(BJJMedia.needsCompatibleCopy(subtype: "avc1", atoms: [:]))
         let configuration = BJJNativePhotoPicker.configuration()
-        XCTAssertEqual(configuration.preferredAssetRepresentationMode, .current)
+        XCTAssertEqual(configuration.preferredAssetRepresentationMode, .compatible)
         XCTAssertEqual(configuration.selectionLimit, 1)
         XCTAssertNil(BJJPhotoImportStatus.progress(nil))
         XCTAssertNil(BJJPhotoImportStatus.progress(Progress(totalUnitCount: 0)))
@@ -541,6 +547,39 @@ import UniformTypeIdentifiers
         XCTAssertEqual(BJJPhotoImportStatus.progress(progress), 0.35)
         progress.completedUnitCount = 150
         XCTAssertEqual(BJJPhotoImportStatus.progress(progress), 1)
+    }
+    func testDiagnosticsAreBoundedPersistentRedactedAndClearable() throws {
+        let file = root.appendingPathComponent("diagnostics/events.json")
+        let diagnostics = BJJDiagnostics(file: file, limit: 3)
+        let sensitive = "private-video.mov /Users/Steve secret annotation"
+        let underlying = NSError(domain: NSOSStatusErrorDomain, code: -50, userInfo: [NSLocalizedDescriptionKey: sensitive])
+        let error = NSError(domain: "AVFoundationErrorDomain", code: -11800,
+                            userInfo: [NSLocalizedDescriptionKey: sensitive, NSUnderlyingErrorKey: underlying])
+        let operation = UUID().uuidString
+        for _ in 0..<8 { diagnostics.record(.mediaError, operation: operation, phase: sensitive, error: error) }
+        let snapshot = diagnostics.snapshot()
+        let events = try XCTUnwrap(snapshot["events"] as? [BJJJSON])
+        XCTAssertEqual(events.count, 3)
+        XCTAssertEqual(events.last?["operation"] as? String, operation)
+        XCTAssertEqual((events.last?["errors"] as? [BJJJSON])?.count, 2)
+        let encoded = String(decoding: try JSONSerialization.data(withJSONObject: snapshot), as: UTF8.self)
+        XCTAssertFalse(encoded.contains(sensitive)); XCTAssertFalse(encoded.contains("private-video"))
+        XCTAssertTrue(encoded.contains("-11800")); XCTAssertTrue(encoded.contains("-50"))
+        XCTAssertEqual(snapshot["persistenceUnavailable"] as? Bool, false)
+        let reopened = BJJDiagnostics(file: file, limit: 3)
+        XCTAssertEqual((reopened.snapshot()["events"] as? [BJJJSON])?.count, 3)
+        reopened.clear()
+        XCTAssertEqual((BJJDiagnostics(file: file).snapshot()["events"] as? [BJJJSON])?.count, 0)
+    }
+    func testDiagnosticFailureDoesNotBreakOperationsAndExpiredEventsAreExcluded() throws {
+        let blocked = root.appendingPathComponent("blocked")
+        try Data("not a directory".utf8).write(to: blocked)
+        let diagnostics = BJJDiagnostics(file: blocked.appendingPathComponent("events.json"))
+        diagnostics.record(.launch)
+        XCTAssertEqual(diagnostics.snapshot()["persistenceUnavailable"] as? Bool, true)
+        let expired = root.appendingPathComponent("expired.json")
+        try JSONSerialization.data(withJSONObject: [["event": "launch", "time": Date().addingTimeInterval(-8 * 86400).timeIntervalSince1970]]).write(to: expired)
+        XCTAssertEqual((BJJDiagnostics(file: expired).snapshot()["events"] as? [BJJJSON])?.count, 0)
     }
     func testImportDiagnosticsAndAutomaticEditorOpening() async throws {
         let source = root.appendingPathComponent("direct-open.mp4"); try await silentVideo(source)
