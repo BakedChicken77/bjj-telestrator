@@ -21,7 +21,7 @@ import AVFoundation
             let source = root.appendingPathComponent("fixture-\(UUID().uuidString).mp4")
             defer { try? FileManager.default.removeItem(at: source) }
             try await video(source)
-            await library.importFile(source)
+            await library.importFile(source, openWhenReady: false)
         } catch { library.error = error.localizedDescription }
     }
     private static func video(_ url: URL) async throws {

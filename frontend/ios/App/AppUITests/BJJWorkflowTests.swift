@@ -13,13 +13,18 @@ final class BJJWorkflowTests: XCTestCase {
     }
     override func tearDownWithError() throws {
         if let testRun, testRun.failureCount > 0 {
-            let screenshot = XCTAttachment(screenshot: app.screenshot())
+            let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
             screenshot.name = "native-ui-failure"; screenshot.lifetime = .keepAlways; add(screenshot)
         }
         app.terminate()
         XCUIDevice.shared.orientation = .portrait
     }
     private func openReview() {
+        if app.buttons["home.reviews"].waitForExistence(timeout: 10) {
+            expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: app.buttons["home.reviews"])
+            waitForExpectations(timeout: 60)
+            app.buttons["home.reviews"].tap()
+        }
         let review = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "review.")).firstMatch
         XCTAssertTrue(review.waitForExistence(timeout: 60), app.debugDescription)
         review.tap()
@@ -43,7 +48,7 @@ final class BJJWorkflowTests: XCTestCase {
         waitForExpectations(timeout: 10)
         XCTAssertEqual(five.label, "Tip $5.00")
         XCTAssertTrue(app.buttons["tips.custom"].exists)
-        let portrait = XCTAttachment(screenshot: app.screenshot())
+        let portrait = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         portrait.name = "native-tips-portrait"; portrait.lifetime = .keepAlways; add(portrait)
         app.buttons["tips.custom"].tap()
         let amount = app.textFields["tips.amount"]
@@ -60,7 +65,7 @@ final class BJJWorkflowTests: XCTestCase {
         let close = app.buttons["tips.close"].firstMatch
         expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: close)
         waitForExpectations(timeout: 10)
-        let landscape = XCTAttachment(screenshot: app.screenshot())
+        let landscape = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         landscape.name = "native-tips-custom-landscape"; landscape.lifetime = .keepAlways; add(landscape)
         close.tap()
         XCTAssertTrue(support.waitForExistence(timeout: 10))
@@ -90,7 +95,7 @@ final class BJJWorkflowTests: XCTestCase {
         XCTAssertTrue(export.waitForExistence(timeout: 10)); export.tap()
         XCTAssertTrue(app.navigationBars["Export ready"].waitForExistence(timeout: 60), app.debugDescription)
         XCTAssertTrue(app.buttons["Share / Save to Files"].exists)
-        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "native-ui-export-ready"; screenshot.lifetime = .keepAlways; add(screenshot)
         app.buttons["export.done"].tap()
         XCTAssertTrue(app.buttons["editor.done"].waitForExistence(timeout: 10))
@@ -114,21 +119,51 @@ final class BJJWorkflowTests: XCTestCase {
             .press(forDuration: 0.1, thenDragTo: start.coordinate(withNormalizedOffset: CGVector(dx: 2, dy: 0.5)))
         XCTAssertNotEqual(start.value as? String, oldValue)
         let editedValue = start.value as? String
-        let portrait = XCTAttachment(screenshot: app.screenshot())
+        let portrait = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         portrait.name = "native-cue-range-portrait"; portrait.lifetime = .keepAlways; add(portrait)
         XCUIDevice.shared.orientation = .landscapeLeft
+        expectation(for: NSPredicate { _, _ in self.app.frame.width > self.app.frame.height }, evaluatedWith: app)
+        waitForExpectations(timeout: 10)
         let save = app.buttons["cue.properties.save"]
         expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: save)
         waitForExpectations(timeout: 10)
         XCTAssertEqual(start.value as? String, editedValue, "Rotation must preserve the draft")
         XCTAssertLessThanOrEqual(canvas.frame.maxX, start.frame.minX)
-        let landscape = XCTAttachment(screenshot: app.screenshot())
+        let landscape = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         landscape.name = "native-cue-range-landscape"; landscape.lifetime = .keepAlways; add(landscape)
         save.tap()
         XCUIDevice.shared.orientation = .portrait
         XCTAssertTrue(label.waitForExistence(timeout: 10)); label.tap()
         XCTAssertTrue(start.waitForExistence(timeout: 10)); XCTAssertEqual(start.value as? String, editedValue)
         app.buttons["cue.properties.cancel"].tap()
+        app.buttons["editor.done"].tap()
+    }
+    func testInspectorCollapseCanvasCancelDeleteAndUndo() throws {
+        app.launch(); openReview()
+        app.segmentedControls.buttons["Draw"].tap()
+        let canvas = app.otherElements["editor.video"]
+        canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.4))
+            .press(forDuration: 0.1, thenDragTo: canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.6)))
+        let label = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "cue.strip.")).firstMatch
+        XCTAssertTrue(label.waitForExistence(timeout: 10)); label.tap()
+        let collapse = app.buttons["cue.properties.collapse"]
+        XCTAssertTrue(collapse.waitForExistence(timeout: 10))
+        let before = canvas.frame.height
+        collapse.tap(); XCTAssertGreaterThan(canvas.frame.height, before)
+        collapse.tap()
+        canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            .press(forDuration: 0.1, thenDragTo: canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.55)))
+        XCTAssertTrue(app.buttons["cue.properties.save"].exists)
+        app.buttons["cue.properties.cancel"].tap()
+        label.tap()
+        let delete = app.buttons["cue.properties.delete"]
+        let form = app.descendants(matching: .any)["cue.properties.form"].firstMatch
+        XCTAssertTrue(form.exists)
+        for _ in 0..<10 { if delete.isHittable { break }; form.swipeUp() }
+        XCTAssertTrue(delete.isHittable); delete.tap()
+        XCTAssertFalse(label.exists)
+        app.buttons["Undo"].tap()
+        XCTAssertTrue(label.waitForExistence(timeout: 10))
         app.buttons["editor.done"].tap()
     }
     func testCueEndHandleCancellationPreservesSavedTiming() throws {

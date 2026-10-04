@@ -108,6 +108,12 @@ enum BJJCueGeometry {
 
 extension BJJNativeEditorSession {
     var selectedCue: BJJJSON? { project.annotations.first { $0.s("id") == selectedID } }
+    var displayCues: [BJJJSON] {
+        (draftOrder ?? project.annotations).map { cue in
+            guard let previewCue, previewCue.s("id") == cue.s("id") else { return cue }
+            var preview = previewCue; preview["zIndex"] = cue["zIndex"]; return preview
+        }
+    }
     var pictureSize: CGSize { CGSize(width: project.source.n("displayWidth"), height: project.source.n("displayHeight")) }
     func select(_ id: String?, seekToCue: Bool = false) {
         cancelCueEdit(); pause(); selectedID = id; selecting = true; drawing = true
@@ -122,15 +128,66 @@ extension BJJNativeEditorSession {
         updated["updatedAt"] = BJJProject.now(); annotations[index] = updated
         try commit(annotations)
     }
-    func beginCueEdit() { cancelCueEdit(); pause(); editRevision = project.revision; previewCue = selectedCue }
-    func finishCueEdit() {
-        let cue = previewCue, revision = editRevision; cancelCueEdit()
-        guard let cue, let revision else { return }
-        do { try updateCue(cue, expectedRevision: revision) } catch { self.error = error.localizedDescription }
+    func beginInspector() {
+        guard let cue = selectedCue else { return }
+        cancelCueEdit(); pause(); inspectingCue = true
+        editRevision = project.revision; cueDraft = cue; previewCue = cue
     }
-    func cancelCueEdit() { if previewCue != nil { previewCue = nil }; editRevision = nil }
+    func stageCue(_ cue: BJJJSON) {
+        cueDraft = cue
+        var document = project.json; document["annotations"] = [cue]
+        if (try? BJJProject(document)) != nil { previewCue = cue }
+    }
+    func saveInspector() throws {
+        guard let cue = cueDraft, let revision = editRevision, revision == project.revision else {
+            throw BJJError.invalid("This review changed. Cancel and reopen the cue before saving.")
+        }
+        guard cueEditDirty else { cancelCueEdit(); return }
+        var annotations = draftOrder ?? project.annotations
+        guard let index = annotations.firstIndex(where: { $0.s("id") == cue.s("id") }) else {
+            throw BJJError.invalid("This cue no longer exists.")
+        }
+        var updated = cue; updated["updatedAt"] = BJJProject.now()
+        if let draftOrder, let ordered = draftOrder.first(where: { $0.s("id") == cue.s("id") }) { updated["zIndex"] = ordered["zIndex"] }
+        annotations[index] = updated
+        try commit(annotations) // Failed saves retain the draft and its revision.
+    }
+    func deleteInspector() throws {
+        guard let revision = editRevision, revision == project.revision, let id = selectedID else {
+            throw BJJError.invalid("This review changed. Cancel and reopen the cue before deleting.")
+        }
+        try commit(project.annotations.filter { $0.s("id") != id })
+    }
+    func beginCueEdit() {
+        pause()
+        if inspectingCue { gestureSnapshot = previewCue; return }
+        cancelCueEdit(); editRevision = project.revision; previewCue = selectedCue
+    }
+    func finishCueEdit() {
+        if inspectingCue {
+            if let previewCue { var staged = cueDraft ?? previewCue; staged["geometry"] = previewCue["geometry"]; stageCue(staged) }
+            gestureSnapshot = nil; return
+        }
+        let cue = previewCue, revision = editRevision
+        guard let cue, let revision else { return }
+        do { try updateCue(cue, expectedRevision: revision) }
+        catch { self.error = error.localizedDescription; cancelCueEdit() }
+    }
+    func cancelCueGesture() {
+        if inspectingCue { if let gestureSnapshot { previewCue = gestureSnapshot }; gestureSnapshot = nil }
+        else { cancelCueEdit() }
+    }
+    func cancelCueEdit() {
+        // Canvas layout/refresh calls this while idle. Re-publishing unchanged
+        // nil/false values would feed updateUIView back into SwiftUI forever.
+        if previewCue != nil { previewCue = nil }
+        if cueDraft != nil { cueDraft = nil }
+        if inspectingCue { inspectingCue = false }
+        if draftOrder != nil { draftOrder = nil }
+        editRevision = nil; gestureSnapshot = nil
+    }
     func layer(_ id: String, forward: Bool) {
-        var ordered = project.annotations.enumerated().sorted {
+        var ordered = (draftOrder ?? project.annotations).enumerated().sorted {
             $0.element.n("zIndex") == $1.element.n("zIndex") ? $0.offset < $1.offset : $0.element.n("zIndex") < $1.element.n("zIndex")
         }.map { $0.element }
         guard let index = ordered.firstIndex(where: { $0.s("id") == id }) else { return }
@@ -138,6 +195,13 @@ extension BJJNativeEditorSession {
         guard ordered.indices.contains(next) else { return }
         ordered.swapAt(index, next)
         for i in ordered.indices { ordered[i]["zIndex"] = i; ordered[i]["updatedAt"] = BJJProject.now() }
+        if inspectingCue {
+            let baseline = project.annotations.enumerated().sorted {
+                $0.element.n("zIndex") == $1.element.n("zIndex") ? $0.offset < $1.offset : $0.element.n("zIndex") < $1.element.n("zIndex")
+            }.map { $0.element.s("id") }
+            draftOrder = ordered.map { $0.s("id") } == baseline ? nil : ordered
+            return
+        }
         do { try commit(ordered) } catch { self.error = error.localizedDescription }
     }
 }

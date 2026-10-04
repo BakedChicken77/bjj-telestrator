@@ -12,6 +12,8 @@ struct BJJNativeHome: View {
     }
     @Environment(\.scenePhase) private var scenePhase
     @State private var search = ""
+    @State private var previousReviews = false
+    @State private var afterLibrary: (() -> Void)?
     @State private var photos = false
     @State private var files = false
     @State private var backupImport = false
@@ -25,52 +27,37 @@ struct BJJNativeHome: View {
     }
     var body: some View {
         NavigationStack {
-            List {
-                Section {
-                    Menu {
-                        Button("Choose from Photos", systemImage: "photo.on.rectangle") { photos = true }
-                        Button("Choose from Files", systemImage: "folder") { backupImport = false; files = true }
-                        Button("Restore project backup", systemImage: "arrow.down.doc") { backupImport = true; files = true }
-                    } label: { Label("New review", systemImage: "plus.circle.fill").font(.headline).frame(minHeight: 44) }
-                    Text("Draw on your videos, record commentary, and share your perspective.")
-                        .font(.footnote).foregroundStyle(.secondary)
+            VStack(spacing: 0) {
+                ZStack {
+                    Color.black
+                    VStack(spacing: 24) {
+                        Image("FreshFrameLogo").resizable().scaledToFit().frame(width: 144, height: 144).accessibilityHidden(true)
+                        Text("Your next perspective starts here.").font(.headline).foregroundStyle(.white)
+                        Menu {
+                            Button("Choose from Photos", systemImage: "photo.on.rectangle") { photos = true }
+                            Button("Choose from Files", systemImage: "folder") { backupImport = false; files = true }
+                            Button("Previous reviews", systemImage: "clock") { previousReviews = true }
+                        } label: { Label("Select a video", systemImage: "plus.circle.fill").frame(minHeight: 44) }
+                            .buttonStyle(.borderedProminent).accessibilityIdentifier("home.selectVideo")
+                    }.padding()
                 }
-                ForEach([true, false], id: \.self) { native in
-                    let items = filtered.filter { $0.preview == native }
-                    if !items.isEmpty {
-                        Section(native ? "Your reviews" : "Earlier reviews · open a protected copy") {
-                            ForEach(items, id: \.key) { review in
-                                Button { Task { await library.open(review) } } label: {
-                                    BJJNativeLibraryRow(library: library, review: review)
-                                }
-                                .accessibilityIdentifier("review.\(review.id)")
-                                .contextMenu {
-                                    if native && review.problem == nil {
-                                        Button("Rename", systemImage: "pencil") { name = review.name; renaming = review }
-                                        Button("Duplicate", systemImage: "plus.square.on.square") { Task { await library.change(review, action: "Duplicate") } }
-                                        Button("Back up", systemImage: "square.and.arrow.up") { Task { await library.change(review, action: "Back up") } }
-                                        Button("Move to Recently Deleted", systemImage: "trash", role: .destructive) { trash = review }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                if filtered.isEmpty && !library.busy {
-                    ContentUnavailableView(search.isEmpty ? "Start a review" : "No matching reviews", systemImage: "film",
-                                           description: Text(search.isEmpty ? "Choose a video from Photos or Files." : "Try a different name."))
-                }
-                Section {
-                    Button("Recently Deleted", systemImage: "trash") { recentlyDeleted = true }.frame(minHeight: 44)
-                    Button("Support Fresh Frame", systemImage: "heart") { support = true }
-                        .frame(minHeight: 44).accessibilityIdentifier("tips.open")
-                    Link("Help & support", destination: URL(string: "https://github.com/BakedChicken77/bjj-telestrator/blob/main/docs/SUPPORT.md")!)
-                    Link("Privacy policy", destination: URL(string: "https://github.com/BakedChicken77/bjj-telestrator/blob/main/docs/PRIVACY.md")!)
-                }
+                HStack {
+                    Button("Previous reviews", systemImage: "clock") { previousReviews = true }.accessibilityIdentifier("home.reviews")
+                    Spacer()
+                    Button("Support Fresh Frame", systemImage: "heart") { support = true }.accessibilityIdentifier("tips.open")
+                }.frame(minHeight: 44).padding().background(.bar)
             }
             .disabled(library.busy)
             .navigationTitle("Fresh Frame")
-            .searchable(text: $search, prompt: "Find a review")
+            .sheet(isPresented: $previousReviews, onDismiss: {
+                if let action = afterLibrary { afterLibrary = nil; action() }
+            }) {
+                NavigationStack {
+                    reviewList.searchable(text: $search, prompt: "Find a review")
+                        .navigationTitle("Previous reviews")
+                        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { previousReviews = false } } }
+                }
+            }
             .refreshable { await library.refresh() }
             .task {
                 #if DEBUG
@@ -113,13 +100,13 @@ struct BJJNativeHome: View {
                 TextField("Review name", text: $name)
                 Button("Cancel", role: .cancel) { renaming = nil }
                 Button("Save") {
-                    if let review = renaming { Task { await library.change(review, action: "Rename", name: name) } }
+                    if let review = renaming { previousReviews = false; Task { await library.change(review, action: "Rename", name: name) } }
                     renaming = nil
                 }.disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || name.count > 160)
             }
             .confirmationDialog("Move review to Recently Deleted?", isPresented: Binding(get: { trash != nil }, set: { if !$0 { trash = nil } }), titleVisibility: .visible) {
                 Button("Move to Recently Deleted", role: .destructive) {
-                    if let review = trash { Task { await library.change(review, action: "Move to Recently Deleted") } }
+                    if let review = trash { previousReviews = false; Task { await library.change(review, action: "Move to Recently Deleted") } }
                     trash = nil
                 }
             } message: { Text("You can restore this review later. Original reviews remain unchanged.") }
@@ -128,6 +115,54 @@ struct BJJNativeHome: View {
             } message: { Text(library.error ?? "") }
             .onChange(of: scenePhase) { _, phase in if phase == .background { library.suspend() } }
         }
+    }
+    private func closeLibrary(_ action: @escaping () -> Void) { afterLibrary = action; previousReviews = false }
+    private var reviewList: some View {
+        List {
+                Section {
+                    Menu {
+                        Button("Choose from Photos", systemImage: "photo.on.rectangle") { closeLibrary { photos = true } }
+                        Button("Choose from Files", systemImage: "folder") { closeLibrary { backupImport = false; files = true } }
+                        Button("Restore project backup", systemImage: "arrow.down.doc") { closeLibrary { backupImport = true; files = true } }
+                    } label: { Label("New review", systemImage: "plus.circle.fill").font(.headline).frame(minHeight: 44) }
+                    Text("Draw on your videos, record commentary, and share your perspective.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+                ForEach([true, false], id: \.self) { native in
+                    let items = filtered.filter { $0.preview == native }
+                    if !items.isEmpty {
+                        Section(native ? "Your reviews" : "Earlier reviews · open a protected copy") {
+                            ForEach(items, id: \.key) { review in
+                                Button { closeLibrary { Task { await library.open(review) } } } label: {
+                                    BJJNativeLibraryRow(library: library, review: review)
+                                }
+                                .accessibilityIdentifier("review.\(review.id)")
+                                .contextMenu {
+                                    if native && review.problem == nil {
+                                        Button("Rename", systemImage: "pencil") { closeLibrary { name = review.name; renaming = review } }
+                                        Button("Duplicate", systemImage: "plus.square.on.square") { closeLibrary { Task { await library.change(review, action: "Duplicate") } } }
+                                        Button("Back up", systemImage: "square.and.arrow.up") { closeLibrary { Task { await library.change(review, action: "Back up") } } }
+                                        Button("Move to Recently Deleted", systemImage: "trash", role: .destructive) { closeLibrary { trash = review } }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                if filtered.isEmpty && !library.busy {
+                    ContentUnavailableView(search.isEmpty ? "Start a review" : "No matching reviews", systemImage: "film",
+                                           description: Text(search.isEmpty ? "Choose a video from Photos or Files." : "Try a different name."))
+                }
+                Section {
+                    Button("Recently Deleted", systemImage: "trash") { closeLibrary { recentlyDeleted = true } }.frame(minHeight: 44)
+                    Button("Support Fresh Frame", systemImage: "heart") { closeLibrary { support = true } }
+                        .frame(minHeight: 44).accessibilityIdentifier("tips.open")
+                    Button("Share import timing report", systemImage: "clock.arrow.circlepath") { closeLibrary { Task { await library.shareImportDiagnostics() } } }
+                    Link("Help & support", destination: URL(string: "https://github.com/BakedChicken77/bjj-telestrator/blob/main/docs/SUPPORT.md")!)
+                    Link("Privacy policy", destination: URL(string: "https://github.com/BakedChicken77/bjj-telestrator/blob/main/docs/PRIVACY.md")!)
+                }
+            }
+
     }
     private var deletedList: some View {
         NavigationStack {

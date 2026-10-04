@@ -5,12 +5,15 @@ import SwiftUI
 struct BJJCueProperties: View {
     @ObservedObject var session: BJJNativeEditorSession
     @Environment(\.dismiss) private var dismiss
-    @State private var cue: BJJJSON
+    private var cue: BJJJSON {
+        get { session.cueDraft ?? session.selectedCue ?? initialCue }
+        nonmutating set { session.stageCue(newValue) }
+    }
     @State private var problem: String?
+    private let initialCue: BJJJSON
     private let onClose: (() -> Void)?
-    private let revision: Int
     init(session: BJJNativeEditorSession, cue: BJJJSON, onClose: (() -> Void)? = nil) {
-        self.onClose = onClose; self.session = session; _cue = State(initialValue: cue); revision = session.project.revision
+        self.onClose = onClose; self.session = session; initialCue = cue
     }
     private var geometry: BJJJSON { cue["geometry"] as! BJJJSON }
     var body: some View {
@@ -73,35 +76,41 @@ struct BJJCueProperties: View {
                         Button("Make 10% larger") { resize(1.1) }; Button("Make 10% smaller") { resize(0.9) }
                     }
                 }
+                Section("Cue actions") {
+                    Button("Forward one layer") { session.layer(cue.s("id"), forward: true) }
+                    Button("Backward one layer") { session.layer(cue.s("id"), forward: false) }
+                    Button("Delete cue", role: .destructive) {
+                        do { try session.deleteInspector(); close() }
+                        catch { problem = error.localizedDescription }
+                    }.accessibilityIdentifier("cue.properties.delete")
+                }
                 if let problem { Section { Text(problem).foregroundStyle(.red).accessibilityLabel("Cannot save: \(problem)") } }
             }
+            .accessibilityIdentifier("cue.properties.form")
             .navigationTitle("\(cue.s("type").capitalized) properties").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { close() }.accessibilityIdentifier("cue.properties.cancel") }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        do { try session.updateCue(cue, expectedRevision: revision); close() }
+                        do { try session.saveInspector(); close() }
                         catch { problem = error.localizedDescription }
                     }.accessibilityIdentifier("cue.properties.save")
                 }
                 ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("Done") { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) } }
             }
         }
-        .onAppear { session.previewCue = cue }
-        .onDisappear { session.cancelCueEdit() }
+
     }
     private func close() { session.cancelCueEdit(); if let onClose { onClose() } else { dismiss() } }
     private func changeBoundary(_ start: Bool, _ seconds: Double) {
         cue = BJJCueTiming.adjust(cue, start: start, seconds: seconds, duration: session.project.duration, fps: session.project.exportSettings.n("fps"))
-        session.previewCue = cue
         let position = start ? cue.n("startSec") : max(cue.n("startSec"), cue.n("endSec") - 1 / session.project.exportSettings.n("fps"))
         session.seek(position)
     }
-    private func move(_ x: CGFloat, _ y: CGFloat) { cue = BJJCueGeometry.move(cue, delta: CGPoint(x: x, y: y), size: session.pictureSize); session.previewCue = cue }
+    private func move(_ x: CGFloat, _ y: CGFloat) { cue = BJJCueGeometry.move(cue, delta: CGPoint(x: x, y: y), size: session.pictureSize) }
     private func resize(_ factor: CGFloat) {
         let b = BJJCueGeometry.bounds(cue, size: session.pictureSize)
         cue = BJJCueGeometry.resize(cue, corner: 3, to: CGPoint(x: b.minX + b.width * factor, y: b.minY + b.height * factor), size: session.pictureSize)
-        session.previewCue = cue
     }
     private func set(_ key: String, _ value: Any, nested: Bool) {
         if nested { var g = geometry; g[key] = value; cue["geometry"] = g } else { cue[key] = value }

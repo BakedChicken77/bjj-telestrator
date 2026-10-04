@@ -28,10 +28,10 @@ extension BJJStore {
             try FileManager.default.removeItem(at: path)
         }
     }
-    func recoverCopy(_ draft: BJJProject, suffix: String = " (recovered copy)", sourceStore: BJJStore? = nil) throws -> BJJProject {
-        try locked { try copyReview(draft, suffix: suffix, sourceStore: sourceStore ?? self) }
+    func recoverCopy(_ draft: BJJProject, suffix: String = " (recovered copy)", sourceStore: BJJStore? = nil, copyID: String? = nil) throws -> BJJProject {
+        try locked { try copyReview(draft, suffix: suffix, sourceStore: sourceStore ?? self, copyID: copyID) }
     }
-    private func copyReview(_ pending: BJJProject, suffix: String, sourceStore: BJJStore) throws -> BJJProject {
+    private func copyReview(_ pending: BJJProject, suffix: String, sourceStore: BJJStore, copyID: String?) throws -> BJJProject {
         let original = try sourceStore.load(pending.id)
         for field in ["source", "createdAt"] {
             guard NSDictionary(dictionary: ["value": pending.json[field]!]).isEqual(to: ["value": original.json[field]!]) else {
@@ -41,7 +41,7 @@ extension BJJStore {
         var document = pending.json; document["proxy"] = original.proxy
         let draft = try BJJProject(document)
         let registry = try sourceStore.recordings(draft.id)
-        for clip in draft.voiceovers {
+        for clip in draft.allTakes {
             guard let registered = registry[clip["id"] as! String] as? BJJJSON else { throw BJJError.invalid("Unknown recovery recording.") }
             for field in ["id", "asset", "durationSec", "recordedAt", "codec", "sampleRate", "channels"] {
                 guard NSDictionary(dictionary: ["value": clip[field]!]).isEqual(to: ["value": registered[field]!]) else {
@@ -61,10 +61,15 @@ extension BJJStore {
                 throw BJJError.domain("ASSET_CHANGED", "A copied asset failed checksum verification. The original was preserved.")
             }
         }
-        let (id, folder) = try createDirectory()
+        if let copyID, FileManager.default.fileExists(atPath: try safeURL(copyID, "project.json").path) {
+            let existing = try load(copyID)
+            guard existing.json["recoveryOperationId"] as? String == copyID else { throw BJJError.invalid("Recovery copy identity conflicts with another project.") }
+            return existing
+        }
+        let (id, folder) = try createDirectory(id: copyID ?? UUID().uuidString.lowercased())
         do {
             var mapping = [draft.id: id]
-            for object in draft.annotations + draft.voiceovers { mapping[object["id"] as! String] = UUID().uuidString.lowercased() }
+            for object in draft.annotations + draft.allTakes + draft.reviewTimeline.holds { mapping[object["id"] as! String] = UUID().uuidString.lowercased() }
             let literalFields: Set<String> = ["text", "projectName", "originalFilename"]
             func remap(_ value: Any) -> Any {
                 if let text = value as? String { return mapping[text] ?? text }
@@ -79,6 +84,7 @@ extension BJJStore {
             }
             var json = remap(draft.json) as! BJJJSON
             json["revision"] = 1
+            if let copyID { json["recoveryOperationId"] = copyID }
             json["createdAt"] = BJJProject.now(); json["updatedAt"] = BJJProject.now()
             json["projectName"] = String(draft.name.prefix(160 - suffix.count)) + suffix
             for media in [draft.source, draft.proxy] {
@@ -87,15 +93,16 @@ extension BJJStore {
                 try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try copyAsset(ref, to: target)
             }
-            var clips = json["voiceovers"] as! [BJJJSON]
             var newRegistry: BJJJSON = [:]
-            for index in clips.indices {
-                let ref = "voiceover/\(clips[index]["id"] as! String).wav"
-                try copyAsset(draft.voiceovers[index]["asset"] as! String, to: folder.appendingPathComponent(ref))
-                clips[index]["asset"] = ref
-                newRegistry[clips[index]["id"] as! String] = clips[index]
+            for key in ["voiceovers", "reviewNarration"] {
+                guard var clips = json[key] as? [BJJJSON], let originals = draft.json[key] as? [BJJJSON] else { continue }
+                for index in clips.indices {
+                    let ref = "voiceover/\(clips[index]["id"] as! String).wav"
+                    try copyAsset(originals[index]["asset"] as! String, to: folder.appendingPathComponent(ref))
+                    clips[index]["asset"] = ref; newRegistry[clips[index]["id"] as! String] = clips[index]
+                }
+                json[key] = clips
             }
-            json["voiceovers"] = clips
             try writeJSON(newRegistry, to: folder.appendingPathComponent("voiceover/assets.json"))
             return try save(BJJProject(json), creating: true)
         } catch {
