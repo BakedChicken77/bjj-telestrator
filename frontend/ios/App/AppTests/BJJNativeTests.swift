@@ -522,9 +522,25 @@ import UniformTypeIdentifiers
             if library.busy && library.canCancel { break }
             try await Task.sleep(nanoseconds: 10_000_000)
         }
-        XCTAssertTrue(library.busy); library.cancel()
+        XCTAssertTrue(library.busy)
+        XCTAssertEqual(library.activity, BJJPhotoImportStatus.title)
+        XCTAssertTrue(library.activityDetail.contains("iCloud"))
+        library.cancel()
         await operation.value
+        XCTAssertEqual(library.activity, "Cancelling…")
         XCTAssertFalse(library.busy); XCTAssertNil(library.error); XCTAssertTrue(library.reviews.isEmpty)
+    }
+    func testPhotoPickerAvoidsCompatibilityConversionAndReportsHonestProgress() {
+        let configuration = BJJNativePhotoPicker.configuration()
+        XCTAssertEqual(configuration.preferredAssetRepresentationMode, .current)
+        XCTAssertEqual(configuration.selectionLimit, 1)
+        XCTAssertNil(BJJPhotoImportStatus.progress(nil))
+        XCTAssertNil(BJJPhotoImportStatus.progress(Progress(totalUnitCount: 0)))
+        let progress = Progress(totalUnitCount: 100)
+        progress.completedUnitCount = 35
+        XCTAssertEqual(BJJPhotoImportStatus.progress(progress), 0.35)
+        progress.completedUnitCount = 150
+        XCTAssertEqual(BJJPhotoImportStatus.progress(progress), 1)
     }
     func testImportDiagnosticsAndAutomaticEditorOpening() async throws {
         let source = root.appendingPathComponent("direct-open.mp4"); try await silentVideo(source)

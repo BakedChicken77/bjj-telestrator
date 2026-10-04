@@ -70,7 +70,7 @@ struct BJJNativeHome: View {
                     VStack(spacing: 16) {
                         Text(library.activity).font(.headline)
                         if let progress = library.progress { ProgressView(value: progress) } else { ProgressView() }
-                        Text("Keep the app open while your video is prepared.").font(.footnote)
+                        Text(library.activityDetail).font(.footnote)
                         if library.canCancel { Button("Cancel", role: .cancel) { library.cancel() }.frame(minHeight: 44) }
                     }.padding(24).frame(maxWidth: 300).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
                 }

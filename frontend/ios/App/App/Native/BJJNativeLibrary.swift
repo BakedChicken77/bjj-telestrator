@@ -17,6 +17,7 @@ struct BJJNativeDeletedReview: Identifiable {
     @Published var deleted: [BJJNativeDeletedReview] = []
     @Published var busy = false
     @Published var activity = ""
+    @Published var activityDetail = "Keep the app open while your video is prepared."
     @Published var progress: Double?
     @Published var error: String?
     @Published var session: BJJNativeEditorSession?
@@ -60,6 +61,7 @@ struct BJJNativeDeletedReview: Identifiable {
         guard !busy, session == nil else { return false }
         refreshGeneration += 1
         busy = true; activity = title; progress = nil; canCancel = cancellable
+        activityDetail = "Keep the app open while your video is prepared."
         return true
     }
     private func finish() async {
@@ -116,11 +118,16 @@ struct BJJNativeDeletedReview: Identifiable {
         Task { [weak self] in
             while !Task.isCancelled {
                 guard let self, self.mediaID == id, let job = try? self.service?.mediaJobs.get(id) else { return }
+                // Cancellation is terminal UI intent; polling must not overwrite it.
+                if !self.canCancel { return }
                 if self.awaitingPhoto && job.totalBytes == nil {
-                    self.progress = self.photoLoad?.fractionCompleted; self.activity = "Downloading selected video…"
+                    self.progress = BJJPhotoImportStatus.progress(self.photoLoad)
+                    self.activity = BJJPhotoImportStatus.title
+                    self.activityDetail = BJJPhotoImportStatus.detail
                     try? await Task.sleep(nanoseconds: 200_000_000); continue
                 }
                 self.progress = job.progress
+                self.activityDetail = "Keep the app open while your video is prepared."
                 self.activity = job.stage == "copying" ? "Copying video…" : job.stage == "preparing_preview" ? "Preparing video…" : "Checking video…"
                 try? await Task.sleep(nanoseconds: 200_000_000)
             }
@@ -173,7 +180,8 @@ struct BJJNativeDeletedReview: Identifiable {
     func importPhoto(_ item: NSItemProvider) async {
         var imported: BJJProject?
         var importedJobID: String?
-        guard begin("Downloading selected video…", cancellable: true) else { return }
+        guard begin(BJJPhotoImportStatus.title, cancellable: true) else { return }
+        activityDetail = BJJPhotoImportStatus.detail
         do {
             let service = try services(), job = try service.mediaJobs.create(); mediaID = job.jobId; importedJobID = job.jobId
             awaitingPhoto = true
@@ -255,7 +263,7 @@ struct BJJNativeDeletedReview: Identifiable {
                     guard let job = (try? store.readJSON(file))?["job"] as? BJJJSON else { return nil }
                     return job.filter { ["operation", "status", "stage", "copiedBytes", "totalBytes", "timings", "mediaProfile", "createdAt", "errorCode"].contains($0.key) }
                 }
-                return ["version": 1, "createdAt": BJJProject.now(), "appVersion": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown", "osVersion": ProcessInfo.processInfo.operatingSystemVersionString, "imports": records]
+                return ["version": 1, "createdAt": BJJProject.now(), "appVersion": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown", "appBuild": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown", "osVersion": ProcessInfo.processInfo.operatingSystemVersionString, "imports": records]
             }
             let path = FileManager.default.temporaryDirectory.appendingPathComponent("FreshFrame-import-timing-\(UUID().uuidString).json")
             try store.writeJSON(report, to: path); diagnosticURL = path; shareURL = path
@@ -293,10 +301,17 @@ struct BJJNativeDeletedReview: Identifiable {
 
 struct BJJNativePhotoPicker: UIViewControllerRepresentable {
     let selected: (NSItemProvider?) -> Void
+    static func configuration() -> PHPickerConfiguration {
+        var configuration = PHPickerConfiguration()
+        configuration.filter = .videos; configuration.selectionLimit = 1
+        // The native media pipeline accepts HEVC/HDR. Avoid Photos converting
+        // to a compatibility representation before our own preview preparation.
+        configuration.preferredAssetRepresentationMode = .current
+        return configuration
+    }
     func makeCoordinator() -> Coordinator { Coordinator(selected: selected) }
     func makeUIViewController(context: Context) -> PHPickerViewController {
-        var configuration = PHPickerConfiguration(); configuration.filter = .videos; configuration.selectionLimit = 1
-        let picker = PHPickerViewController(configuration: configuration); picker.delegate = context.coordinator
+        let picker = PHPickerViewController(configuration: Self.configuration()); picker.delegate = context.coordinator
         return picker
     }
     func updateUIViewController(_ controller: PHPickerViewController, context: Context) { }
@@ -304,6 +319,18 @@ struct BJJNativePhotoPicker: UIViewControllerRepresentable {
         let selected: (NSItemProvider?) -> Void
         init(selected: @escaping (NSItemProvider?) -> Void) { self.selected = selected }
         func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) { selected(results.first?.itemProvider) }
+    }
+}
+
+enum BJJPhotoImportStatus {
+    static let title = "Getting video from Photos…"
+    static let detail = "Photos may be downloading this video from iCloud or preparing it. Copying into Fresh Frame has not started yet."
+    static func progress(_ value: Progress?) -> Double? {
+        // NSItemProvider reports aggregate loading, not a cloud-only download.
+        // Unknown/zero totals must not appear as a stuck 0% progress bar.
+        guard let value, value.totalUnitCount > 0, !value.isIndeterminate,
+              value.fractionCompleted.isFinite else { return nil }
+        return min(1, max(0, value.fractionCompleted))
     }
 }
 
