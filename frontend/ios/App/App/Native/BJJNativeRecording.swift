@@ -12,6 +12,7 @@ import UIKit
     private var pauseStart: Double?
     private var pauseBoundary = 0.0
     private var frozenPTS = 0.0
+    private var frozenFrameResolved = false
     private var pausedDuration = 0.0
     private var clockTimer: Timer?
     private var pausePreparing = false
@@ -23,7 +24,7 @@ import UIKit
         if let began = pauseStart {
             let ticks = ((recorder.currentTime - began) * 48000).rounded()
             if ticks > 0 {
-                newHolds.append(["id": UUID().uuidString.lowercased(), "sourceTicks": (pauseBoundary * 48000).rounded(), "durationTicks": ticks, "frozenPTS": frozenPTS])
+                newHolds.append(["id": UUID().uuidString.lowercased(), "sourceTicks": (pauseBoundary * 48000).rounded(), "durationTicks": ticks, "frozenPTS": frozenPTS, "frameResolved": frozenFrameResolved])
                 pausedDuration += ticks / 48000
             }
             pauseStart = nil; player.playImmediately(atRate: 1); return
@@ -34,6 +35,7 @@ import UIKit
         player.pause(); pauseStart = recorder.currentTime
         pauseBoundary = project.reviewTimeline.source(at: output)
         frozenPTS = pauseBoundary
+        frozenFrameResolved = false
         pausePreparing = true
         let token = lifecycle.sessionID
         defer { pausePreparing = false }
@@ -43,6 +45,7 @@ import UIKit
             let frame = try await generator.image(at: CMTime(seconds: pauseBoundary + ((project.source["videoStartSec"] as? NSNumber)?.doubleValue ?? 0), preferredTimescale: 48000))
             guard lifecycle.sessionID == token, recorder === self.recorder else { return }
             frozenPTS = max(0, frame.actualTime.seconds - ((project.source["videoStartSec"] as? NSNumber)?.doubleValue ?? 0))
+            frozenFrameResolved = true
         } catch {
             guard lifecycle.sessionID == token else { return }
             stop(reason: "The paused frame could not be inspected. The take and its pause were preserved for review.")
@@ -146,7 +149,7 @@ import UIKit
         let startSec = start
         if let began = pauseStart, let capture {
             let ticks = ((capture.currentTime - began) * 48000).rounded()
-            if ticks > 0 { newHolds.append(["id": UUID().uuidString.lowercased(), "sourceTicks": (pauseBoundary * 48000).rounded(), "durationTicks": ticks, "frozenPTS": frozenPTS]) }
+            if ticks > 0 { newHolds.append(["id": UUID().uuidString.lowercased(), "sourceTicks": (pauseBoundary * 48000).rounded(), "durationTicks": ticks, "frozenPTS": frozenPTS, "frameResolved": frozenFrameResolved]) }
         }
         let holds = newHolds
         capture?.delegate = nil; capture?.stop(); player?.pause()

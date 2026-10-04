@@ -208,6 +208,15 @@ import UniformTypeIdentifiers
         print("Held VFR range frames: \(frames.count); first: \(frames.prefix(3)); last: \(frames.suffix(3))")
         XCTAssertGreaterThan(frames.count, 10)
         XCTAssertTrue(frames.allSatisfy { $0.rgb[1] > 200 && $0.rgb[2] < 40 }, "VFR hold must freeze the exact green frame without stretching multiple frames")
+        // Stop/interruption can precede the asynchronous frame acknowledgement.
+        // The fallback timestamp is an instant inside a picture, not its PTS.
+        json["reviewTimeline"] = ["version": 1, "holds": [["id": UUID().uuidString.lowercased(), "sourceTicks": 47520, "durationTicks": 36000, "frozenPTS": 0.99, "frameResolved": false]]]
+        let interrupted = try BJJProject(json), fallback = root.appendingPathComponent("held-vfr-unresolved.mp4")
+        try await BJJRenderer().render(media: media, project: interrupted, store: store, output: fallback, options: BJJExportOptions(start: 1.1, end: 1.6)) { _ in }
+        let fallbackMedia = try await BJJMedia.inspect(fallback, reference: "exports/fallback.mp4", originalName: "fallback.mp4")
+        let fallbackFrames = try decodedTimingFrames(fallbackMedia)
+        XCTAssertGreaterThan(fallbackFrames.count, 10)
+        XCTAssertTrue(fallbackFrames.allSatisfy { $0.rgb[2] > 200 && $0.rgb[1] < 64 }, "Unacknowledged pause must repeat the picture covering 0.99 seconds, before the green transition")
     }
     func testPauseNarrationReceiptReopenUndoPreviewAndMP4() async throws {
         executionTimeAllowance = 300

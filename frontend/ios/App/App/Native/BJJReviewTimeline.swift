@@ -60,6 +60,7 @@ struct BJJReviewTimeline {
             previous = source
             try BJJValidate.number(hold["durationTicks"], "pause duration", 1...(86400 * Self.rate), integer: true)
             let pts = try BJJValidate.number(hold["frozenPTS"], "frozen frame", 0...sourceDuration)
+            if let resolved = hold["frameResolved"] { try BJJValidate.bool(resolved, "pause frame resolution") }
             guard pts < sourceDuration, abs(pts - source / Self.rate) <= 1 else { throw BJJError.invalid("Frozen frame is outside the pause boundary.") }
         }
         guard duration <= 86400 else { throw BJJError.invalid("The output review cannot exceed 24 hours.") }
@@ -122,6 +123,7 @@ struct BJJReviewTimeline {
             if cancelled() { throw BJJError.cancelled }
             let at = CMTime(seconds: span.output, preferredTimescale: 48000)
             if let hold = span.hold {
+                let requireExact = exactFrame && (hold["frameResolved"] as? Bool ?? true)
                 let pts = CMTimeAdd(range.start, CMTime(seconds: hold.n("frozenPTS"), preferredTimescale: 1000000000))
                 guard let asset = source.asset else { throw BJJError.invalid("The paused video asset is unavailable.") }
                 let reader = try AVAssetReader(asset: asset)
@@ -134,7 +136,7 @@ struct BJJReviewTimeline {
                     while let sample = output.copyNextSampleBuffer() {
                         if cancelled() { return nil }
                         if CMSampleBufferGetImageBuffer(sample) != nil,
-                           !exactFrame || CMSampleBufferGetPresentationTimeStamp(sample).seconds >= pts.seconds - 0.0000001 { return sample }
+                           !requireExact || CMSampleBufferGetPresentationTimeStamp(sample).seconds >= pts.seconds - 0.0000001 { return sample }
                         // Core Media can return marker buffers without a picture.
                     }
                     return nil
