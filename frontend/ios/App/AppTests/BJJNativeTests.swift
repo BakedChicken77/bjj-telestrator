@@ -1,8 +1,10 @@
 import XCTest
 import AVFoundation
 import CoreImage
+import Combine
 import CryptoKit
 import SwiftUI
+import UniformTypeIdentifiers
 @testable import App
 
 @MainActor final class BJJNativeTests: XCTestCase {
@@ -34,6 +36,57 @@ import SwiftUI
         XCTAssertEqual(try store.load(initial.id).annotations[0].n("startSec"), 16.0 / 30, accuracy: 0.000001)
         editor.history(redo: false)
         XCTAssertEqual(editor.project.annotations[0].n("startSec"), 1)
+    }
+    func testIdleCueCancellationDoesNotRepublishDuringCanvasRefresh() throws {
+        let initial = try project(), editor = try BJJNativeEditorSession(project: initial, store: store, preferences: nil)
+        defer { editor.close() }
+        var updates = 0
+        let subscription = editor.objectWillChange.sink { updates += 1 }
+        defer { subscription.cancel() }
+        for _ in 0..<20 { editor.cancelCueEdit(); editor.cancelCueGesture() }
+        XCTAssertEqual(updates, 0, "An idle canvas refresh must not trigger another SwiftUI update")
+        editor.select(initial.annotations[0].s("id")); editor.beginInspector(); editor.cancelCueEdit()
+        let completed = updates
+        for _ in 0..<20 { editor.cancelCueEdit(); editor.cancelCueGesture() }
+        XCTAssertEqual(updates, completed)
+    }
+    func testInspectorCanvasDraftCancelDeleteAndFailedSave() throws {
+        let initial = try project(), editor = try BJJNativeEditorSession(project: initial, store: store, preferences: nil)
+        defer { editor.close() }
+        let original = initial.annotations[0], id = original.s("id")
+        editor.select(id); editor.beginInspector()
+        var styled = original; styled["strokeOpacity"] = 0.4
+        editor.stageCue(styled)
+        editor.beginCueEdit()
+        editor.previewCue = BJJCueGeometry.move(styled, delta: CGPoint(x: 0.1, y: 0.1), size: editor.pictureSize)
+        editor.finishCueEdit()
+        XCTAssertEqual(editor.project.revision, initial.revision)
+        XCTAssertEqual(editor.undoCount, 0)
+        XCTAssertEqual(editor.cueDraft?.n("strokeOpacity"), 0.4)
+        let completed = try XCTUnwrap(editor.previewCue)
+        editor.beginCueEdit(); editor.previewCue = original; editor.cancelCueGesture()
+        XCTAssertEqual(editor.previewCue! as NSDictionary, completed as NSDictionary)
+        var invalid = completed; invalid["endSec"] = 0
+        editor.stageCue(invalid)
+        XCTAssertThrowsError(try editor.saveInspector())
+        XCTAssertTrue(editor.inspectingCue); XCTAssertNotNil(editor.cueDraft)
+        editor.stageCue(completed); try editor.saveInspector()
+        XCTAssertEqual(editor.undoCount, 1)
+        editor.history(redo: false)
+        XCTAssertEqual(editor.project.annotations[0] as NSDictionary, original as NSDictionary)
+        editor.select(id); editor.beginInspector(); editor.stageCue(styled)
+        try editor.deleteInspector()
+        XCTAssertTrue(editor.project.annotations.isEmpty)
+        editor.history(redo: false)
+        XCTAssertEqual(editor.project.annotations[0] as NSDictionary, original as NSDictionary)
+        editor.select(id); editor.beginInspector(); try editor.saveInspector()
+        XCTAssertEqual(editor.project.revision, initial.revision + 4) // no-op Save writes nothing
+        editor.select(id); editor.beginInspector(); editor.stageCue(styled)
+        var external = editor.project.json; external["projectName"] = "Concurrent edit"
+        _ = try store.save(BJJProject(external))
+        XCTAssertThrowsError(try editor.saveInspector())
+        XCTAssertTrue(editor.inspectingCue); XCTAssertEqual(editor.cueDraft?.n("strokeOpacity"), 0.4)
+        editor.cancelCueEdit()
     }
     func testNewNativeCuesRemainVisibleAtFractionalPausedTimes() throws {
         let initial = try project()
@@ -93,6 +146,166 @@ import SwiftUI
         let output = try XCTUnwrap(editor.exportURL)
         XCTAssertEqual(try redPixels(output, time: 29.0 / 30), 0)
         XCTAssertGreaterThan(try redPixels(output, time: 1), 20)
+    }
+    func testReviewTimelineBoundariesPlacementsAndCompatibility() throws {
+        let hold: BJJJSON = ["id": UUID().uuidString.lowercased(), "sourceTicks": 4 * 48000, "durationTicks": 5 * 48000, "frozenPTS": 4.0]
+        let timeline = BJJReviewTimeline(sourceDuration: 10, holds: [hold])
+        XCTAssertEqual(timeline.duration, 15)
+        XCTAssertEqual(timeline.source(at: 3.9), 3.9)
+        XCTAssertEqual(timeline.source(at: 4), 4)
+        XCTAssertEqual(timeline.source(at: 8.999), 4)
+        XCTAssertEqual(timeline.source(at: 9), 4)
+        XCTAssertEqual(timeline.source(at: 14), 9)
+        XCTAssertEqual(timeline.output(before: 4), 4)
+        XCTAssertEqual(timeline.output(after: 4), 9)
+        let placements = timeline.placements(start: 3, duration: 8)
+        XCTAssertEqual(placements.count, 3)
+        XCTAssertEqual(placements.map { $0.n("durationTicks") }, [48000, 240000, 96000])
+        XCTAssertEqual(placements.compactMap { timeline.position($0) }, [3, 4, 9])
+        let initial = try project()
+        var endHold = hold; endHold["frozenPTS"] = 4 - 1 / 30.0
+        var json = initial.json; json["reviewTimeline"] = BJJReviewTimeline(sourceDuration: 4, holds: [endHold]).json
+        XCTAssertThrowsError(try BJJProject(json), "Marker prevents older editors silently changing clocks")
+        json["requiredCapabilities"] = (initial.json["requiredCapabilities"] as! [String]) + [BJJReviewTimeline.capability]
+        XCTAssertNoThrow(try BJJProject(json))
+        var wrong = hold; wrong["durationTicks"] = -1; json["reviewTimeline"] = ["version": 1, "holds": [wrong]]
+        XCTAssertThrowsError(try BJJProject(json))
+    }
+    func testSourceEndTrimKeepsRegistryAndActualWAVDurationEqual() throws {
+        let initial = try project(), id = UUID().uuidString.lowercased(), asset = "voiceover/\(UUID().uuidString.lowercased()).wav"
+        let path = try store.safeURL(initial.id, asset)
+        try tone(path, frequency: 880, duration: 0.75, pcm16: true)
+        try BJJNativeRecording.trimUnregisteredTake(path, frames: 24000)
+        let audio = try AVAudioFile(forReading: path)
+        XCTAssertEqual(audio.length, 24000); XCTAssertEqual(audio.fileFormat.streamDescription.pointee.mBitsPerChannel, 16)
+        let clip: BJJJSON = ["id": id, "asset": asset, "startSec": 3.5, "durationSec": 0.5, "endSec": 4.0,
+            "gain": 1.0, "muted": false, "timingOffsetMs": 0.0, "recordedAt": BJJProject.now(), "codec": "pcm_s16le", "sampleRate": 48000, "channels": 1]
+        try store.registerClip(initial.id, clip: clip)
+        let recovered = try store.loadRecoveringRecordings(initial.id)
+        XCTAssertEqual(recovered.voiceovers[0].n("durationSec"), Double(audio.length) / audio.fileFormat.sampleRate)
+        XCTAssertThrowsError(try BJJNativeRecording.trimUnregisteredTake(path, frames: 0))
+        XCTAssertEqual(try AVAudioFile(forReading: path).length, 24000)
+    }
+    func testPausedVFRFrameAndRangeExport() async throws {
+        let fixture = try XCTUnwrap(Bundle(for: BJJNativeTests.self).url(forResource: "media-timing-conformance", withExtension: "json"))
+        let cases = try XCTUnwrap(try store.readJSON(fixture)["cases"] as? [BJJJSON])
+        let item = try XCTUnwrap(cases.first { $0.s("name") == "variable-frame-rate" })
+        let original = root.appendingPathComponent("held-vfr.mp4")
+        try XCTUnwrap(Data(base64Encoded: item.s("movieBase64"))).write(to: original)
+        let project = try await BJJService(store: store).importFile(original, originalName: "held-vfr.mp4")
+        var json = project.json
+        json["requiredCapabilities"] = (project.json["requiredCapabilities"] as! [String]) + [BJJReviewTimeline.capability]
+        json["reviewTimeline"] = ["version": 1, "holds": [["id": UUID().uuidString.lowercased(), "sourceTicks": 48000, "durationTicks": 36000, "frozenPTS": 1.0]]]
+        json["reviewNarration"] = [BJJJSON]()
+        var settings = project.exportSettings; settings["fps"] = 30.0; json["exportSettings"] = settings
+        let configured = try store.save(BJJProject(json))
+        let media = try await BJJMedia.inspect(original, reference: project.source.s("asset"), originalName: "held-vfr.mp4")
+        let movie = root.appendingPathComponent("held-vfr-range.mp4")
+        try await BJJRenderer().render(media: media, project: configured, store: store, output: movie, options: BJJExportOptions(start: 1.1, end: 1.6)) { _ in }
+        let exported = try await BJJMedia.inspect(movie, reference: "exports/range.mp4", originalName: "range.mp4")
+        XCTAssertEqual(exported.videoRange.duration.seconds, 0.5, accuracy: 1 / 30.0)
+        let frames = try decodedTimingFrames(exported)
+        print("Held VFR range frames: \(frames.count); first: \(frames.prefix(3)); last: \(frames.suffix(3))")
+        XCTAssertGreaterThan(frames.count, 10)
+        XCTAssertTrue(frames.allSatisfy { $0.rgb[1] > 200 && $0.rgb[2] < 40 }, "VFR hold must freeze the exact green frame without stretching multiple frames")
+        // Stop/interruption can precede the asynchronous frame acknowledgement.
+        // The fallback timestamp is an instant inside a picture, not its PTS.
+        json["reviewTimeline"] = ["version": 1, "holds": [["id": UUID().uuidString.lowercased(), "sourceTicks": 47520, "durationTicks": 36000, "frozenPTS": 0.99, "frameResolved": false]]]
+        let interrupted = try BJJProject(json), fallback = root.appendingPathComponent("held-vfr-unresolved.mp4")
+        try await BJJRenderer().render(media: media, project: interrupted, store: store, output: fallback, options: BJJExportOptions(start: 1.1, end: 1.6)) { _ in }
+        let fallbackMedia = try await BJJMedia.inspect(fallback, reference: "exports/fallback.mp4", originalName: "fallback.mp4")
+        let fallbackFrames = try decodedTimingFrames(fallbackMedia)
+        XCTAssertGreaterThan(fallbackFrames.count, 10)
+        XCTAssertTrue(fallbackFrames.allSatisfy { $0.rgb[2] > 200 && $0.rgb[1] < 64 }, "Unacknowledged pause must repeat the picture covering 0.99 seconds, before the green transition")
+    }
+    func testPauseNarrationReceiptReopenUndoPreviewAndMP4() async throws {
+        executionTimeAllowance = 300
+        let service = try BJJService(store: store)
+        var initial = try await service.importFile(try await sourceVideo(audio: true, moving: true), originalName: "pause.mp4")
+        var initialJSON = initial.json; initialJSON["annotations"] = [annotation(start: 0.75, end: 1.25)]
+        initial = try store.save(BJJProject(initialJSON))
+        let id = UUID().uuidString.lowercased(), holdID = UUID().uuidString.lowercased()
+        let hold: BJJJSON = ["id": holdID, "sourceTicks": 48000, "durationTicks": 240000, "frozenPTS": 1.0]
+        let timeline = BJJReviewTimeline(sourceDuration: 4, holds: [hold])
+        let asset = "voiceover/\(id).wav"
+        try tone(store.safeURL(initial.id, asset), frequency: 880, duration: 7, pcm16: true)
+        let take: BJJJSON = ["id": id, "asset": asset, "durationSec": 7.0, "sampleCount": 336000,
+            "gain": 1.0, "muted": false, "recordedAt": BJJProject.now(), "codec": "pcm_s16le", "sampleRate": 48000,
+            "channels": 1, "placements": timeline.placements(start: 0.5, duration: 7)]
+        let receipt: BJJJSON = ["kind": "review-narration-v1", "operationId": UUID().uuidString.lowercased(), "baseRevision": initial.revision, "take": take, "holds": [hold]]
+        try store.registerReviewReceipt(initial.id, receipt: receipt)
+        XCTAssertFalse(try store.load(initial.id).pauseAware)
+        let recovered = try BJJStore(root: root).loadRecoveringRecordings(initial.id)
+        XCTAssertEqual(recovered.outputDuration, 9)
+        XCTAssertEqual(recovered.duration, 4)
+        XCTAssertEqual(recovered.reviewNarration.count, 1)
+        XCTAssertEqual(try store.loadRecoveringRecordings(initial.id).revision, recovered.revision)
+        let plan = try BJJRenderPlan(store: store, project: recovered)
+        XCTAssertEqual(plan.json["version"] as? Int, 3)
+        XCTAssertEqual(plan.json["assets"] as? [BJJJSON] != nil, true)
+        let mix = root.appendingPathComponent("pause-mix.caf")
+        let preview = try await BJJAudioComposition.preview(project: recovered, store: store, target: mix)
+        let previewDuration = try await preview.asset.load(.duration)
+        XCTAssertEqual(previewDuration.seconds, 9, accuracy: 0.04)
+        let generator = AVAssetImageGenerator(asset: preview.asset)
+        generator.requestedTimeToleranceBefore = .zero; generator.requestedTimeToleranceAfter = .zero
+        func previewPixel(_ seconds: Double) throws -> [UInt8] {
+            let image = try generator.copyCGImage(at: CMTime(seconds: seconds, preferredTimescale: 60000), actualTime: nil)
+            var bytes = [UInt8](repeating: 0, count: 4)
+            bytes.withUnsafeMutableBytes { pointer in
+                let context = CGContext(data: pointer.baseAddress, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+                    space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+                context.draw(image, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+            }
+            return bytes
+        }
+        XCTAssertEqual(try previewPixel(2), try previewPixel(4), "Preview must repeat the same picture throughout the hold")
+        XCTAssertNotEqual(try previewPixel(4), try previewPixel(7), "Preview must resume source motion after the hold")
+        let previewEnergy = try await audioEnergy(mix, from: 2, to: 5)
+        XCTAssertGreaterThan(previewEnergy, 0.05)
+        let media = try await BJJMedia.inspect(store.asset(initial.id, initial.source.s("asset")), reference: initial.source.s("asset"), originalName: "pause")
+        let output = root.appendingPathComponent("pause-export.mp4")
+        try await BJJRenderer().render(media: media, project: recovered, store: store, output: output) { _ in }
+        let exported = try await BJJMedia.inspect(output, reference: "exports/check.mp4", originalName: "check")
+        XCTAssertEqual(exported.videoRange.duration.seconds, 9, accuracy: 0.04)
+        let frames = try decodedTimingFrames(exported)
+        let held = frames.filter { $0.time >= 1.2 && $0.time < 5.8 }
+        print("Paused review output frames: \(frames.count); first: \(frames.prefix(3)); last: \(frames.suffix(3)); held: \(held.prefix(3))")
+        let frozen = try XCTUnwrap(held.first)
+        XCTAssertGreaterThan(held.count, 100)
+        XCTAssertTrue(held.allSatisfy { zip($0.rgb, frozen.rgb).allSatisfy { abs($0 - $1) <= 3 } }, "One decoded frame must repeat throughout the hold")
+        XCTAssertTrue(held.allSatisfy { $0.redPixels > 500 }, "Source-time cue remains visible during the hold")
+        XCTAssertEqual(try redPixels(output, time: 6.5), 0, "Cue timing resumes in source seconds")
+        let resumed = try XCTUnwrap(frames.first { $0.time >= 7 })
+        XCTAssertGreaterThan(abs(resumed.rgb[2] - frozen.rgb[2]), 10, "Video must resume instead of extending the frozen frame")
+        let outputEnergy = try await audioEnergy(output, from: 2, to: 5)
+        XCTAssertGreaterThan(outputEnergy, 0.05)
+        let duplicate = try BJJProjectVersions(store: store).duplicate(recovered.id, revision: recovered.revision)
+        XCTAssertEqual(duplicate.reviewNarration.count, 1); XCTAssertEqual(duplicate.outputDuration, 9)
+        XCTAssertNotEqual(duplicate.reviewTimeline.holds[0].s("id"), holdID)
+        let backup = root.appendingPathComponent("pause.bjjproj")
+        try BJJProjectPackage.backup(store, project: recovered, output: backup, includeProxy: true, work: BJJPackageWork())
+        let restored = try await BJJProjectPackage.restore(store, source: backup, staging: root.appendingPathComponent("pause-restore"), id: UUID().uuidString.lowercased(), work: BJJPackageWork())
+        XCTAssertEqual(restored.outputDuration, 9); XCTAssertEqual(restored.reviewNarration.count, 1)
+        XCTAssertNotEqual(restored.reviewTimeline.holds[0].s("id"), holdID)
+        var muted = recovered.json, mutedTake = take; mutedTake["muted"] = true; muted["reviewNarration"] = [mutedTake]
+        let mutedMix = root.appendingPathComponent("muted-pause.caf")
+        _ = try await BJJAudioComposition.preview(project: BJJProject(muted), store: store, target: mutedMix)
+        let heldOriginalEnergy = try await audioEnergy(mutedMix, from: 2, to: 5)
+        XCTAssertLessThan(heldOriginalEnergy, 0.005, "Original video audio must be silent during holds")
+        let editor = try BJJNativeEditorSession(project: recovered, store: store, preferences: nil)
+        defer { editor.close() }
+        editor.updateAudio(removing: id)
+        XCTAssertEqual(editor.project.reviewTimeline.holds.count, 1, "Take removal retains project-owned pauses")
+        // Avoid racing preview regeneration with the next editing transaction.
+        for _ in 0..<100 { if !editor.preparingAudio { break }; try await Task.sleep(nanoseconds: 10_000_000) }
+        editor.history(redo: false)
+        XCTAssertEqual(editor.project.reviewNarration.count, 1)
+        for _ in 0..<100 { if !editor.preparingAudio { break }; try await Task.sleep(nanoseconds: 10_000_000) }
+        editor.removeNarrationPause(holdID)
+        XCTAssertEqual(editor.project.outputDuration, 4)
+        XCTAssertFalse((editor.project.reviewNarration[0]["placements"] as! [BJJJSON]).contains { $0["holdId"] as? String == holdID })
+        XCTAssertNoThrow(try store.asset(initial.id, asset))
     }
     func testNativeNarrationPreviewRangeExportAndImmutableRetry() async throws {
         executionTimeAllowance = 300
@@ -238,7 +451,7 @@ import SwiftUI
         executionTimeAllowance = 300
         let source = root.appendingPathComponent("cue-edit-source.mp4"); try await silentVideo(source)
         let library = BJJNativeLibrary(root: root.appendingPathComponent("edits"), originalRoot: root.appendingPathComponent("originals"))
-        await library.importFile(source)
+        await library.importFile(source, openWhenReady: false)
         await library.open(try XCTUnwrap(library.reviews.first))
         let editor = try XCTUnwrap(library.session); defer { editor.close() }
         for tool in BJJNativeTool.allCases {
@@ -267,7 +480,7 @@ import SwiftUI
         try await silentVideo(source)
         let hash = try BJJAssets.digest(source)
         let library = BJJNativeLibrary(root: root.appendingPathComponent("native"), originalRoot: root.appendingPathComponent("original"))
-        await library.importFile(source)
+        await library.importFile(source, openWhenReady: false)
         XCTAssertNil(library.error); XCTAssertFalse(library.busy)
         var review = try XCTUnwrap(library.reviews.first { $0.preview })
         let thumbnail = await library.thumbnail(review)
@@ -296,6 +509,217 @@ import SwiftUI
             let project = try store.load(review.id)
             XCTAssertEqual(try BJJAssets.digest(store.asset(project.id, project.source.s("asset"))), hash)
         }
+    }
+    func testPhotoProviderCancellationSettlesWithoutCallback() async throws {
+        let library = BJJNativeLibrary(root: root.appendingPathComponent("cancelled-photo"), originalRoot: root.appendingPathComponent("originals"))
+        let provider = NSItemProvider()
+        provider.registerFileRepresentation(forTypeIdentifier: UTType.movie.identifier, fileOptions: [], visibility: .all) { _ in
+            // Model a cloud provider that never calls its handler after Cancel.
+            Progress(totalUnitCount: 1)
+        }
+        let operation = Task { await library.importPhoto(provider) }
+        for _ in 0..<100 {
+            if library.busy && library.canCancel { break }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertTrue(library.busy)
+        XCTAssertEqual(library.activity, BJJPhotoImportStatus.title)
+        XCTAssertTrue(library.activityDetail.contains("iCloud"))
+        library.cancel()
+        await operation.value
+        XCTAssertEqual(library.activity, "Cancelling…")
+        XCTAssertFalse(library.busy); XCTAssertNil(library.error); XCTAssertTrue(library.reviews.isEmpty)
+    }
+    func testPhotosWaitBackgroundExpirationIsActionableAndDoesNotHang() async throws {
+        let library = BJJNativeLibrary(root: root.appendingPathComponent("background-photos"), originalRoot: root.appendingPathComponent("originals"))
+        let provider = NSItemProvider()
+        provider.registerFileRepresentation(forTypeIdentifier: UTType.movie.identifier, fileOptions: [], visibility: .all) { _ in Progress(totalUnitCount: 100) }
+        let operation = Task { await library.importPhoto(provider) }
+        for _ in 0..<100 {
+            if library.busy && library.canCancel { break }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertTrue(library.busy)
+        let folder = library.root.appendingPathComponent("media-jobs")
+        let path = try XCTUnwrap(FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil).first)
+        let service = try library.services()
+        let id = try BJJValidate.object(service.store.readJSON(path)["job"], "job").s("jobId")
+        library.suspend()
+        XCTAssertFalse(try service.mediaJobs.get(id).cancelRequested)
+        library.resume()
+        XCTAssertTrue(library.busy)
+        service.mediaJobs.expireBackground(id)
+        await operation.value
+        XCTAssertFalse(library.busy)
+        XCTAssertEqual(library.error, BJJMediaJobs.backgroundMessage)
+        XCTAssertEqual(try service.mediaJobs.get(id).errorCode, "MEDIA_BACKGROUND_EXPIRED")
+        XCTAssertNil(library.session); XCTAssertTrue(library.reviews.isEmpty)
+    }
+    func testPhotosWaitCheckpointsAndBackgroundRecoveryPreserveEvidence() throws {
+        let manager = try BJJMediaJobs(store: store)
+        let job = try manager.create()
+        let (_, worker) = try manager.beginImport(job.jobId, waitingForPhotos: true)
+        manager.checkpoint(job.jobId, providerProgress: 0.35)
+        let path = store.root.appendingPathComponent("media-jobs/\(job.jobId).json")
+        var saved = try BJJValidate.object(store.readJSON(path)["job"], "job")
+        XCTAssertEqual(saved.s("importPhase"), "waiting_for_photos")
+        XCTAssertNotNil(saved["lastCheckpointAt"])
+        XCTAssertEqual(saved["providerProgress"] as? Double, 0.35)
+        XCTAssertNotNil((saved["timings"] as? BJJJSON)?["provider_wait_elapsed"])
+        manager.enterBackground(job.jobId)
+        XCTAssertNoThrow(try worker.cancellation.check())
+        manager.expireBackground(job.jobId)
+        XCTAssertThrowsError(try worker.cancellation.check())
+        let restarted = try BJJMediaJobs(store: store)
+        let recovered = try restarted.get(job.jobId)
+        XCTAssertEqual(recovered.errorCode, "MEDIA_BACKGROUND_EXPIRED")
+        XCTAssertEqual(recovered.importPhase, "waiting_for_photos")
+        XCTAssertEqual(restarted.recoveredInterruption, BJJMediaJobs.backgroundMessage)
+        saved = try BJJValidate.object(store.readJSON(path)["job"], "job")
+        XCTAssertEqual(saved.s("stopReason"), "background_expired")
+        manager.failure(job.jobId, BJJError.cancelled)
+    }
+    func testCompletedBackgroundImportOpensEditorOnlyAfterReturn() async throws {
+        let source = root.appendingPathComponent("background-success.mp4"); try await silentVideo(source)
+        let library = BJJNativeLibrary(root: root.appendingPathComponent("background-success"), originalRoot: root.appendingPathComponent("originals"))
+        library.suspend()
+        await library.importFile(source)
+        XCTAssertNil(library.error); XCTAssertFalse(library.busy)
+        XCTAssertNil(library.session); XCTAssertEqual(library.reviews.count, 1)
+        library.resume()
+        let session = try XCTUnwrap(library.session)
+        session.close(); library.session = nil
+    }
+    func testPhotosReadyCheckpointTracksActualCopyAndUserCancel() throws {
+        let manager = try BJJMediaJobs(store: store)
+        let job = try manager.create()
+        let (_, worker) = try manager.beginImport(job.jobId, waitingForPhotos: true)
+        worker.endPhotosWait(); worker.copying(512, 1024)
+        manager.checkpoint(job.jobId)
+        _ = try manager.cancel(job.jobId)
+        manager.expireBackground(job.jobId) // Expiration must not reclassify a user cancel.
+        manager.failure(job.jobId, BJJError.cancelled)
+        let recovered = try BJJMediaJobs(store: store).get(job.jobId)
+        XCTAssertEqual(recovered.importPhase, "copying")
+        XCTAssertEqual(recovered.copiedBytes, 512)
+        XCTAssertEqual(recovered.stopReason, "user_cancelled")
+        XCTAssertEqual(recovered.errorCode, "JOB_CANCELLED")
+    }
+    func testPhotoPickerRequestsCompatibleVideoAndReportsHonestProgress() {
+        XCTAssertTrue(BJJMedia.needsCompatibleCopy(subtype: "hvc1", atoms: ["dvcC": Data([1])]))
+        XCTAssertTrue(BJJMedia.needsCompatibleCopy(subtype: "hev1", atoms: ["dvvC": Data([1])]))
+        XCTAssertTrue(BJJMedia.needsCompatibleCopy(subtype: "dvh1", atoms: [:]))
+        XCTAssertTrue(BJJMedia.needsCompatibleCopy(subtype: "dvhe", atoms: [:]))
+        XCTAssertFalse(BJJMedia.needsCompatibleCopy(subtype: "hvc1", atoms: [:]))
+        XCTAssertFalse(BJJMedia.needsCompatibleCopy(subtype: "avc1", atoms: [:]))
+        let configuration = BJJNativePhotoPicker.configuration()
+        XCTAssertEqual(configuration.preferredAssetRepresentationMode, .compatible)
+        XCTAssertEqual(configuration.selectionLimit, 1)
+        XCTAssertNil(BJJPhotoImportStatus.progress(nil))
+        XCTAssertNil(BJJPhotoImportStatus.progress(Progress(totalUnitCount: 0)))
+        let progress = Progress(totalUnitCount: 100)
+        progress.completedUnitCount = 35
+        XCTAssertEqual(BJJPhotoImportStatus.progress(progress), 0.35)
+        progress.completedUnitCount = 150
+        XCTAssertEqual(BJJPhotoImportStatus.progress(progress), 1)
+    }
+    func testDiagnosticsAreBoundedPersistentRedactedAndClearable() throws {
+        let file = root.appendingPathComponent("diagnostics/events.json")
+        let diagnostics = BJJDiagnostics(file: file, limit: 3)
+        let sensitive = "private-video.mov /Users/Steve secret annotation"
+        let underlying = NSError(domain: NSOSStatusErrorDomain, code: -50, userInfo: [NSLocalizedDescriptionKey: sensitive])
+        let error = NSError(domain: "AVFoundationErrorDomain", code: -11800,
+                            userInfo: [NSLocalizedDescriptionKey: sensitive, NSUnderlyingErrorKey: underlying])
+        let operation = UUID().uuidString
+        for _ in 0..<8 { diagnostics.record(.mediaError, operation: operation, phase: sensitive, error: error) }
+        let snapshot = diagnostics.snapshot()
+        let events = try XCTUnwrap(snapshot["events"] as? [BJJJSON])
+        XCTAssertEqual(events.count, 3)
+        XCTAssertEqual(events.last?["operation"] as? String, operation)
+        XCTAssertEqual((events.last?["errors"] as? [BJJJSON])?.count, 2)
+        let encoded = String(decoding: try JSONSerialization.data(withJSONObject: snapshot), as: UTF8.self)
+        XCTAssertFalse(encoded.contains(sensitive)); XCTAssertFalse(encoded.contains("private-video"))
+        XCTAssertTrue(encoded.contains("-11800")); XCTAssertTrue(encoded.contains("-50"))
+        XCTAssertEqual(snapshot["persistenceUnavailable"] as? Bool, false)
+        let reopened = BJJDiagnostics(file: file, limit: 3)
+        XCTAssertEqual((reopened.snapshot()["events"] as? [BJJJSON])?.count, 3)
+        reopened.clear()
+        XCTAssertEqual((BJJDiagnostics(file: file).snapshot()["events"] as? [BJJJSON])?.count, 0)
+    }
+    func testDiagnosticFailureDoesNotBreakOperationsAndExpiredEventsAreExcluded() throws {
+        let blocked = root.appendingPathComponent("blocked")
+        try Data("not a directory".utf8).write(to: blocked)
+        let diagnostics = BJJDiagnostics(file: blocked.appendingPathComponent("events.json"))
+        diagnostics.record(.launch)
+        XCTAssertEqual(diagnostics.snapshot()["persistenceUnavailable"] as? Bool, true)
+        let expired = root.appendingPathComponent("expired.json")
+        try JSONSerialization.data(withJSONObject: [["event": "launch", "time": Date().addingTimeInterval(-8 * 86400).timeIntervalSince1970]]).write(to: expired)
+        XCTAssertEqual((BJJDiagnostics(file: expired).snapshot()["events"] as? [BJJJSON])?.count, 0)
+    }
+    func testImportDiagnosticsAndAutomaticEditorOpening() async throws {
+        let source = root.appendingPathComponent("direct-open.mp4"); try await silentVideo(source)
+        let library = BJJNativeLibrary(root: root.appendingPathComponent("direct-open"), originalRoot: root.appendingPathComponent("originals"))
+        await library.importFile(source)
+        let editor = try XCTUnwrap(library.session); defer { editor.close() }
+        XCTAssertFalse(library.busy); XCTAssertNil(library.error)
+        let jobs = library.root.appendingPathComponent("media-jobs")
+        let record = try XCTUnwrap(FileManager.default.contentsOfDirectory(at: jobs, includingPropertiesForKeys: nil).first { $0.pathExtension == "json" })
+        let job = try BJJValidate.object(try library.services().store.readJSON(record)["job"], "job")
+        let timings = try BJJValidate.object(job["timings"], "timings")
+        for stage in ["copy", "source_hash_before", "inspect", "proxy_encode", "proxy_validation", "source_hash_after", "publish", "prepare_total"] {
+            XCTAssertGreaterThanOrEqual(try BJJValidate.number(timings[stage], stage, 0...86400), 0)
+        }
+        XCTAssertEqual((job["mediaProfile"] as? BJJJSON)?["codec"] as? String, "avc1")
+        editor.close(); library.session = nil
+        await library.shareImportDiagnostics()
+        let timingReport = try XCTUnwrap(library.shareURL)
+        let report = try library.services().store.readJSON(timingReport)
+        let imports = try BJJValidate.objects(report["imports"], "timing records", maximum: 256)
+        XCTAssertEqual(imports.count, 1); XCTAssertNil(imports[0]["projectId"]); XCTAssertNil(imports[0]["jobId"])
+        let bytes = try source.resourceValues(forKeys: [.fileSizeKey]).fileSize!
+        XCTAssertEqual((imports[0]["copiedBytes"] as? NSNumber)?.intValue, bytes)
+        XCTAssertEqual((imports[0]["totalBytes"] as? NSNumber)?.intValue, bytes)
+        XCTAssertEqual(imports[0]["appVersion"] as? String, Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String)
+        XCTAssertEqual(imports[0]["appBuild"] as? String, Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String)
+        let restarted = try BJJMediaJobs(store: library.services().store)
+        let restored = try restarted.get(job.s("jobId"))
+        XCTAssertEqual(restored.copiedBytes, Int64(bytes))
+        XCTAssertEqual(restored.totalBytes, Int64(bytes))
+        XCTAssertNotNil(restored.timings?["copy"])
+        XCTAssertEqual(restored.appBuild, imports[0]["appBuild"] as? String)
+        library.endShare(); XCTAssertFalse(FileManager.default.fileExists(atPath: timingReport.path))
+    }
+    func testFailedAndCancelledImportsPersistPartialCopyDiagnostics() throws {
+        let manager = try BJJMediaJobs(store: store)
+        for cancelled in [false, true] {
+            let job = try manager.create()
+            let (_, worker) = try manager.beginImport(job.jobId)
+            worker.copying(512, 1024); worker.metric("provider_wait", seconds: 2)
+            if cancelled { _ = try manager.cancel(job.jobId) }
+            manager.failure(job.jobId, cancelled ? BJJError.cancelled : BJJError.invalid("Test failure"))
+            let restored = try BJJMediaJobs(store: store).get(job.jobId)
+            XCTAssertEqual(restored.status, cancelled ? "cancelled" : "failed")
+            XCTAssertEqual(restored.copiedBytes, 512); XCTAssertEqual(restored.totalBytes, 1024)
+            XCTAssertEqual(restored.timings?["provider_wait"], 2)
+            XCTAssertEqual(restored.appBuild, job.appBuild)
+        }
+    }
+    func testHistoricalMediaDiagnosticsKeepUnknownBuildAndSavedTimings() throws {
+        let manager = try BJJMediaJobs(store: store)
+        let job = try manager.create()
+        _ = try manager.cancel(job.jobId)
+        let path = store.root.appendingPathComponent("media-jobs/\(job.jobId).json")
+        var record = try store.readJSON(path)
+        var historical = try BJJValidate.object(record["job"], "job")
+        historical.removeValue(forKey: "appVersion"); historical.removeValue(forKey: "appBuild")
+        historical["timings"] = ["provider_wait": 7.0]
+        record["job"] = historical; try store.writeJSON(record, to: path)
+        let restarted = try BJJMediaJobs(store: store)
+        let restored = try restarted.get(job.jobId)
+        XCTAssertNil(restored.appVersion); XCTAssertNil(restored.appBuild)
+        XCTAssertEqual(restored.timings?["provider_wait"], 7)
+        restarted.recordMetric(job.jobId, "editor_open", seconds: 0.1)
+        XCTAssertEqual(try restarted.get(job.jobId).timings?["provider_wait"], 7)
     }
     func testNativeLibraryShowsUnsupportedOriginalWithoutMutatingIt() async throws {
         let project = try project()
@@ -363,7 +787,7 @@ import SwiftUI
         let source = root.appendingPathComponent("library-layout.mp4")
         try await silentVideo(source)
         let library = BJJNativeLibrary(root: root.appendingPathComponent("native"), originalRoot: root.appendingPathComponent("original"))
-        await library.importFile(source)
+        await library.importFile(source, openWhenReady: false)
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let previous = scene.windows.first { $0.isKeyWindow }
         let container = UIViewController()
@@ -1244,12 +1668,12 @@ import SwiftUI
         XCTAssertEqual(try String(contentsOf: protected, encoding: .utf8), "must remain")
         XCTAssertTrue(NSDictionary(dictionary: try store.load(retained.id).json).isEqual(to: retained.json))
     }
-    private func tone(_ url: URL, frequency: Double, duration: Double) throws {
+    private func tone(_ url: URL, frequency: Double, duration: Double, pcm16: Bool = false) throws {
         let format = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 1)!
         let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(duration * 48000))!
         buffer.frameLength = buffer.frameCapacity
         for i in 0..<Int(buffer.frameLength) { buffer.floatChannelData![0][i] = Float(0.2 * sin(2 * .pi * frequency * Double(i) / 48000)) }
-        let file = try AVAudioFile(forWriting: url, settings: format.settings)
+        let file = try AVAudioFile(forWriting: url, settings: pcm16 ? AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 48000, channels: 1, interleaved: true)!.settings : format.settings)
         try file.write(from: buffer)
     }
     private func clip(_ p: BJJProject) throws -> BJJJSON {
@@ -1278,7 +1702,7 @@ import SwiftUI
         _ = try store.save(BJJProject(undo))
         XCTAssertEqual(try store.load(p.id).voiceovers.count, 1)
     }
-    private func silentVideo(_ url: URL, rotated: Bool = false) async throws {
+    private func silentVideo(_ url: URL, rotated: Bool = false, moving: Bool = false) async throws {
         let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: [AVVideoCodecKey: AVVideoCodecType.h264,
             AVVideoWidthKey: 320, AVVideoHeightKey: 180])
@@ -1299,7 +1723,7 @@ import SwiftUI
             let stride = CVPixelBufferGetBytesPerRow(frame)
             for y in 0..<180 { for x in 0..<320 {
                 let p = y * stride + x * 4
-                bytes[p] = 80; bytes[p + 1] = 45; bytes[p + 2] = 20; bytes[p + 3] = 255
+                bytes[p] = moving ? UInt8(80 + i) : 80; bytes[p + 1] = 45; bytes[p + 2] = 20; bytes[p + 3] = 255
             } }
             CVPixelBufferUnlockBaseAddress(frame, [])
             guard adaptor.append(frame, withPresentationTime: CMTime(value: Int64(i), timescale: 30)) else { throw writer.error! }
@@ -1308,9 +1732,9 @@ import SwiftUI
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in writer.finishWriting { continuation.resume() } }
         guard writer.status == .completed else { throw writer.error! }
     }
-    private func sourceVideo(rotated: Bool = false, audio: Bool = false) async throws -> URL {
+    private func sourceVideo(rotated: Bool = false, audio: Bool = false, moving: Bool = false) async throws -> URL {
         let video = root.appendingPathComponent("\(UUID().uuidString).mp4")
-        try await silentVideo(video, rotated: rotated)
+        try await silentVideo(video, rotated: rotated, moving: moving)
         guard audio else { return video }
         let wave = root.appendingPathComponent("tone.wav"); try tone(wave, frequency: 440, duration: 4)
         let composition = AVMutableComposition()

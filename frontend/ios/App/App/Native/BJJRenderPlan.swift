@@ -8,7 +8,7 @@ struct BJJExportOptions {
     var maximum: Double = 1920
     var crf: Double = 23
     func validate(_ project: BJJProject) throws {
-        guard start.isFinite, end.isFinite, start >= 0, end <= project.duration, end - start >= 0.05,
+        guard start.isFinite, end.isFinite, start >= 0, end <= project.outputDuration, end - start >= 0.05,
               [720.0, 1280, 1920, 3840].contains(maximum), [18.0, 23, 28].contains(crf) else {
             throw BJJError.invalid("Choose a valid video range and export quality.")
         }
@@ -18,8 +18,8 @@ struct BJJExportOptions {
         self.start = start; self.end = end; self.maximum = maximum; self.crf = crf
     }
     init(_ json: BJJJSON, project: BJJProject) throws {
-        start = try BJJValidate.number(json["start"], "range start", 0...project.duration)
-        end = try BJJValidate.number(json["end"], "range end", 0...project.duration)
+        start = try BJJValidate.number(json["start"], "range start", 0...project.outputDuration)
+        end = try BJJValidate.number(json["end"], "range end", 0...project.outputDuration)
         maximum = try BJJValidate.number(json["maximum"], "output size", 720...3840)
         crf = try BJJValidate.number(json["crf"], "quality", 18...28)
         try validate(project)
@@ -32,14 +32,16 @@ struct BJJRenderPlan {
     var options: BJJExportOptions? { (json["options"] as? BJJJSON).flatMap { try? BJJExportOptions($0, project: project) } }
     static func output(_ project: BJJProject, options: BJJExportOptions? = nil) -> BJJJSON {
         let size = BJJRenderer.outputSize(CGSize(width: project.source.n("displayWidth"), height: project.source.n("displayHeight")), maximum: options.map { CGFloat($0.maximum) })
-        return ["startSec": options?.start ?? 0, "endSec": options?.end ?? project.duration, "width": Int(size.width), "height": Int(size.height),
+        var result: BJJJSON = ["startSec": options?.start ?? 0, "endSec": options?.end ?? project.outputDuration, "width": Int(size.width), "height": Int(size.height),
                 "fps": project.exportSettings.n("fps"), "quality": options.map { ["crf": $0.crf, "fps": project.exportSettings.n("fps"), "preset": project.exportSettings.s("preset")] } ?? project.exportSettings,
                 "container": "mp4", "videoCodec": "h264", "audioCodec": "aac", "pixelFormat": "yuv420p",
-                "colorPolicy": (project.json["requiredCapabilities"] as! [String]).contains(BJJColor.capability) ? "hdr-rec709-v1" : "supported-sdr-v1", "audioPolicy": "linear-mix-v1"]
+                "colorPolicy": (project.json["requiredCapabilities"] as! [String]).contains(BJJColor.capability) ? "hdr-rec709-v1" : "supported-sdr-v1", "audioPolicy": project.pauseAware ? "pause-linear-mix-v1" : "linear-mix-v1"]
+        if project.pauseAware { result["rangeClock"] = "output"; result["timelinePolicy"] = "source-holds-v1" }
+        return result
     }
     init(store: BJJStore, project: BJJProject, options: BJJExportOptions? = nil) throws {
         try options?.validate(project)
-        var json: BJJJSON = ["version": options == nil ? 1 : 2, "projectId": project.id, "revision": project.revision,
+        var json: BJJJSON = ["version": project.pauseAware ? 3 : (options == nil ? 1 : 2), "projectId": project.id, "revision": project.revision,
                             "requiredCapabilities": project.json["requiredCapabilities"]!, "output": Self.output(project, options: options),
                             "project": project.json, "assets": try BJJAssets.manifest(store, project)]
         if let options { json["options"] = options.json }
@@ -48,10 +50,10 @@ struct BJJRenderPlan {
     init(_ json: BJJJSON, projectId: String, revision: Int?) throws {
         let document = try BJJValidate.object(json["project"], "export project")
         let project = try BJJProject(document)
-        try BJJValidate.number(json["version"], "render plan version", 1...2, integer: true)
+        try BJJValidate.number(json["version"], "render plan version", 1...3, integer: true)
         try BJJValidate.number(json["revision"], "render plan revision", 1...9007199254740991, integer: true)
         let options = try (json["options"] as? BJJJSON).map { try BJJExportOptions($0, project: project) }
-        guard (json["version"] as? Int == 1 && options == nil) || (json["version"] as? Int == 2 && options != nil) else { throw BJJError.invalid("Invalid export options version.") }
+        guard (json["version"] as? Int == 1 && options == nil && !project.pauseAware) || (json["version"] as? Int == 2 && options != nil && !project.pauseAware) || (json["version"] as? Int == 3 && project.pauseAware) else { throw BJJError.invalid("Invalid export options version.") }
         guard json["projectId"] as? String == projectId,
               project.id == projectId, json["revision"] as? Int == revision, project.revision == revision,
               document["schemaVersion"] as? Int == project.json["schemaVersion"] as? Int,

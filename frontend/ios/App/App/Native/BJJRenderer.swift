@@ -27,6 +27,9 @@ enum BJJColor {
 }
 
 struct BJJMedia {
+    static func needsCompatibleCopy(subtype: String, atoms: [String: Any]) -> Bool {
+        atoms["dvcC"] != nil || atoms["dvvC"] != nil || ["dvh1", "dvhe"].contains(subtype)
+    }
     let asset: AVURLAsset
     let video: AVAssetTrack
     let videoRange: CMTimeRange
@@ -60,8 +63,9 @@ struct BJJMedia {
         let extensions = (CMFormatDescriptionGetExtensions(format) as NSDictionary?) ?? NSDictionary()
         let atoms = extensions[kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms] as? [String: Any] ?? [:]
         let subtype = fourCC(CMFormatDescriptionGetMediaSubType(format))
-        if atoms["dvcC"] != nil || atoms["dvvC"] != nil || ["dvh1", "dvhe"].contains(subtype) {
-            throw BJJError.domain("MEDIA_UNSUPPORTED", "This Dolby Vision variant needs a Photos-rendered SDR copy. Its original was preserved.")
+        if needsCompatibleCopy(subtype: subtype, atoms: atoms) {
+            BJJDiagnostics.shared.record(.dolbyRejected, value: Double(CMFormatDescriptionGetMediaSubType(format)))
+            throw BJJError.domain("MEDIA_DOLBY_UNSUPPORTED", "This video is still in an unsupported Dolby Vision format. Try importing it from Photos, which requests a compatible copy. If Photos cannot convert it, choose an SDR copy and share a diagnostic report from Previous reviews. Your original video was not changed.")
         }
         let seconds = range.duration.seconds
         guard seconds.isFinite, seconds >= 0.05, seconds <= 86400,
@@ -292,24 +296,25 @@ final class BJJRenderer {
     func render(media: BJJMedia, project: BJJProject?, store: BJJStore, output: URL,
                 proxy: Bool = false, options: BJJExportOptions? = nil, progress: @escaping (Double) -> Void) async throws {
         if let options, let project { try options.validate(project) }
+        let timeline = project?.reviewTimeline ?? BJJReviewTimeline(sourceDuration: media.videoRange.duration.seconds)
         let start = options?.start ?? 0
-        let duration = CMTime(seconds: (options?.end ?? media.videoRange.duration.seconds) - start, preferredTimescale: 60000)
+        let duration = CMTime(seconds: (options?.end ?? timeline.duration) - start, preferredTimescale: 60000)
         let fps = min(60, project?.exportSettings.n("fps") ?? min(30, media.fps))
         let size = Self.outputSize(media.orientedSize, maximum: proxy ? 1920 : options.map { CGFloat($0.maximum) })
         let composition = AVMutableComposition()
         guard let video = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) else {
             throw BJJError.invalid("Unable to prepare a video track.")
         }
-        try video.insertTimeRange(media.videoRange, of: media.video, at: .zero)
+        try await timeline.insertVideo(media.video, range: media.videoRange, into: video, cancelled: { [self] in shouldStop() })
         var audioProject = project
         if let project, let options {
-            var document = project.json
-            document["voiceovers"] = project.voiceovers.filter {
-                $0.n("startSec") + $0.n("timingOffsetMs") / 1000 < options.end && $0.n("endSec") + $0.n("timingOffsetMs") / 1000 > options.start
-            }
-            audioProject = try BJJProject(document)
+            var json = project.json
+            json["voiceovers"] = project.voiceovers.filter { BJJTakeDisplay.start($0, project: project) < options.end && BJJTakeDisplay.end($0, project: project) > options.start }
+            if project.pauseAware { json["reviewNarration"] = project.reviewNarration.filter { BJJTakeDisplay.start($0, project: project) < options.end && BJJTakeDisplay.end($0, project: project) > options.start } }
+            audioProject = try BJJProject(json)
         }
         let audio = try await BJJAudioComposition.build(media: media, project: audioProject, store: store, composition: composition)
+        defer { for path in audio.temporaryFiles { try? FileManager.default.removeItem(at: path) } }
         let mixScale = audio.scale
         let videoComposition = AVMutableVideoComposition()
         // AVFoundation converts HDR inputs to these SDR properties BEFORE its
@@ -319,8 +324,9 @@ final class BJJRenderer {
         videoComposition.colorYCbCrMatrix = AVVideoYCbCrMatrix_ITU_R_709_2
         videoComposition.renderSize = size
         videoComposition.frameDuration = CMTime(seconds: 1 / fps, preferredTimescale: 60000)
+        videoComposition.sourceTrackIDForFrameTiming = kCMPersistentTrackID_Invalid
         let instruction = AVMutableVideoCompositionInstruction()
-        instruction.timeRange = CMTimeRange(start: .zero, duration: media.videoRange.duration)
+        instruction.timeRange = CMTimeRange(start: .zero, duration: CMTime(seconds: timeline.duration, preferredTimescale: 48000))
         let layer = AVMutableVideoCompositionLayerInstruction(assetTrack: video)
         layer.setTransform(media.transform.concatenating(CGAffineTransform(scaleX: size.width / media.orientedSize.width,
                                                                           y: size.height / media.orientedSize.height)), at: .zero)
@@ -393,16 +399,47 @@ final class BJJRenderer {
             monitor.resume()
             var videoEnded = false
             var lastProgress = -1.0
+            // A scaled one-picture edit can yield one long-duration buffer, even
+            // with a video composition frameDuration. Sample its OUTPUT clock on
+            // the export grid explicitly, retaining at most two decoded pictures.
+            // Ordinary exports retain their established reader/writer path.
+            var currentPicture: CMSampleBuffer?
+            var nextPicture: CMSampleBuffer?
+            var outputFrame: Int64 = 0
+            func picture() -> CMSampleBuffer? {
+                while !self.shouldStop(), let sample = videoOutput.copyNextSampleBuffer() {
+                    if CMSampleBufferGetImageBuffer(sample) != nil { return sample }
+                }
+                return nil
+            }
             videoInput.requestMediaDataWhenReady(on: DispatchQueue(label: "bjj.encode.video")) { [self] in
                 while videoInput.isReadyForMoreMediaData && !videoEnded && !shouldStop() {
                     autoreleasepool {
-                        guard let sample = videoOutput.copyNextSampleBuffer() else {
+                        let decoded: CMSampleBuffer?
+                        let pts: CMTime
+                        if !timeline.holds.isEmpty {
+                            let elapsed = Double(outputFrame) / fps
+                            if elapsed >= duration.seconds - 0.0000001 {
+                                videoEnded = true; videoInput.markAsFinished(); endedStream(); return
+                            }
+                            pts = CMTime(seconds: start + elapsed, preferredTimescale: 60000)
+                            if currentPicture == nil { currentPicture = picture(); nextPicture = picture() }
+                            while let next = nextPicture,
+                                  CMSampleBufferGetOutputPresentationTimeStamp(next).seconds <= pts.seconds + 0.0000001 {
+                                currentPicture = next; nextPicture = picture()
+                            }
+                            decoded = currentPicture
+                        } else {
+                            decoded = videoOutput.copyNextSampleBuffer()
+                            pts = decoded.map { CMSampleBufferGetPresentationTimeStamp($0) } ?? .invalid
+                        }
+                        guard let sample = decoded else {
                             videoEnded = true
                             if reader.status == .failed { complete(.failure(reader.error ?? BJJError.invalid("Video decoding failed."))) }
+                            else if !timeline.holds.isEmpty { complete(.failure(BJJError.invalid("The paused review has no decoded picture."))) }
                             else { videoInput.markAsFinished(); endedStream() }
                             return
                         }
-                        let pts = CMSampleBufferGetPresentationTimeStamp(sample)
                         guard let source = CMSampleBufferGetImageBuffer(sample), let pool = adaptor.pixelBufferPool else {
                             complete(.failure(BJJError.invalid("A decoded video frame is unavailable."))); return
                         }
@@ -411,11 +448,12 @@ final class BJJRenderer {
                             complete(.failure(BJJError.invalid("Not enough memory to render this resolution."))); return
                         }
                         var image = CIImage(cvPixelBuffer: source)
-                        if let overlayImage = overlay.image(at: pts.seconds) { image = overlayImage.composited(over: image) }
+                        if let overlayImage = overlay.image(at: timeline.source(at: pts.seconds)) { image = overlayImage.composited(over: image) }
                         context.render(image, to: destination, bounds: CGRect(origin: .zero, size: size), colorSpace: deliverySpace)
                         guard adaptor.append(destination, withPresentationTime: CMTimeSubtract(pts, CMTime(seconds: start, preferredTimescale: 60000))) else {
                             complete(.failure(writer.error ?? BJJError.invalid("Unable to encode a video frame."))); return
                         }
+                        outputFrame += 1
                         if pts.seconds - lastProgress >= 0.2 { lastProgress = pts.seconds; progress(max(0, pts.seconds - start)) }
                     }
                 }

@@ -1,6 +1,83 @@
 import Foundation
 import CryptoKit
 
+/// Local, bounded diagnostic breadcrumbs. Never accepts free-form messages,
+/// filenames, URLs, annotation text, media bytes or audio route/device names.
+final class BJJDiagnostics: @unchecked Sendable {
+    enum Event: String { case launch, background, foreground, backgroundExpired, libraryStart, libraryFinish, libraryError, cancel,
+        photosRequest, photosReady, mediaStage, mediaError, dolbyRejected, packageStage, packageError,
+        editorOpen, editorClose, editorError, editSaved, history, playback, audioPreview,
+        recordingStart, recordingStop, recordingPause, recordingError, exportStage, exportError, share }
+    static let shared = BJJDiagnostics()
+    private let queue = DispatchQueue(label: "FreshFrame.diagnostics", qos: .utility)
+    private let file: URL
+    private let session = UUID().uuidString.lowercased()
+    private let limit: Int
+    private var rows: [BJJJSON]?
+    private var writeFailed = false
+    init(file: URL? = nil, limit: Int = 500) {
+        self.file = file ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("FreshFrameDiagnostics/events.json")
+        self.limit = max(1, min(500, limit))
+    }
+    private func load() -> [BJJJSON] {
+        if let rows { return rows }
+        guard let size = try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= 1_048_576,
+              let data = try? Data(contentsOf: file), let value = try? JSONSerialization.jsonObject(with: data) as? [BJJJSON] else { return [] }
+        return Array(value.suffix(limit))
+    }
+    static func errors(_ error: Error) -> [BJJJSON] {
+        var result = [BJJJSON](), current: NSError? = error as NSError
+        let domains = [NSCocoaErrorDomain, NSURLErrorDomain, "AVFoundationErrorDomain", "NSOSStatusErrorDomain", "NSItemProviderErrorDomain", "PHPhotosErrorDomain"]
+        for _ in 0..<4 {
+            guard let item = current else { break }
+            result.append(["domain": domains.contains(item.domain) ? item.domain : "other", "code": item.code])
+            current = item.userInfo[NSUnderlyingErrorKey] as? NSError
+        }
+        if let error = error as? BJJError {
+            let code = error.code
+            if code.range(of: "^[A-Z_]{1,64}$", options: .regularExpression) != nil { result.insert(["domain": "FreshFrame", "code": code], at: 0) }
+        }
+        return result
+    }
+    func record(_ event: Event, operation: String? = nil, phase: String? = nil, error: Error? = nil, value: Double? = nil) {
+        var row: BJJJSON = ["event": event.rawValue, "time": Date().timeIntervalSince1970, "session": session,
+            "version": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown",
+            "build": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown"]
+        if let operation, UUID(uuidString: operation) != nil { row["operation"] = operation }
+        if let phase, ["waiting_for_photos", "queued", "running", "failed", "completed", "cancelled", "copying", "inspecting", "preparing_preview", "validating", "ready", "backup", "restore", "import", "repair"].contains(phase) { row["phase"] = phase }
+        if let value, value.isFinite { row["value"] = value }
+        if let error { row["errors"] = Self.errors(error) }
+        let entry = row
+        queue.async {
+            let cutoff = Date().addingTimeInterval(-7 * 86400).timeIntervalSince1970
+            var rows = self.load().filter { ($0["time"] as? Double ?? 0) >= cutoff }
+            rows.append(entry); self.rows = Array(rows.suffix(self.limit))
+            self.persist()
+        }
+    }
+    private func persist() {
+        do {
+            var folder = file.deletingLastPathComponent()
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            var values = URLResourceValues(); values.isExcludedFromBackup = true
+            try folder.setResourceValues(values)
+            try JSONSerialization.data(withJSONObject: rows ?? [], options: [.sortedKeys]).write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+            writeFailed = false
+        } catch { writeFailed = true } // Logging must never break editing/storage recovery.
+    }
+    func snapshot() -> BJJJSON {
+        queue.sync {
+            let cutoff = Date().addingTimeInterval(-7 * 86400).timeIntervalSince1970
+            rows = load().filter { ($0["time"] as? Double ?? 0) >= cutoff }
+            return ["schemaVersion": 1, "events": rows ?? [], "persistenceUnavailable": writeFailed,
+                    "osVersion": ProcessInfo.processInfo.operatingSystemVersionString]
+        }
+    }
+    func clear() { queue.sync { rows = []; persist() } }
+    func flush() { queue.sync {} }
+}
+
 /// Hashing and verification run off the main actor with bounded one-MiB reads.
 final class BJJJobCancellation {
     private let lock = NSLock()
@@ -52,7 +129,7 @@ enum BJJAssets {
     static func required(_ project: BJJProject, proxy: Bool = false) -> [String: (String, BJJJSON)] {
         var result = [project.source.s("asset"): ("source", project.source)]
         if proxy { result[project.proxy.s("asset")] = ("proxy", project.proxy) }
-        for clip in project.voiceovers {
+        for clip in project.allTakes {
             result[clip.s("asset")] = ("voiceover", clip.filter { ["durationSec", "codec", "sampleRate", "channels", "recordedAt"].contains($0.key) })
         }
         return result
@@ -102,7 +179,7 @@ enum BJJAssets {
     static func exportEstimate(_ project: BJJProject) -> BJJJSON {
         let size = BJJRenderer.outputSize(CGSize(width: project.source.n("displayWidth"), height: project.source.n("displayHeight")))
         let bitrate = min(60_000_000, max(1_000_000, Double(size.width * size.height) * project.exportSettings.n("fps") * 0.12 * pow(2, (23 - project.exportSettings.n("crf")) / 6)))
-        let output = Int64(ceil(project.duration * (bitrate + 192000) / 8))
+        let output = Int64(ceil(project.outputDuration * (bitrate + 192000) / 8))
         // AVFoundation streams frames/audio; allow output relocation plus metadata.
         return estimate("export", output: output, working: output + 32 * mib)
     }

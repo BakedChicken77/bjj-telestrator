@@ -89,7 +89,7 @@ struct BJJExportJob: Codable {
                 job.outputAvailable = job.status == "completed" && job.filename.map { $0 == URL(fileURLWithPath: $0).lastPathComponent && FileManager.default.fileExists(atPath: exportFolder.appendingPathComponent($0).path) } == true
                 jobs[job.jobId] = job
                 try persist(job)
-            } catch { logger.error("Unreadable export metadata: \(error.localizedDescription, privacy: .public)") }
+            } catch { BJJDiagnostics.shared.record(.exportError, error: error); logger.error("Unreadable export metadata: \(error.localizedDescription, privacy: .private)") }
         }
         guard cleanTemporary else { return }
         let temp = folder.appendingPathComponent("temp")
@@ -98,6 +98,7 @@ struct BJJExportJob: Codable {
         }
     }
     private func persist(_ job: BJJExportJob) throws {
+        BJJDiagnostics.shared.record(.exportStage, operation: job.jobId, phase: job.status)
         let url = try store.safeURL(job.projectId, "exports/\(job.jobId).json")
         try JSONEncoder().encode(job).write(to: url, options: .atomic)
     }
@@ -235,7 +236,7 @@ struct BJJExportJob: Codable {
                 try store.checkSpace(required: (BJJAssets.exportEstimate(project)["requiredBytes"] as! NSNumber).int64Value)
                 try await BJJAssets.offMain { [store] in try plan.verify(store, cancellation: cancellation) }
                 try cancellation.check()
-                let duration = (plan.options?.end ?? project.duration) - (plan.options?.start ?? 0)
+                let duration = (plan.options?.end ?? project.outputDuration) - (plan.options?.start ?? 0)
                 let source = try store.asset(project.id, project.source.s("asset"))
                 let media = try await BJJMedia.inspect(source, reference: project.source.s("asset"), originalName: project.source.s("originalFilename"))
                 let staging = try store.safeURL(project.id, "temp/\(id).mp4")
@@ -251,8 +252,8 @@ struct BJJExportJob: Codable {
                 if jobs[id]?.status == "cancelled" { return }
                 let probe = try await BJJMedia.inspect(staging, reference: "exports/output.mp4", originalName: "output.mp4")
                 let tolerance = max(0.1, 1 / project.exportSettings.n("fps"))
-                let expectedAudio = (media.json["hasAudio"] as! Bool) || project.voiceovers.contains {
-                    !($0["muted"] as! Bool) && $0.n("gain") * project.settings.n("voiceoverMasterGain") > 0 && $0.n("startSec") + $0.n("timingOffsetMs") / 1000 < (plan.options?.end ?? project.duration) && $0.n("endSec") + $0.n("timingOffsetMs") / 1000 > (plan.options?.start ?? 0)
+                let expectedAudio = (media.json["hasAudio"] as! Bool) || project.allTakes.contains {
+                    !($0["muted"] as! Bool) && $0.n("gain") * project.settings.n("voiceoverMasterGain") > 0 && BJJTakeDisplay.start($0, project: project) < (plan.options?.end ?? project.outputDuration) && BJJTakeDisplay.end($0, project: project) > (plan.options?.start ?? 0)
                 }
                 guard !BJJColor.isHDR(probe.json), probe.json.s("transferFunction") == "bt709", probe.json.s("colorPrimaries") == "bt709",
                       probe.json.s("colorMatrix") == "bt709", probe.json.s("codec") == "avc1", abs(probe.videoRange.duration.seconds - duration) <= tolerance,
@@ -272,12 +273,13 @@ struct BJJExportJob: Codable {
                 logger.info("Export completed: \(id, privacy: .public)")
             } catch {
                 if jobs[id]?.status != "cancelled" {
+                    BJJDiagnostics.shared.record(.exportError, operation: id, error: error)
                     jobs[id]?.status = "failed"; jobs[id]?.outputAvailable = false
                     let domain = error as? BJJError
                     let lowSpace = (error as NSError).code == NSFileWriteOutOfSpaceError
                     jobs[id]?.errorCode = lowSpace ? "STORAGE_LOW" : domain?.code ?? "EXPORT_FAILED"
                     jobs[id]?.error = lowSpace ? "Storage filled during export. Free space and retry this revision." : domain?.localizedDescription ?? "Export failed. Check source media and available storage, then retry this revision."
-                    logger.error("Export failed: \(id, privacy: .public), \(error.localizedDescription, privacy: .public)")
+                    logger.error("Export failed: \(id, privacy: .public), \(error.localizedDescription, privacy: .private)")
                 }
             }
             if let job = jobs[id] { try? persist(job) }

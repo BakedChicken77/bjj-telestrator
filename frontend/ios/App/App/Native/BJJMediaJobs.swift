@@ -15,6 +15,15 @@ struct BJJMediaJob: Codable {
     var errorCode: String?
     var error: String?
     var projectRevision: Int?
+    var timings: [String: Double]?
+    var mediaProfile: [String: String]?
+    // Optional so historical records remain readable without inventing provenance.
+    var appVersion: String?
+    var appBuild: String?
+    var importPhase: String?
+    var lastCheckpointAt: String?
+    var providerProgress: Double?
+    var stopReason: String?
     let createdAt: String
     var terminal: Bool { ["completed", "failed", "cancelled"].contains(status) }
     func json() throws -> BJJJSON {
@@ -31,10 +40,24 @@ final class BJJMediaWork {
     private let lock = NSLock()
     private var copied: Int64 = 0, total: Int64 = 0
     private var fraction: Double = 0
+    private var timings: [String: Double] = [:]
+    private var photosBegan: Double?
+    private var waitingForPhotos = false
+    func beginPhotosWait() { lock.lock(); photosBegan = ProcessInfo.processInfo.systemUptime; waitingForPhotos = true; lock.unlock() }
+    func endPhotosWait() { lock.lock(); waitingForPhotos = false; lock.unlock() }
+    func photosWait() -> Double? {
+        lock.lock(); defer { lock.unlock() }
+        guard waitingForPhotos, let photosBegan else { return nil }
+        return max(0, ProcessInfo.processInfo.systemUptime - photosBegan)
+    }
+    func metric(_ key: String, seconds: Double) { lock.lock(); timings[key] = max(0, seconds); lock.unlock() }
+    func metrics() -> [String: Double] { lock.lock(); defer { lock.unlock() }; return timings }
     func copying(_ count: Int64, _ size: Int64) { lock.lock(); copied = count; total = size; lock.unlock() }
     func rendering(_ value: Double) { lock.lock(); fraction = max(0, min(1, value)); lock.unlock() }
     func snapshot() -> (Int64, Int64, Double) { lock.lock(); defer { lock.unlock() }; return (copied, total, fraction) }
     static func copy(_ input: URL, _ target: URL, store: BJJStore, work: BJJMediaWork) throws {
+        let began = ProcessInfo.processInfo.systemUptime
+        defer { work.metric("copy", seconds: ProcessInfo.processInfo.systemUptime - began) }
         let size = Int64(try input.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0)
         guard size > 0, size <= 4 * 1024 * 1024 * 1024 else { throw BJJError.domain("MEDIA_UNSUPPORTED", "Choose a nonempty video smaller than 4 GiB.") }
         try store.checkSpace(required: (BJJAssets.estimate("import", output: 0, incoming: size)["requiredBytes"] as! NSNumber).int64Value)
@@ -71,6 +94,12 @@ final class BJJMediaWork {
     private var jobs: [String: BJJMediaJob] = [:]
     private var work: [String: BJJMediaWork] = [:]
     private var encoders: [String: BJJRenderer] = [:]
+    private var backgroundTasks: [String: UIBackgroundTaskIdentifier] = [:]
+    var recoveredInterruption: String?
+    deinit {
+        let tokens = Array(backgroundTasks.values)
+        DispatchQueue.main.async { for token in tokens { UIApplication.shared.endBackgroundTask(token) } }
+    }
     var activityChanged: (() -> Void)?
     var active: Bool { jobs.values.contains { !$0.terminal && $0.status == "running" } }
     private var root: URL { store.root.appendingPathComponent("media-jobs") }
@@ -88,8 +117,11 @@ final class BJJMediaWork {
                 try validate(job)
                 guard job.jobId == url.deletingPathExtension().lastPathComponent else { continue }
                 if !job.terminal {
-                    job.status = "failed"; job.errorCode = "MEDIA_INTERRUPTED"
-                    job.error = "Video preparation stopped when the app closed. Import again or repair the preview; saved projects were preserved."
+                    job.status = "failed"; job.errorCode = job.stopReason == "background_expired" ? "MEDIA_BACKGROUND_EXPIRED" : "MEDIA_INTERRUPTED"
+                    job.error = job.stopReason == "background_expired" ? Self.backgroundMessage : "The previous import was interrupted before it finished. Select the video again. Saved reviews were preserved."
+                    if job.cancelRequested && job.stopReason != "background_expired" {
+                        job.status = "cancelled"; job.errorCode = "JOB_CANCELLED"; job.error = "Video preparation was cancelled."
+                    }
                     let folder = try store.directory(job.projectId)
                     if job.operation == "import" {
                         if let project = try? store.load(job.projectId) {
@@ -101,6 +133,7 @@ final class BJJMediaWork {
                     }
                     try? FileManager.default.removeItem(at: store.safeURL(job.projectId, "temp/media-\(job.jobId).mp4"))
                     try persist(job)
+                    if job.status == "failed" { recoveredInterruption = job.error }
                 }
                 jobs[job.jobId] = job; work[job.jobId] = BJJMediaWork()
             } catch { continue }
@@ -125,7 +158,58 @@ final class BJJMediaWork {
                 job.copiedBytes = state.0; job.totalBytes = state.1; job.progress = min(1, Double(state.0) / Double(state.1))
             } else if job.stage == "preparing_preview" { job.progress = state.2 }
         }
+        if let metrics = work[id]?.metrics() {
+            job.timings = (job.timings ?? [:]).merging(metrics) { _, new in new }
+        }
         return job
+    }
+    func recordMetric(_ id: String, _ key: String, seconds: Double) {
+        work[id]?.metric(key, seconds: seconds)
+        guard var job = jobs[id] else { return }
+        captureDiagnostics(&job)
+        job.timings = (job.timings ?? [:]).merging([key: max(0, seconds)]) { _, new in new }
+        jobs[id] = job; try? persist(job)
+    }
+    private func captureDiagnostics(_ job: inout BJJMediaJob) {
+        guard let worker = work[job.jobId] else { return }
+        let state = worker.snapshot()
+        if state.1 > 0 { job.copiedBytes = state.0; job.totalBytes = state.1 }
+        job.timings = (job.timings ?? [:]).merging(worker.metrics()) { _, new in new }
+        if let elapsed = worker.photosWait() {
+            job.importPhase = "waiting_for_photos"
+            job.timings?["provider_wait_elapsed"] = elapsed
+        } else { job.importPhase = job.stage }
+        job.lastCheckpointAt = BJJProject.now()
+    }
+    func checkpoint(_ id: String, providerProgress: Double? = nil) {
+        guard var job = jobs[id], !job.terminal else { return }
+        captureDiagnostics(&job)
+        if let providerProgress, providerProgress.isFinite { job.providerProgress = min(1, max(0, providerProgress)) }
+        jobs[id] = job; try? persist(job)
+    }
+    static let backgroundMessage = "iOS ended the time available for importing in the background. Select the video again and keep Fresh Frame open until it finishes. Saved reviews were preserved."
+    private func startBackground(_ id: String) {
+        guard backgroundTasks[id] == nil else { return }
+        let token = UIApplication.shared.beginBackgroundTask(withName: "Fresh Frame import") { [weak self] in
+            MainActor.assumeIsolated { self?.expireBackground(id) }
+        }
+        if token != .invalid { backgroundTasks[id] = token }
+    }
+    private func endBackground(_ id: String) {
+        if let token = backgroundTasks.removeValue(forKey: id) { UIApplication.shared.endBackgroundTask(token) }
+    }
+    func enterBackground(_ id: String) {
+        checkpoint(id)
+        if backgroundTasks[id] == nil { expireBackground(id) }
+    }
+    func expireBackground(_ id: String) {
+        defer { endBackground(id) }
+        guard var job = jobs[id], !job.terminal, !job.cancelRequested else { return }
+        job.stopReason = "background_expired"
+        captureDiagnostics(&job); jobs[id] = job; try? persist(job)
+        work[id]?.cancellation.cancel(); encoders[id]?.cancel()
+        BJJDiagnostics.shared.record(.backgroundExpired, operation: id, phase: job.importPhase)
+        BJJDiagnostics.shared.flush()
     }
     func create(_ project: BJJProject? = nil) throws -> BJJMediaJob {
         guard jobs.values.filter({ !$0.terminal }).count < 2 else { throw BJJError.domain("JOB_ACTIVE", "Finish or cancel the current video preparation first.") }
@@ -134,29 +218,38 @@ final class BJJMediaWork {
             jobs.removeValue(forKey: oldest.jobId); work.removeValue(forKey: oldest.jobId)
         }
         let job = BJJMediaJob(jobId: UUID().uuidString.lowercased(), projectId: project?.id ?? UUID().uuidString.lowercased(),
-                              operation: project == nil ? "import" : "repair", stage: project == nil ? "copying" : "inspecting", createdAt: BJJProject.now())
+                              operation: project == nil ? "import" : "repair", stage: project == nil ? "copying" : "inspecting",
+                              appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
+                              appBuild: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String,
+                              createdAt: BJJProject.now())
         try persist(job); jobs[job.jobId] = job; work[job.jobId] = BJJMediaWork()
         return job
     }
     private func update(_ id: String, _ change: (inout BJJMediaJob) -> Void) throws {
         guard var job = jobs[id], !job.terminal else { return }
-        change(&job); jobs[id] = job; activityChanged?(); try persist(job)
+        change(&job); captureDiagnostics(&job); jobs[id] = job; activityChanged?(); try persist(job)
+        if job.terminal { endBackground(id) }
+        BJJDiagnostics.shared.record(.mediaStage, operation: id, phase: job.terminal ? job.status : job.importPhase ?? job.stage)
     }
     @discardableResult func cancel(_ id: String) throws -> BJJMediaJob {
         let job = try get(id)
         if !job.terminal {
             work[id]?.cancellation.cancel(); encoders[id]?.cancel()
-            try update(id) { $0.cancelRequested = true; if job.status == "queued" { $0.status = "cancelled"; $0.errorCode = "JOB_CANCELLED" } }
+            try update(id) { $0.cancelRequested = true; if $0.stopReason == nil { $0.stopReason = "user_cancelled" }; if job.status == "queued" { $0.status = "cancelled"; $0.errorCode = "JOB_CANCELLED" } }
         }
         return try get(id)
     }
     func failure(_ id: String, _ error: Error) {
+        BJJDiagnostics.shared.record(.mediaError, operation: id, error: error)
         let cancelled = (try? work[id]?.cancellation.check()) == nil
-        let code = cancelled ? "JOB_CANCELLED" : ((error as? BJJError)?.code ?? ((error as? CocoaError)?.code == .fileWriteOutOfSpace ? "STORAGE_LOW" : "MEDIA_FAILED"))
+        let expired = jobs[id]?.stopReason == "background_expired"
+        let code = expired ? "MEDIA_BACKGROUND_EXPIRED" : cancelled ? "JOB_CANCELLED" : ((error as? BJJError)?.code ?? ((error as? CocoaError)?.code == .fileWriteOutOfSpace ? "STORAGE_LOW" : "MEDIA_FAILED"))
         try? update(id) {
-            $0.status = cancelled ? "cancelled" : "failed"; $0.errorCode = code
-            $0.error = cancelled ? "Video preparation was cancelled." : ((error as? BJJError)?.localizedDescription ?? "Video preparation failed. Check storage and choose a complete supported source. Existing projects were preserved.")
+            $0.timings = work[id]?.metrics()
+            $0.status = cancelled && !expired ? "cancelled" : "failed"; $0.errorCode = code
+            $0.error = expired ? Self.backgroundMessage : cancelled ? "Video preparation was cancelled." : ((error as? BJJError)?.localizedDescription ?? "Video preparation failed. Check storage and choose a complete supported source. Existing projects were preserved.")
         }
+        endBackground(id)
         cleanupImport(id)
     }
     private func cleanupImport(_ id: String) {
@@ -166,12 +259,14 @@ final class BJJMediaWork {
             try? FileManager.default.removeItem(at: folder)
         }
     }
-    func beginImport(_ id: String) throws -> (URL, BJJMediaWork) {
+    func beginImport(_ id: String, waitingForPhotos: Bool = false) throws -> (URL, BJJMediaWork) {
         let job = try get(id)
         try work[id]!.cancellation.check()
         guard job.operation == "import", job.status == "queued" else { throw BJJError.domain("JOB_ACTIVE", "This import was already started. Check its status before retrying.") }
+        if waitingForPhotos { work[id]?.beginPhotosWait() }
         try update(id) { $0.status = "running" }
         _ = try store.createDirectory(id: job.projectId)
+        startBackground(id)
         return (try store.safeURL(job.projectId, "source/\(id).mov"), work[id]!)
     }
     func importFile(_ input: URL, originalName: String) async throws -> BJJProject {
@@ -206,14 +301,16 @@ final class BJJMediaWork {
     }
     private func prepareMedia(_ id: String, sourceReference: String, originalName: String, snapshot: BJJProject?) async throws -> BJJProject {
         let job = try get(id), worker = work[id]!
+        let began = ProcessInfo.processInfo.systemUptime
+        var stageStart = began
         let temporary = try store.safeURL(job.projectId, "temp/media-\(id).mp4")
         let proxyRef = "proxy/\(UUID().uuidString.lowercased()).mp4", encoder = BJJRenderer()
         let candidate = try store.safeURL(job.projectId, proxyRef)
         encoders[id] = encoder
-        let background = UIApplication.shared.beginBackgroundTask(withName: "BJJ video preparation") { [weak self] in Task { @MainActor in _ = try? self?.cancel(id) } }
+        startBackground(id)
         defer {
             encoders.removeValue(forKey: id)
-            if background != .invalid { UIApplication.shared.endBackgroundTask(background) }
+            endBackground(id)
             try? FileManager.default.removeItem(at: temporary)
             // Keep any candidate owned by a committed document or pending atomic save.
             if let current = try? store.load(job.projectId), current.proxy.s("asset") != proxyRef { try? FileManager.default.removeItem(at: candidate) }
@@ -224,12 +321,16 @@ final class BJJMediaWork {
             let source = try BJJAssets.file(store, job.projectId, sourceReference)
             let hash = try await BJJAssets.offMain { [store] in
                 if let snapshot {
-                    var json = snapshot.json; json["voiceovers"] = [BJJJSON]()
+                    var json = snapshot.json; json["voiceovers"] = [BJJJSON](); if snapshot.pauseAware { json["reviewNarration"] = [BJJJSON]() }
                     return try BJJAssets.manifest(store, BJJProject(json), cancellation: worker.cancellation)[0].s("sha256")
                 }
                 return try BJJAssets.digest(source, cancellation: worker.cancellation)
             }
+            worker.metric("source_hash_before", seconds: ProcessInfo.processInfo.systemUptime - stageStart)
+            stageStart = ProcessInfo.processInfo.systemUptime
             let media = try await BJJMedia.inspect(source, reference: sourceReference, originalName: originalName)
+            worker.metric("inspect", seconds: ProcessInfo.processInfo.systemUptime - stageStart)
+            try update(id) { $0.mediaProfile = ["sourceSHA256": hash, "codec": media.json.s("codec"), "durationSec": String(media.videoRange.duration.seconds), "dimensions": "\(Int(media.orientedSize.width))x\(Int(media.orientedSize.height))", "fps": String(media.fps), "hdr": String(BJJColor.isHDR(media.json))] }
             if let snapshot {
                 guard abs(media.videoRange.duration.seconds - snapshot.duration) <= 0.001,
                       abs(media.videoRange.start.seconds - ((snapshot.source["videoStartSec"] as? NSNumber)?.doubleValue ?? 0)) <= 0.001,
@@ -240,7 +341,10 @@ final class BJJMediaWork {
             try store.checkSpace(required: (BJJAssets.proxyEstimate(media.videoRange.duration.seconds)["requiredBytes"] as! NSNumber).int64Value)
             try worker.cancellation.check()
             try update(id) { $0.stage = "preparing_preview"; $0.progress = 0 }
+            stageStart = ProcessInfo.processInfo.systemUptime
             try await encoder.render(media: media, project: nil, store: store, output: temporary, proxy: true) { worker.rendering($0 / media.videoRange.duration.seconds) }
+            worker.metric("proxy_encode", seconds: ProcessInfo.processInfo.systemUptime - stageStart)
+            stageStart = ProcessInfo.processInfo.systemUptime
             try update(id) { $0.stage = "validating"; $0.progress = nil }
             let preview = try await BJJMedia.inspect(temporary, reference: proxyRef, originalName: originalName)
             let expected = BJJRenderer.outputSize(media.orientedSize, maximum: 1920)
@@ -250,9 +354,13 @@ final class BJJMediaWork {
                   preview.json["hasAudio"] as? Bool != true || preview.json.s("audioCodec") == "aac" else {
                 throw BJJError.domain("MEDIA_VALIDATION_FAILED", "The preview failed its orientation, timing, codec or audio check. The previous project was preserved.")
             }
+            worker.metric("proxy_validation", seconds: ProcessInfo.processInfo.systemUptime - stageStart)
+            stageStart = ProcessInfo.processInfo.systemUptime
             guard try await BJJAssets.offMain({ try BJJAssets.digest(source, cancellation: worker.cancellation) }) == hash else {
                 throw BJJError.domain("ASSET_CHANGED", "The original changed during preparation. Restore its original file.")
             }
+            worker.metric("source_hash_after", seconds: ProcessInfo.processInfo.systemUptime - stageStart)
+            stageStart = ProcessInfo.processInfo.systemUptime
             var proxy = preview.json; proxy["durationSec"] = media.videoRange.duration.seconds
             // No await between cancellation/revision check and atomic publication.
             let saved = try store.locked {
@@ -274,7 +382,9 @@ final class BJJMediaWork {
                 try FileManager.default.moveItem(at: temporary, to: candidate)
                 return try store.save(BJJProject(json), creating: snapshot == nil, replacingProxy: snapshot != nil)
             }
-            try update(id) { $0.status = "completed"; $0.stage = "ready"; $0.progress = 1; $0.projectRevision = saved.revision }
+            worker.metric("publish", seconds: ProcessInfo.processInfo.systemUptime - stageStart)
+            worker.metric("prepare_total", seconds: ProcessInfo.processInfo.systemUptime - began)
+            try update(id) { $0.timings = worker.metrics(); $0.status = "completed"; $0.stage = "ready"; $0.progress = 1; $0.projectRevision = saved.revision }
             return saved
         }
     }

@@ -57,7 +57,7 @@ enum BJJProjectPackage {
         let expected = BJJAssets.required(project, proxy: includeProxy)
         let assets = try BJJValidate.objects(value["assets"], "package assets", maximum: archive.limits.files)
         guard assets.count == expected.count, project.source.s("asset") != project.proxy.s("asset"),
-              !project.voiceovers.contains(where: { [project.source.s("asset"), project.proxy.s("asset")].contains($0.s("asset")) }) else { throw BJJPackageArchive.invalid("The package is missing required media.") }
+              !project.allTakes.contains(where: { [project.source.s("asset"), project.proxy.s("asset")].contains($0.s("asset")) }) else { throw BJJPackageArchive.invalid("The package is missing required media.") }
         var refs = Set<String>(), identifiers = Set<String>(), names: Set<String> = ["manifest.json", "project.json"]
         for asset in assets {
             let id = try BJJValidate.uuid(asset["assetId"])
@@ -149,12 +149,12 @@ enum BJJProjectPackage {
     static func digest(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
     static func remap(_ project: BJJProject, id: String) -> (BJJJSON, [String: String]) {
         var map = [project.id: id]
-        for item in project.annotations + project.voiceovers { map[item.s("id")] = UUID().uuidString.lowercased() }
+        for item in project.annotations + project.allTakes + project.reviewTimeline.holds { map[item.s("id")] = UUID().uuidString.lowercased() }
         let suffix = URL(fileURLWithPath: project.source.s("asset")).pathExtension.lowercased()
         let extensionName = !suffix.isEmpty && suffix.count <= 10 && suffix.allSatisfy({ "abcdefghijklmnopqrstuvwxyz0123456789".contains($0) }) ? suffix : "mp4"
         map[project.source.s("asset")] = "source/\(UUID().uuidString.lowercased()).\(extensionName)"
         map[project.proxy.s("asset")] = "proxy/\(UUID().uuidString.lowercased()).mp4"
-        for clip in project.voiceovers { map[clip.s("asset")] = "voiceover/\(map[clip.s("id")]!).wav" }
+        for clip in project.allTakes { map[clip.s("asset")] = "voiceover/\(map[clip.s("id")]!).wav" }
         let literal: Set<String> = ["text", "projectName", "originalFilename", "label", "note", "name"]
         func rewrite(_ value: Any) -> Any {
             if let string = value as? String { return map[string] ?? string }
@@ -242,7 +242,7 @@ enum BJJProjectPackage {
         let project = try await BJJAssets.offMain { () throws -> BJJProject in
             let project = try BJJProject(prepared.json)
             var registry: BJJJSON = [:]
-            for clip in project.voiceovers {
+            for clip in project.allTakes {
                 try work.cancellation.check()
                 let audio = try AVAudioFile(forReading: prepared.folder.appendingPathComponent(clip.s("asset")))
                 let format = audio.fileFormat.streamDescription.pointee
