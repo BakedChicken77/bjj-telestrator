@@ -33,6 +33,21 @@ final class BJJWorkflowTests: XCTestCase {
         expectation(for: ready, evaluatedWith: app.buttons["editor.export"])
         waitForExpectations(timeout: 30)
     }
+    func testHomeVideoSelectionRemainsVisibleWithLargerLogo() throws {
+        app.launch()
+        let select = app.buttons["home.selectVideo"]
+        XCTAssertTrue(select.waitForExistence(timeout: 60))
+        expectation(for: NSPredicate(format: "enabled == true AND hittable == true"), evaluatedWith: select)
+        waitForExpectations(timeout: 60)
+        let portrait = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        portrait.name = "larger-home-logo-portrait"; portrait.lifetime = .keepAlways; add(portrait)
+        XCUIDevice.shared.orientation = .landscapeLeft
+        expectation(for: NSPredicate { _, _ in self.app.frame.width > self.app.frame.height && select.isHittable }, evaluatedWith: app)
+        waitForExpectations(timeout: 10)
+        XCTAssertTrue(app.buttons["home.reviews"].isHittable)
+        let landscape = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        landscape.name = "larger-home-logo-landscape"; landscape.lifetime = .keepAlways; add(landscape)
+    }
     func testOptionalTipsCustomValidationAndLandscapeDismissal() throws {
         app.launchEnvironment["BJJ_UI_TEST_TIPS"] = "1"
         app.launch()

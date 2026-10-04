@@ -83,4 +83,11 @@ No simulator result proves microphone hardware, cloud-provider latency, touch er
 
 ## Remaining release gates
 
+### October 4 diagnostics and home logo follow-up
+
+- Persist copied/total bytes at media stage transitions and terminal success/failure/cancellation; retain saved timings after reopening. New import/repair records capture their originating appVersion/appBuild; diagnostic exports include these fields. Legacy records omit unknown provenance instead of inheriting the report-export build. No project schema migration or media changes are required.
+- Enlarge the existing home logo to 82% of available width, bounded by available height to preserve the selection action. A scroll fallback supports constrained screens and larger text. Diagnostics remains in Previous reviews.
+- Regression coverage: actual imported file size survives completion, reopening and diagnostic export; partial failure/cancel counters survive reopening; historical records decode without new fields and retain timings. Home UI captures portrait/landscape with selection reachable.
+- On iPhone: compare logo against Steve's annotated screenshot, rotate and use larger text; import a local clip, export diagnostics before/after relaunch, check copiedBytes == totalBytes > 0 and per-import build; cancel a large copy and verify partial counters. Historical zeros cannot be reconstructed. Photos provider wait still includes possible cloud transfer and conversion; do not label it as cloud-only or claim a performance improvement.
+
 Remaining physical iPhone validation, controlled import benchmarks and exact final-commit CI evidence must be collected. Further import optimization depends on those measurements. Additional publication requires release authorization; code updates alone do not authorize merging, tagging or production submission.
