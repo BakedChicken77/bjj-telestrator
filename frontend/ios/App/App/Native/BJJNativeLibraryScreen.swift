@@ -49,22 +49,6 @@ struct BJJNativeHome: View {
             }
             .disabled(library.busy)
             .navigationTitle("Fresh Frame")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        Task { await library.shareImportDiagnostics() }
-                    } label: {
-                        Image(systemName: "doc.text.magnifyingglass")
-                            .font(.system(size: 18)).foregroundStyle(.secondary)
-                            .frame(minWidth: 44, minHeight: 44)
-                            .contentShape(Rectangle())
-                    }
-                    .accessibilityLabel("Export diagnostics")
-                    .accessibilityHint("Opens the share sheet for a diagnostic report. No error is required.")
-                    .accessibilityIdentifier("home.diagnostics")
-                    .disabled(library.busy || library.session != nil)
-                }
-            }
             .sheet(isPresented: $previousReviews, onDismiss: {
                 if let action = afterLibrary { afterLibrary = nil; action() }
             }) {

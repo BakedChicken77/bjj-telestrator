@@ -581,23 +581,6 @@ import UniformTypeIdentifiers
         try JSONSerialization.data(withJSONObject: [["event": "launch", "time": Date().addingTimeInterval(-8 * 86400).timeIntervalSince1970]]).write(to: expired)
         XCTAssertEqual((BJJDiagnostics(file: expired).snapshot()["events"] as? [BJJJSON])?.count, 0)
     }
-    func testDiagnosticsCanBeSharedWithoutErrorsOrImportedReviews() async throws {
-        let library = BJJNativeLibrary(root: root.appendingPathComponent("empty-diagnostics"), originalRoot: root.appendingPathComponent("originals"))
-        XCTAssertNil(library.error)
-        await library.shareImportDiagnostics()
-        XCTAssertNil(library.error); XCTAssertFalse(library.busy)
-        XCTAssertTrue(library.reviews.isEmpty)
-        let report = try XCTUnwrap(library.shareURL)
-        let json = try library.services().store.readJSON(report)
-        XCTAssertEqual((json["imports"] as? [BJJJSON])?.count, 0)
-        XCTAssertNotNil(json["diagnostics"] as? BJJJSON)
-        library.endShare()
-        XCTAssertNil(library.shareURL)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: report.path))
-        await library.shareImportDiagnostics()
-        XCTAssertNotNil(library.shareURL); XCTAssertNil(library.error)
-        library.endShare()
-    }
     func testImportDiagnosticsAndAutomaticEditorOpening() async throws {
         let source = root.appendingPathComponent("direct-open.mp4"); try await silentVideo(source)
         let library = BJJNativeLibrary(root: root.appendingPathComponent("direct-open"), originalRoot: root.appendingPathComponent("originals"))
