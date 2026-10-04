@@ -21,6 +21,7 @@ import UIKit
     var liveElapsed: Double { recorder?.currentTime ?? 0 }
     func toggleVideoPause() async throws {
         guard lifecycle.phase == .recording, let player, let recorder, let project, let store, !pausePreparing else { return }
+        BJJDiagnostics.shared.record(.recordingPause, value: videoPaused ? 0 : 1)
         if let began = pauseStart {
             let ticks = ((recorder.currentTime - began) * 48000).rounded()
             if ticks > 0 {
@@ -145,6 +146,7 @@ import UIKit
     }
     func stop(reason: String? = nil) {
         guard active else { return }
+        BJJDiagnostics.shared.record(.recordingStop, value: reason == nil ? 0 : 1)
         let capture = recorder, path = url, document = project, storage = store
         let startSec = start
         if let began = pauseStart, let capture {

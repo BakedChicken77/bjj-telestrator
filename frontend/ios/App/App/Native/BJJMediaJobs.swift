@@ -154,6 +154,7 @@ final class BJJMediaWork {
     private func update(_ id: String, _ change: (inout BJJMediaJob) -> Void) throws {
         guard var job = jobs[id], !job.terminal else { return }
         change(&job); jobs[id] = job; activityChanged?(); try persist(job)
+        BJJDiagnostics.shared.record(.mediaStage, operation: id, phase: job.terminal ? job.status : job.stage)
     }
     @discardableResult func cancel(_ id: String) throws -> BJJMediaJob {
         let job = try get(id)
@@ -164,6 +165,7 @@ final class BJJMediaWork {
         return try get(id)
     }
     func failure(_ id: String, _ error: Error) {
+        BJJDiagnostics.shared.record(.mediaError, operation: id, error: error)
         let cancelled = (try? work[id]?.cancellation.check()) == nil
         let code = cancelled ? "JOB_CANCELLED" : ((error as? BJJError)?.code ?? ((error as? CocoaError)?.code == .fileWriteOutOfSpace ? "STORAGE_LOW" : "MEDIA_FAILED"))
         try? update(id) {

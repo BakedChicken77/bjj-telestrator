@@ -13,6 +13,9 @@ Long-press a review to rename, duplicate, back up, or move it to Recently Delete
 
 ## Troubleshooting
 
+- **Dolby Vision import:** Import from Photos so Fresh Frame can request a compatible rendition. The original Photos video is not modified. Conversion may take time. If Photos still supplies an unsupported format, send the diagnostic report and use an SDR copy; raw Dolby Vision Files imports remain unsupported by the verified color pipeline.
+- **Diagnostics:** Immediately after reproducing a problem, use **Previous reviews → Share diagnostic report**, or **Share diagnostics** on a library error. This includes import timings and recent app events with error codes, without your footage or annotation text. No Mac is required. It is a troubleshooting log, not a complete crash report; abrupt termination can lose the last queued events. **Clear diagnostic logs** clears events, not saved reviews or import timing records.
+
 - **Recording:** Allow Fresh Frame access to the microphone in iPhone Settings. Check the selected audio route and try headphones to avoid speaker feedback.
 - **Export:** Keep the app open and ensure sufficient free storage. Retry an interrupted export from the export screen.
 - **Missing review:** Check search filters and Recently Deleted. Do not uninstall the app as a troubleshooting step: local projects can be removed.

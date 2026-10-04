@@ -99,6 +99,7 @@ struct BJJPackageJob: Codable {
     private func update(_ id: String, _ change: (inout BJJPackageJob) -> Void) throws {
         guard var job = jobs[id] else { throw BJJError.domain("PACKAGE_MISSING", "This package operation is unavailable.") }
         change(&job)
+        BJJDiagnostics.shared.record(.packageStage, operation: id, phase: job.status)
         if job.status == "completed" {
             try store.writeJSON(job.json(), to: path(id, "completed.json"))
             jobs[id] = job; activityChanged?(); try? persist(job)
@@ -151,6 +152,7 @@ struct BJJPackageJob: Codable {
         }
     }
     private func fail(_ id: String, _ error: Error) {
+        BJJDiagnostics.shared.record(.packageError, operation: id, error: error)
         guard jobs[id]?.status != "completed", let worker = workers[id] else { return }
         let cancelled: Bool
         do { try worker.cancellation.check(); cancelled = (error as? BJJError)?.code == "JOB_CANCELLED" } catch { cancelled = true }

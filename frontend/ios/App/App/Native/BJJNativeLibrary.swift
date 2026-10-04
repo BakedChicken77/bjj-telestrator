@@ -19,7 +19,7 @@ struct BJJNativeDeletedReview: Identifiable {
     @Published var activity = ""
     @Published var activityDetail = "Keep the app open while your video is prepared."
     @Published var progress: Double?
-    @Published var error: String?
+    @Published var error: String? { didSet { if error != nil { BJJDiagnostics.shared.record(.libraryError) } } }
     @Published var session: BJJNativeEditorSession?
     @Published var shareURL: URL?
     @Published var canCancel = false
@@ -37,6 +37,7 @@ struct BJJNativeDeletedReview: Identifiable {
         self.originalRoot = originalRoot ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("BJJTelestrator/projects", isDirectory: true)
         images.countLimit = 100; images.totalCostLimit = 20 * 1024 * 1024
+        BJJDiagnostics.shared.record(.launch)
     }
     func services() throws -> BJJService {
         if let service { return service }
@@ -61,20 +62,23 @@ struct BJJNativeDeletedReview: Identifiable {
         guard !busy, session == nil else { return false }
         refreshGeneration += 1
         busy = true; activity = title; progress = nil; canCancel = cancellable
+        BJJDiagnostics.shared.record(.libraryStart)
         activityDetail = "Keep the app open while your video is prepared."
         return true
     }
     private func finish() async {
+        BJJDiagnostics.shared.record(.libraryFinish)
         mediaID = nil; packageID = nil; photoLoad = nil; canCancel = false; busy = false
         await refresh()
     }
     func cancel() {
+        BJJDiagnostics.shared.record(.cancel, operation: mediaID ?? packageID)
         photoLoad?.cancel()
         if let mediaID { _ = try? service?.mediaJobs.cancel(mediaID) }
         if let packageID { _ = try? service?.packageJobs.cancel(packageID) }
         canCancel = false; activity = "Cancelling…"
     }
-    func suspend() { if canCancel { cancel() } }
+    func suspend() { BJJDiagnostics.shared.record(.background); if canCancel { cancel() } }
     func open(_ review: BJJNativeReview) async {
         if let problem = review.problem { error = problem; return }
         guard begin(review.preview ? "Opening review…" : "Preparing protected copy…") else { return }
@@ -185,6 +189,7 @@ struct BJJNativeDeletedReview: Identifiable {
         do {
             let service = try services(), job = try service.mediaJobs.create(); mediaID = job.jobId; importedJobID = job.jobId
             awaitingPhoto = true
+            BJJDiagnostics.shared.record(.photosRequest, operation: job.jobId)
             let downloadStart = ProcessInfo.processInfo.systemUptime
             let polling = pollMedia(job.jobId); defer { polling.cancel(); awaitingPhoto = false }
             do {
@@ -200,6 +205,8 @@ struct BJJNativeDeletedReview: Identifiable {
                         }
                     }
                     photoLoad = item.loadFileRepresentation(forTypeIdentifier: UTType.movie.identifier) { url, providerError in
+                        BJJDiagnostics.shared.record(.photosReady, operation: job.jobId, error: providerError,
+                            value: ProcessInfo.processInfo.systemUptime - downloadStart)
                         worker.metric("provider_wait", seconds: ProcessInfo.processInfo.systemUptime - downloadStart)
                         // Provider URLs expire on return from this callback. Stream into our
                         // owned source here; never load a whole video into memory.
@@ -220,6 +227,7 @@ struct BJJNativeDeletedReview: Identifiable {
         if let imported { openImported(imported, jobID: importedJobID) }
     }
     private func report(_ error: Error) {
+        BJJDiagnostics.shared.record(.libraryError, operation: mediaID ?? packageID, error: error)
         if let mediaID, (try? service?.mediaJobs.get(mediaID).status) == "cancelled" { return }
         if (error as? BJJError)?.code != "JOB_CANCELLED" { self.error = error.localizedDescription }
     }
@@ -263,9 +271,10 @@ struct BJJNativeDeletedReview: Identifiable {
                     guard let job = (try? store.readJSON(file))?["job"] as? BJJJSON else { return nil }
                     return job.filter { ["operation", "status", "stage", "copiedBytes", "totalBytes", "timings", "mediaProfile", "createdAt", "errorCode"].contains($0.key) }
                 }
-                return ["version": 1, "createdAt": BJJProject.now(), "appVersion": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown", "appBuild": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown", "osVersion": ProcessInfo.processInfo.operatingSystemVersionString, "imports": records]
+                return ["version": 2, "createdAt": BJJProject.now(), "appVersion": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown", "appBuild": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown", "osVersion": ProcessInfo.processInfo.operatingSystemVersionString, "imports": records, "diagnostics": BJJDiagnostics.shared.snapshot()]
             }
-            let path = FileManager.default.temporaryDirectory.appendingPathComponent("FreshFrame-import-timing-\(UUID().uuidString).json")
+            BJJDiagnostics.shared.record(.share)
+            let path = FileManager.default.temporaryDirectory.appendingPathComponent("FreshFrame-diagnostics-\(UUID().uuidString).json")
             try store.writeJSON(report, to: path); diagnosticURL = path; shareURL = path
         } catch { self.error = error.localizedDescription }
         await finish()
@@ -304,9 +313,9 @@ struct BJJNativePhotoPicker: UIViewControllerRepresentable {
     static func configuration() -> PHPickerConfiguration {
         var configuration = PHPickerConfiguration()
         configuration.filter = .videos; configuration.selectionLimit = 1
-        // The native media pipeline accepts HEVC/HDR. Avoid Photos converting
-        // to a compatibility representation before our own preview preparation.
-        configuration.preferredAssetRepresentationMode = .current
+        // Current can deliver Dolby Vision that our verified color pipeline
+        // rejects. Ask Photos for its compatible rendition before importing.
+        configuration.preferredAssetRepresentationMode = .compatible
         return configuration
     }
     func makeCoordinator() -> Coordinator { Coordinator(selected: selected) }
@@ -324,7 +333,7 @@ struct BJJNativePhotoPicker: UIViewControllerRepresentable {
 
 enum BJJPhotoImportStatus {
     static let title = "Getting video from Photos…"
-    static let detail = "Photos may be downloading this video from iCloud or preparing it. Copying into Fresh Frame has not started yet."
+    static let detail = "Photos may be downloading from iCloud or converting to a compatible video. Copying into Fresh Frame has not started yet."
     static func progress(_ value: Progress?) -> Double? {
         // NSItemProvider reports aggregate loading, not a cloud-only download.
         // Unknown/zero totals must not appear as a stuck 0% progress bar.

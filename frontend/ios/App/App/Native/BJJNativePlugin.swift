@@ -388,7 +388,7 @@ public class BJJNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDeleg
                 if call.getString("source") == "photos" {
                     var config = PHPickerConfiguration(photoLibrary: .shared())
                     config.filter = .videos; config.selectionLimit = 1
-                    config.preferredAssetRepresentationMode = .current
+                    config.preferredAssetRepresentationMode = .compatible
                     let picker = PHPickerViewController(configuration: config); picker.delegate = self
                     picker.isModalInPresentation = true
                     host.present(picker, animated: true)

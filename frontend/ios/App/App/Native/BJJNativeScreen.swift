@@ -109,7 +109,7 @@ struct BJJNativeEditorScreen: View {
                 }
             }
             .task { await session.prepareAudio(); await session.prepareThumbnails() }
-            .onChange(of: scenePhase) { _, phase in if phase == .background { session.stopRecording(); session.cancelCueGesture(); session.pause() } else if phase != .active && !session.recording { session.cancelCueGesture(); session.pause() } }
+            .onChange(of: scenePhase) { _, phase in if phase == .background { BJJDiagnostics.shared.record(.background); session.stopRecording(); session.cancelCueGesture(); session.pause() } else if phase != .active && !session.recording { session.cancelCueGesture(); session.pause() } }
             .interactiveDismissDisabled(session.recording || session.exporting || session.preparingAudio)
             .onDisappear { session.close() }
         }
