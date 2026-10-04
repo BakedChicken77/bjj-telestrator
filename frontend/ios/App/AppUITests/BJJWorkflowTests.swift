@@ -33,6 +33,24 @@ final class BJJWorkflowTests: XCTestCase {
         expectation(for: ready, evaluatedWith: app.buttons["editor.export"])
         waitForExpectations(timeout: 30)
     }
+    func testHomeDiagnosticsIsAccessibleWithoutAnError() throws {
+        app.launch()
+        let diagnostics = app.buttons["home.diagnostics"]
+        XCTAssertTrue(diagnostics.waitForExistence(timeout: 60))
+        expectation(for: NSPredicate(format: "enabled == true AND hittable == true"), evaluatedWith: diagnostics)
+        waitForExpectations(timeout: 60)
+        XCTAssertEqual(diagnostics.label, "Export diagnostics")
+        XCTAssertGreaterThanOrEqual(diagnostics.frame.width, 44)
+        XCTAssertGreaterThanOrEqual(diagnostics.frame.height, 44)
+        XCTAssertTrue(app.buttons["home.selectVideo"].exists)
+        let portrait = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        portrait.name = "home-diagnostics-portrait"; portrait.lifetime = .keepAlways; add(portrait)
+        XCUIDevice.shared.orientation = .landscapeLeft
+        expectation(for: NSPredicate { _, _ in self.app.frame.width > self.app.frame.height && diagnostics.isHittable }, evaluatedWith: app)
+        waitForExpectations(timeout: 10)
+        let landscape = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        landscape.name = "home-diagnostics-landscape"; landscape.lifetime = .keepAlways; add(landscape)
+    }
     func testOptionalTipsCustomValidationAndLandscapeDismissal() throws {
         app.launchEnvironment["BJJ_UI_TEST_TIPS"] = "1"
         app.launch()
