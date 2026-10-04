@@ -112,7 +112,7 @@ final class BJJMediaWork {
                     try? FileManager.default.removeItem(at: store.safeURL(job.projectId, "temp/media-\(job.jobId).mp4"))
                     try persist(job)
                 }
-                jobs[job.jobId] = job
+                jobs[job.jobId] = job; work[job.jobId] = BJJMediaWork()
             } catch { continue }
         }
     }
@@ -135,7 +135,9 @@ final class BJJMediaWork {
                 job.copiedBytes = state.0; job.totalBytes = state.1; job.progress = min(1, Double(state.0) / Double(state.1))
             } else if job.stage == "preparing_preview" { job.progress = state.2 }
         }
-        job.timings = work[id]?.metrics() ?? job.timings
+        if let metrics = work[id]?.metrics() {
+            job.timings = (job.timings ?? [:]).merging(metrics) { _, new in new }
+        }
         return job
     }
     func recordMetric(_ id: String, _ key: String, seconds: Double) {
