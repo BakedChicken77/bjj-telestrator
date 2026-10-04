@@ -4,7 +4,7 @@ import CryptoKit
 /// Local, bounded diagnostic breadcrumbs. Never accepts free-form messages,
 /// filenames, URLs, annotation text, media bytes or audio route/device names.
 final class BJJDiagnostics: @unchecked Sendable {
-    enum Event: String { case launch, background, libraryStart, libraryFinish, libraryError, cancel,
+    enum Event: String { case launch, background, foreground, backgroundExpired, libraryStart, libraryFinish, libraryError, cancel,
         photosRequest, photosReady, mediaStage, mediaError, dolbyRejected, packageStage, packageError,
         editorOpen, editorClose, editorError, editSaved, history, playback, audioPreview,
         recordingStart, recordingStop, recordingPause, recordingError, exportStage, exportError, share }
@@ -45,7 +45,7 @@ final class BJJDiagnostics: @unchecked Sendable {
             "version": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown",
             "build": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown"]
         if let operation, UUID(uuidString: operation) != nil { row["operation"] = operation }
-        if let phase, ["queued", "running", "failed", "completed", "cancelled", "copying", "inspecting", "preparing_preview", "validating", "ready", "backup", "restore", "import", "repair"].contains(phase) { row["phase"] = phase }
+        if let phase, ["waiting_for_photos", "queued", "running", "failed", "completed", "cancelled", "copying", "inspecting", "preparing_preview", "validating", "ready", "backup", "restore", "import", "repair"].contains(phase) { row["phase"] = phase }
         if let value, value.isFinite { row["value"] = value }
         if let error { row["errors"] = Self.errors(error) }
         let entry = row
@@ -75,6 +75,7 @@ final class BJJDiagnostics: @unchecked Sendable {
         }
     }
     func clear() { queue.sync { rows = []; persist() } }
+    func flush() { queue.sync {} }
 }
 
 /// Hashing and verification run off the main actor with bounded one-MiB reads.

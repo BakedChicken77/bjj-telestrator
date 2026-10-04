@@ -122,7 +122,10 @@ struct BJJNativeHome: View {
                 Button("Share diagnostics") { library.error = nil; Task { await library.shareImportDiagnostics() } }
                 Button("OK") { library.error = nil }
             } message: { Text(library.error ?? "") }
-            .onChange(of: scenePhase) { _, phase in if phase == .background { library.suspend() } }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .background { library.suspend() }
+                else if phase == .active { library.resume() }
+            }
         }
     }
     private func closeLibrary(_ action: @escaping () -> Void) { afterLibrary = action; previousReviews = false }

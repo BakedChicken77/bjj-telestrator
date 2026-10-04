@@ -83,6 +83,16 @@ No simulator result proves microphone hardware, cloud-provider latency, touch er
 
 ## Remaining release gates
 
+### October 4: import background lifecycle follow-up
+
+Steve reports switching apps, not force-closing, during the 34.1 interrupted import. The logs do not establish why that process ended. Confirmed source issue: the home lifecycle handler immediately cancelled active imports on background entry. Photos wait/copy also lacked a background assertion before preview preparation.
+
+Changes: hold one finite UIKit background task from import start through completion; retain repair coverage; end it on completion, failure or expiration. Background entry checkpoints instead of cancelling video imports. Expiration fences copy/encode, persists `background_expired`, ends the assertion promptly and surfaces retry guidance; provider continuations still settle if the provider never calls back. User cancel remains distinct. A completed background import opens the editor only on foreground return. Backup/restore policy is unchanged.
+
+Additive job diagnostics: `importPhase`, `lastCheckpointAt`, `providerProgress`, `stopReason`, and `provider_wait_elapsed` (partial observed elapsed time, not completed provider duration). Five-second polling checkpoints and lifecycle checkpoints preserve evidence without logging every frame/chunk. Lifecycle/expiration breadcrumbs are flushed before suspension; abrupt termination can still lose data. Historical records need no migration and remain unknown where fields were never recorded. Old `stage` values remain compatible. Startup recovery preserves the last observed phase and shows an actionable interruption message once.
+
+Automated coverage: stalled provider survives background/foreground transition then settles on simulated expiration; persisted wait/progress survives recovery; actual-copy/user-cancel classification; successful background import defers editor opening. All existing media, narration, export and StoreKit gates remain required. Physical gate: local and iCloud clips, brief app switch/return, longer absence/lock, expiry/retry, cancellation/late callback, successful completion while backgrounded, and forced termination/relaunch. Verify saved reviews/originals, no duplicate import, accurate JSON and no stuck busy overlay. iOS controls the actual allowance; no unlimited background processing, automatic resume, cloud-only attribution, or measured speedup is claimed.
+
 ### October 4 diagnostics and home logo follow-up
 
 - Persist copied/total bytes at media stage transitions and terminal success/failure/cancellation; retain saved timings after reopening. New import/repair records capture their originating appVersion/appBuild; diagnostic exports include these fields. Legacy records omit unknown provenance instead of inheriting the report-export build. No project schema migration or media changes are required.
