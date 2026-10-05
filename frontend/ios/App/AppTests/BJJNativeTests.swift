@@ -657,7 +657,9 @@ import UniformTypeIdentifiers
         XCTAssertEqual(record.s("requestedRepresentation"), "automatic")
         XCTAssertEqual(report["version"] as? Int, 3)
         let events = (report["diagnostics"] as? BJJJSON)?["events"] as? [BJJJSON] ?? []
-        let matching = events.filter { $0.s("operation") == record.s("operationId") }
+        let operationID = try XCTUnwrap(record["operationId"] as? String)
+        // Launch/global breadcrumbs legitimately have no operation correlation.
+        let matching = events.filter { ($0["operation"] as? String) == operationID }
         XCTAssertTrue(matching.contains { $0.s("event") == "photosFailed" })
         XCTAssertFalse(matching.contains { ["photosReady", "photosSucceeded", "copyStarted"].contains($0.s("event")) })
         library.endShare()
