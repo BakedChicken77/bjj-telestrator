@@ -530,6 +530,81 @@ import UniformTypeIdentifiers
         XCTAssertEqual(library.activity, "Cancelling…")
         XCTAssertFalse(library.busy); XCTAssertNil(library.error); XCTAssertTrue(library.reviews.isEmpty)
     }
+    func testPhotosWaitBackgroundExpirationIsActionableAndDoesNotHang() async throws {
+        let library = BJJNativeLibrary(root: root.appendingPathComponent("background-photos"), originalRoot: root.appendingPathComponent("originals"))
+        let provider = NSItemProvider()
+        provider.registerFileRepresentation(forTypeIdentifier: UTType.movie.identifier, fileOptions: [], visibility: .all) { _ in Progress(totalUnitCount: 100) }
+        let operation = Task { await library.importPhoto(provider) }
+        for _ in 0..<100 {
+            if library.busy && library.canCancel { break }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertTrue(library.busy)
+        let folder = library.root.appendingPathComponent("media-jobs")
+        let path = try XCTUnwrap(FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil).first)
+        let service = try library.services()
+        let id = try BJJValidate.object(service.store.readJSON(path)["job"], "job").s("jobId")
+        library.suspend()
+        XCTAssertFalse(try service.mediaJobs.get(id).cancelRequested)
+        library.resume()
+        XCTAssertTrue(library.busy)
+        service.mediaJobs.expireBackground(id)
+        await operation.value
+        XCTAssertFalse(library.busy)
+        XCTAssertEqual(library.error, BJJMediaJobs.backgroundMessage)
+        XCTAssertEqual(try service.mediaJobs.get(id).errorCode, "MEDIA_BACKGROUND_EXPIRED")
+        XCTAssertNil(library.session); XCTAssertTrue(library.reviews.isEmpty)
+    }
+    func testPhotosWaitCheckpointsAndBackgroundRecoveryPreserveEvidence() throws {
+        let manager = try BJJMediaJobs(store: store)
+        let job = try manager.create()
+        let (_, worker) = try manager.beginImport(job.jobId, waitingForPhotos: true)
+        manager.checkpoint(job.jobId, providerProgress: 0.35)
+        let path = store.root.appendingPathComponent("media-jobs/\(job.jobId).json")
+        var saved = try BJJValidate.object(store.readJSON(path)["job"], "job")
+        XCTAssertEqual(saved.s("importPhase"), "waiting_for_photos")
+        XCTAssertNotNil(saved["lastCheckpointAt"])
+        XCTAssertEqual(saved["providerProgress"] as? Double, 0.35)
+        XCTAssertNotNil((saved["timings"] as? BJJJSON)?["provider_wait_elapsed"])
+        manager.enterBackground(job.jobId)
+        XCTAssertNoThrow(try worker.cancellation.check())
+        manager.expireBackground(job.jobId)
+        XCTAssertThrowsError(try worker.cancellation.check())
+        let restarted = try BJJMediaJobs(store: store)
+        let recovered = try restarted.get(job.jobId)
+        XCTAssertEqual(recovered.errorCode, "MEDIA_BACKGROUND_EXPIRED")
+        XCTAssertEqual(recovered.importPhase, "waiting_for_photos")
+        XCTAssertEqual(restarted.recoveredInterruption, BJJMediaJobs.backgroundMessage)
+        saved = try BJJValidate.object(store.readJSON(path)["job"], "job")
+        XCTAssertEqual(saved.s("stopReason"), "background_expired")
+        manager.failure(job.jobId, BJJError.cancelled)
+    }
+    func testCompletedBackgroundImportOpensEditorOnlyAfterReturn() async throws {
+        let source = root.appendingPathComponent("background-success.mp4"); try await silentVideo(source)
+        let library = BJJNativeLibrary(root: root.appendingPathComponent("background-success"), originalRoot: root.appendingPathComponent("originals"))
+        library.suspend()
+        await library.importFile(source)
+        XCTAssertNil(library.error); XCTAssertFalse(library.busy)
+        XCTAssertNil(library.session); XCTAssertEqual(library.reviews.count, 1)
+        library.resume()
+        let session = try XCTUnwrap(library.session)
+        session.close(); library.session = nil
+    }
+    func testPhotosReadyCheckpointTracksActualCopyAndUserCancel() throws {
+        let manager = try BJJMediaJobs(store: store)
+        let job = try manager.create()
+        let (_, worker) = try manager.beginImport(job.jobId, waitingForPhotos: true)
+        worker.endPhotosWait(); worker.copying(512, 1024)
+        manager.checkpoint(job.jobId)
+        _ = try manager.cancel(job.jobId)
+        manager.expireBackground(job.jobId) // Expiration must not reclassify a user cancel.
+        manager.failure(job.jobId, BJJError.cancelled)
+        let recovered = try BJJMediaJobs(store: store).get(job.jobId)
+        XCTAssertEqual(recovered.importPhase, "copying")
+        XCTAssertEqual(recovered.copiedBytes, 512)
+        XCTAssertEqual(recovered.stopReason, "user_cancelled")
+        XCTAssertEqual(recovered.errorCode, "JOB_CANCELLED")
+    }
     func testPhotoPickerRequestsCompatibleVideoAndReportsHonestProgress() {
         XCTAssertTrue(BJJMedia.needsCompatibleCopy(subtype: "hvc1", atoms: ["dvcC": Data([1])]))
         XCTAssertTrue(BJJMedia.needsCompatibleCopy(subtype: "hev1", atoms: ["dvvC": Data([1])]))
