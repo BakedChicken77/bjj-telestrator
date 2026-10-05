@@ -5,13 +5,14 @@ import CryptoKit
 /// filenames, URLs, annotation text, media bytes or audio route/device names.
 final class BJJDiagnostics: @unchecked Sendable {
     enum Event: String { case launch, background, foreground, backgroundExpired, libraryStart, libraryFinish, libraryError, cancel,
-        photosRequest, photosReady, mediaStage, mediaError, dolbyRejected, packageStage, packageError,
+        photosRequest, photosReady, photosSucceeded, photosFailed, photosCancelled, photosCallbackIgnored, copyStarted, sceneState, backgroundDenied, mediaStage, mediaError, mediaUnderlyingError, dolbyRejected, packageStage, packageError,
         editorOpen, editorClose, editorError, editSaved, history, playback, audioPreview,
         recordingStart, recordingStop, recordingPause, recordingError, exportStage, exportError, share }
     static let shared = BJJDiagnostics()
     private let queue = DispatchQueue(label: "FreshFrame.diagnostics", qos: .utility)
     private let file: URL
     private let session = UUID().uuidString.lowercased()
+    var sessionID: String { session }
     private let limit: Int
     private var rows: [BJJJSON]?
     private var writeFailed = false
@@ -45,7 +46,7 @@ final class BJJDiagnostics: @unchecked Sendable {
             "version": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown",
             "build": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown"]
         if let operation, UUID(uuidString: operation) != nil { row["operation"] = operation }
-        if let phase, ["waiting_for_photos", "queued", "running", "failed", "completed", "cancelled", "copying", "inspecting", "preparing_preview", "validating", "ready", "backup", "restore", "import", "repair"].contains(phase) { row["phase"] = phase }
+        if let phase, ["unknown", "active", "foreground_inactive", "background", "waiting_for_photos", "queued", "running", "failed", "completed", "cancelled", "copying", "inspecting", "preparing_preview", "validating", "ready", "backup", "restore", "import", "repair"].contains(phase) { row["phase"] = phase }
         if let value, value.isFinite { row["value"] = value }
         if let error { row["errors"] = Self.errors(error) }
         let entry = row

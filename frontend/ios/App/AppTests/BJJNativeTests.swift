@@ -530,6 +530,186 @@ import UniformTypeIdentifiers
         XCTAssertEqual(library.activity, "Cancelling…")
         XCTAssertFalse(library.busy); XCTAssertNil(library.error); XCTAssertTrue(library.reviews.isEmpty)
     }
+    func testSuccessfulPhotoDeliveryFreezesImportEvidenceAndSurvivesLateExpiration() async throws {
+        let source = root.appendingPathComponent("photo-source.mp4"); try await silentVideo(source)
+        let library = BJJNativeLibrary(root: root.appendingPathComponent("photo-success"), originalRoot: root.appendingPathComponent("originals"))
+        let provider = NSItemProvider()
+        provider.registerFileRepresentation(forTypeIdentifier: UTType.movie.identifier, fileOptions: [], visibility: .all) { complete in
+            complete(source, false, nil); return nil
+        }
+        await library.importPhoto(provider, policy: .automatic)
+        let session = try XCTUnwrap(library.session)
+        defer { session.close() }
+        let manager = try library.services().mediaJobs
+        let id = try XCTUnwrap(session.importJobID)
+        let ready = try manager.get(id)
+        XCTAssertEqual(ready.status, "completed")
+        XCTAssertEqual(ready.importPhase, "ready")
+        XCTAssertEqual(ready.providerOutcome, "succeeded")
+        XCTAssertEqual(ready.copiedBytes, ready.totalBytes)
+        XCTAssertNotNil(ready.timings?["provider_wait"])
+        manager.expireBackground(id); _ = try manager.cancel(id)
+        manager.recordMetric(id, "provider_wait", seconds: 999)
+        let unchanged = try manager.get(id)
+        XCTAssertEqual(unchanged.timings, ready.timings)
+        XCTAssertNil(unchanged.stopReason); XCTAssertNil(unchanged.phaseAtStop)
+        XCTAssertEqual(library.reviews.count, 1)
+        await session.prepareAudio()
+        for _ in 0..<100 {
+            if try manager.get(id).timings?["editor_ready"] != nil { break }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertNotNil(try manager.get(id).timings?["editor_ready"])
+        XCTAssertNotNil(try manager.get(id).timings?["post_import_ready"])
+    }
+    func testProviderCancellationErrorWithoutUserIntentRemainsProviderFailure() throws {
+        let manager = try BJJMediaJobs(store: store), job = try manager.create()
+        let (_, worker) = try manager.beginImport(job.jobId, waitingForPhotos: true)
+        worker.providerFinished("failed")
+        manager.failure(job.jobId, BJJError.cancelled)
+        let failed = try manager.get(job.jobId)
+        XCTAssertEqual(failed.status, "failed")
+        XCTAssertEqual(failed.stopReason, "provider_failed")
+        XCTAssertEqual(failed.errorCode, "PHOTOS_PROVIDER_FAILED")
+    }
+    func testPhotoCompletionClaimsOnceAndWaitsForCopyExit() async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            let completion = BJJPhotoImportCompletion(continuation)
+            XCTAssertTrue(completion.claimCallback())
+            XCTAssertFalse(completion.claimCallback())
+            completion.cancel(BJJError.cancelled)
+            XCTAssertFalse(completion.finished, "Cleanup cannot race an owned callback copy")
+            completion.finish(.success(()))
+            XCTAssertTrue(completion.finished)
+            XCTAssertFalse(completion.claimCallback())
+            completion.finish(.failure(BJJError.cancelled))
+        }
+    }
+    func testPhotoCompletionCancellationRejectsLateCallback() async {
+        do {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                let completion = BJJPhotoImportCompletion(continuation)
+                completion.cancel(BJJError.cancelled)
+                XCTAssertFalse(completion.claimCallback())
+                completion.finish(.success(()))
+            }
+            XCTFail("Cancelled provider must not report success")
+        } catch { XCTAssertEqual((error as? BJJError)?.code, "JOB_CANCELLED") }
+    }
+    func testExpiredPhotosEvidenceCannotBeChangedByLateCallback() throws {
+        let manager = try BJJMediaJobs(store: store)
+        let job = try manager.create()
+        manager.configurePhoto(job.jobId, policy: .automatic)
+        let (_, worker) = try manager.beginImport(job.jobId, waitingForPhotos: true)
+        manager.checkpoint(job.jobId, providerProgress: 0.019)
+        manager.expireBackground(job.jobId)
+        let stopped = try manager.get(job.jobId)
+        XCTAssertFalse(worker.acceptProviderURL())
+        worker.endPhotosWait(); worker.copying(100, 100); worker.metric("provider_wait", seconds: 999)
+        _ = try manager.cancel(job.jobId)
+        manager.failure(job.jobId, BJJError.cancelled)
+        manager.failure(job.jobId, BJJError.invalid("late error"))
+        let final = try manager.get(job.jobId)
+        XCTAssertEqual(final.phaseAtStop, "waiting_for_photos")
+        XCTAssertEqual(final.importPhase, "waiting_for_photos")
+        XCTAssertEqual(final.errorCode, "MEDIA_BACKGROUND_EXPIRED")
+        XCTAssertEqual(final.stopReason, "background_expired")
+        XCTAssertEqual(final.providerOutcome, "interrupted")
+        XCTAssertEqual(final.copiedBytes, 0)
+        XCTAssertEqual(final.timings?["provider_wait_elapsed"], stopped.timings?["provider_wait_elapsed"])
+        XCTAssertNil(final.timings?["provider_wait"])
+        XCTAssertEqual(final.requestedRepresentation, "automatic")
+        XCTAssertEqual(final.operationId, job.jobId)
+        XCTAssertNotNil(final.attemptId)
+        let restored = try BJJMediaJobs(store: store).get(job.jobId)
+        XCTAssertEqual(restored.phaseAtStop, final.phaseAtStop)
+        XCTAssertEqual(restored.timings, final.timings)
+    }
+    func testProviderFailureRetainsWaitPhaseAndPartialMetrics() throws {
+        let manager = try BJJMediaJobs(store: store), job = try manager.create()
+        let (_, worker) = try manager.beginImport(job.jobId, waitingForPhotos: true)
+        manager.checkpoint(job.jobId)
+        worker.providerFinished("failed")
+        manager.failure(job.jobId, NSError(domain: "NSItemProviderErrorDomain", code: -1))
+        let failed = try manager.get(job.jobId)
+        XCTAssertEqual(failed.providerOutcome, "failed")
+        XCTAssertEqual(failed.phaseAtStop, "waiting_for_photos")
+        XCTAssertEqual(failed.stopReason, "provider_failed")
+        XCTAssertEqual(failed.errorCode, "PHOTOS_PROVIDER_FAILED")
+        XCTAssertNotNil(failed.timings?["provider_wait_elapsed"])
+        XCTAssertNotNil(failed.timings?["provider_wait"])
+        XCTAssertEqual(failed.copiedBytes, 0)
+    }
+    func testProviderErrorThroughLibraryDoesNotClaimPhotosReady() async throws {
+        let library = BJJNativeLibrary(root: root.appendingPathComponent("provider-error"), originalRoot: root.appendingPathComponent("originals"))
+        let provider = NSItemProvider()
+        provider.registerFileRepresentation(forTypeIdentifier: UTType.movie.identifier, fileOptions: [], visibility: .all) { complete in
+            complete(nil, false, NSError(domain: "NSItemProviderErrorDomain", code: -1))
+            return nil
+        }
+        await library.importPhoto(provider, policy: .automatic)
+        XCTAssertFalse(library.busy); XCTAssertNotNil(library.error); XCTAssertNil(library.session)
+        await library.shareImportDiagnostics()
+        let report = try library.services().store.readJSON(XCTUnwrap(library.shareURL))
+        let record = try XCTUnwrap((report["imports"] as? [BJJJSON])?.first)
+        XCTAssertEqual(record.s("providerOutcome"), "failed")
+        XCTAssertEqual(record.s("importPhase"), "waiting_for_photos")
+        XCTAssertEqual(record.s("requestedRepresentation"), "automatic")
+        XCTAssertEqual(report["version"] as? Int, 3)
+        let events = (report["diagnostics"] as? BJJJSON)?["events"] as? [BJJJSON] ?? []
+        let matching = events.filter { $0.s("operation") == record.s("operationId") }
+        XCTAssertTrue(matching.contains { $0.s("event") == "photosFailed" })
+        XCTAssertFalse(matching.contains { ["photosReady", "photosSucceeded", "copyStarted"].contains($0.s("event")) })
+        library.endShare()
+    }
+    func testSceneDelegateCoordinatorUsesTheHostedLibrary() throws {
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let delegate = try XCTUnwrap(scene.delegate as? SceneDelegate)
+        let coordinator = try XCTUnwrap(delegate.importLifecycle)
+        let host = try XCTUnwrap(delegate.window?.rootViewController as? UIHostingController<BJJNativeHome>)
+        XCTAssertTrue(host.rootView.library === coordinator.library)
+        XCTAssertEqual(coordinator.sceneID, scene.session.persistentIdentifier)
+    }
+    func testSceneCoordinatorRoutesOnlyOwningSceneAndDistinguishesInactive() throws {
+        let library = BJJNativeLibrary(root: root.appendingPathComponent("scene"))
+        let bridge = BJJImportLifecycleCoordinator(sceneID: "owner", library: library)
+        let manager = try library.services().mediaJobs
+        let job = try manager.create(); let (_, worker) = try manager.beginImport(job.jobId, waitingForPhotos: true)
+        bridge.observe(.background, sceneID: "other")
+        XCTAssertEqual(library.sceneState, .unknown)
+        bridge.observe(.foregroundInactive, sceneID: "owner")
+        XCTAssertEqual(library.sceneState, .foregroundInactive)
+        XCTAssertNoThrow(try worker.cancellation.check())
+        bridge.observe(.background, sceneID: "owner")
+        bridge.observe(.background, sceneID: "owner")
+        XCTAssertEqual(try manager.get(job.jobId).lifecycleState, "background")
+        bridge.observe(.foregroundActive, sceneID: "owner")
+        XCTAssertEqual(try manager.get(job.jobId).lifecycleSource, "ui_scene_delegate")
+        _ = try manager.cancel(job.jobId); manager.failure(job.jobId, BJJError.cancelled)
+    }
+    func testDeniedBackgroundAssertionIsNotExpirationAndTokenEndsOnce() throws {
+        let manager = try BJJMediaJobs(store: store)
+        var acquired = 0, ended = 0
+        manager.acquireBackground = { _, _ in acquired += 1; return .invalid }
+        manager.releaseBackground = { _ in ended += 1 }
+        let denied = try manager.create(); let (_, worker) = try manager.beginImport(denied.jobId, waitingForPhotos: true)
+        manager.enterBackground(denied.jobId)
+        XCTAssertEqual(try manager.get(denied.jobId).backgroundTaskGranted, false)
+        XCTAssertNil(try manager.get(denied.jobId).stopReason)
+        XCTAssertNoThrow(try worker.cancellation.check())
+        _ = try manager.cancel(denied.jobId); manager.failure(denied.jobId, BJJError.cancelled)
+        XCTAssertEqual(ended, 0)
+        manager.acquireBackground = { _, _ in acquired += 1; return UIBackgroundTaskIdentifier(rawValue: 42) }
+        let granted = try manager.create(); _ = try manager.beginImport(granted.jobId)
+        manager.expireBackground(granted.jobId); manager.expireBackground(granted.jobId)
+        manager.failure(granted.jobId, BJJError.cancelled)
+        XCTAssertEqual(acquired, 2); XCTAssertEqual(ended, 1)
+    }
+    func testPhotoPoliciesAreAppliedBeforePickerCreation() {
+        XCTAssertEqual(BJJNativePhotoPicker.configuration(policy: .automatic).preferredAssetRepresentationMode, .automatic)
+        XCTAssertEqual(BJJNativePhotoPicker.configuration(policy: .compatible).preferredAssetRepresentationMode, .compatible)
+        XCTAssertTrue(["automatic", "compatible"].contains(Bundle.main.object(forInfoDictionaryKey: "BJJPhotoImportPolicy") as? String ?? ""))
+    }
     func testPhotosWaitBackgroundExpirationIsActionableAndDoesNotHang() async throws {
         let library = BJJNativeLibrary(root: root.appendingPathComponent("background-photos"), originalRoot: root.appendingPathComponent("originals"))
         let provider = NSItemProvider()
