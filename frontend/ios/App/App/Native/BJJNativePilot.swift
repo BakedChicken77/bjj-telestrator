@@ -213,6 +213,9 @@ struct BJJNativeTransportState: Codable {
     private var seeking = false
     private let preferences: UserDefaults?
     var importJobID: String?
+    var importStartedAt: Double?
+    var importPreparedAt: Double?
+    private var importReadyObservation: NSKeyValueObservation?
     private var service: BJJService?
     private var exportCancelled = false
     private var jobID: String?
@@ -403,6 +406,20 @@ struct BJJNativeTransportState: Codable {
             // The previous item is no longer using these files.
             for old in previewFiles where old != path { try? FileManager.default.removeItem(at: old) }
             previewFiles = [path]
+            if let timingJobID, let importStartedAt {
+                // Observe the actual prepared player item, not editor construction.
+                importReadyObservation = item.observe(\.status, options: [.initial, .new]) { [weak self] item, _ in
+                    guard item.status == .readyToPlay else { return }
+                    Task { @MainActor [weak self] in
+                        guard let self, !self.closed, self.player.currentItem === item, self.previewGeneration == generation else { return }
+                        self.service?.mediaJobs.recordMetric(timingJobID, "editor_ready", seconds: ProcessInfo.processInfo.systemUptime - importStartedAt)
+                        if let preparedAt = self.importPreparedAt {
+                            self.service?.mediaJobs.recordMetric(timingJobID, "post_import_ready", seconds: ProcessInfo.processInfo.systemUptime - preparedAt)
+                        }
+                        self.importReadyObservation = nil
+                    }
+                }
+            }
         } catch { self.error = "Audio preview could not be prepared. \(error.localizedDescription)" }
     }
     func startRecording() async {

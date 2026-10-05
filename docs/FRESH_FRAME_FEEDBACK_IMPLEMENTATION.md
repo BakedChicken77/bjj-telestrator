@@ -101,3 +101,7 @@ Automated coverage: stalled provider survives background/foreground transition t
 - On iPhone: compare logo against Steve's annotated screenshot, rotate and use larger text; import a local clip, export diagnostics before/after relaunch, check copiedBytes == totalBytes > 0 and per-import build; cancel a large copy and verify partial counters. Historical zeros cannot be reconstructed. Photos provider wait still includes possible cloud transfer and conversion; do not label it as cloud-only or claim a performance improvement.
 
 Remaining physical iPhone validation, controlled import benchmarks and exact final-commit CI evidence must be collected. Further import optimization depends on those measurements. Additional publication requires release authorization; code updates alone do not authorize merging, tagging or production submission.
+
+## October 5: diagnostic reliability and policy experiment candidate
+
+See [Photos import experiment](PHOTOS_IMPORT_EXPERIMENT.md) for the focused Phase 1 changes, diagnostic envelope v3, signed configuration selection, reproducible run sheet and physical gates. Compatible remains the default. The automatic comparison is prepared, not a measured fix; Phase 3 adoption/recovery and TestFlight publication remain gated.

@@ -2,7 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct BJJNativeHome: View {
-    @StateObject private var library: BJJNativeLibrary
+    @StateObject var library: BJJNativeLibrary
     init(library: BJJNativeLibrary? = nil) {
         #if DEBUG
         _library = StateObject(wrappedValue: library ?? BJJUITestFixture.library() ?? BJJNativeLibrary())
@@ -10,11 +10,11 @@ struct BJJNativeHome: View {
         _library = StateObject(wrappedValue: library ?? BJJNativeLibrary())
         #endif
     }
-    @Environment(\.scenePhase) private var scenePhase
     @State private var search = ""
     @State private var previousReviews = false
     @State private var afterLibrary: (() -> Void)?
     @State private var photos = false
+    private let photoPolicy = BJJPhotoImportPolicy.configured
     @State private var files = false
     @State private var backupImport = false
     @State private var recentlyDeleted = false
@@ -84,9 +84,9 @@ struct BJJNativeHome: View {
                 }
             }
             .sheet(isPresented: $photos) {
-                BJJNativePhotoPicker { item in
+                BJJNativePhotoPicker(policy: photoPolicy) { item in
                     photos = false
-                    if let item { Task { await library.importPhoto(item) } }
+                    if let item { Task { await library.importPhoto(item, policy: photoPolicy) } }
                 }.ignoresSafeArea()
             }
             .fileImporter(isPresented: $files,
@@ -122,10 +122,6 @@ struct BJJNativeHome: View {
                 Button("Share diagnostics") { library.error = nil; Task { await library.shareImportDiagnostics() } }
                 Button("OK") { library.error = nil }
             } message: { Text(library.error ?? "") }
-            .onChange(of: scenePhase) { _, phase in
-                if phase == .background { library.suspend() }
-                else if phase == .active { library.resume() }
-            }
         }
     }
     private func closeLibrary(_ action: @escaping () -> Void) { afterLibrary = action; previousReviews = false }

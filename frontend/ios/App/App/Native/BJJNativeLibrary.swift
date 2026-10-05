@@ -31,6 +31,10 @@ struct BJJNativeDeletedReview: Identifiable {
     private var photoLoad: Progress?
     private var awaitingPhoto = false
     private var isBackground = false
+    private(set) var sceneState: BJJImportSceneState = .unknown
+    private(set) var sceneSource = "unknown"
+    private var importStarted: Double?
+    private var importPreparedAt: Double?
     private var pendingImported: (BJJProject, String?)?
     private var refreshGeneration = 0
     private let images = NSCache<NSString, UIImage>()
@@ -44,6 +48,7 @@ struct BJJNativeDeletedReview: Identifiable {
     func services() throws -> BJJService {
         if let service { return service }
         let created = try BJJService(store: BJJStore(root: root)); service = created
+        created.mediaJobs.observeLifecycle(sceneState.rawValue, source: sceneSource)
         if let interruption = created.mediaJobs.recoveredInterruption { error = interruption }
         return created
     }
@@ -77,10 +82,19 @@ struct BJJNativeDeletedReview: Identifiable {
     }
     func cancel() {
         BJJDiagnostics.shared.record(.cancel, operation: mediaID ?? packageID)
-        photoLoad?.cancel()
         if let mediaID { _ = try? service?.mediaJobs.cancel(mediaID) }
+        photoLoad?.cancel()
         if let packageID { _ = try? service?.packageJobs.cancel(packageID) }
         canCancel = false; activity = "Cancelling…"
+    }
+    func observeScene(_ state: BJJImportSceneState, source: String) {
+        guard state != sceneState || sceneSource == "unknown" else { return }
+        sceneState = state; sceneSource = source
+        service?.mediaJobs.observeLifecycle(state.rawValue, source: source)
+        BJJDiagnostics.shared.record(.sceneState, operation: mediaID ?? packageID, phase: state.rawValue)
+        if state == .background { suspend() }
+        else if state == .active { resume() }
+        else { isBackground = true } // Inactive is not background, but cannot present an editor.
     }
     func suspend() {
         isBackground = true
@@ -150,6 +164,9 @@ struct BJJNativeDeletedReview: Identifiable {
                     self.progress = BJJPhotoImportStatus.progress(self.photoLoad)
                     self.activity = BJJPhotoImportStatus.title
                     self.activityDetail = BJJPhotoImportStatus.detail
+                    if let importStarted = self.importStarted, now - importStarted >= 15 {
+                        self.activityDetail += " Waiting \(Int(now - importStarted)) seconds. Keep Fresh Frame open, or cancel and try again."
+                    }
                     try? await Task.sleep(nanoseconds: 200_000_000); continue
                 }
                 self.progress = job.progress
@@ -163,6 +180,7 @@ struct BJJNativeDeletedReview: Identifiable {
         var imported: BJJProject?
         var importedJobID: String?
         guard begin(backup ? "Restoring backup…" : "Copying video…", cancellable: true) else { return }
+        importStarted = ProcessInfo.processInfo.systemUptime
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         do {
@@ -191,6 +209,7 @@ struct BJJNativeDeletedReview: Identifiable {
                 } catch { service.mediaJobs.failure(job.jobId, error); throw error }
             }
         } catch { report(error) }
+        if imported != nil { importPreparedAt = ProcessInfo.processInfo.systemUptime }
         await finish()
         if openWhenReady, let imported { openImported(imported, jobID: importedJobID) }
     }
@@ -200,20 +219,24 @@ struct BJJNativeDeletedReview: Identifiable {
         do {
             session = try BJJNativeEditorSession(project: project, store: services().store, service: services())
             session?.importJobID = jobID
+            session?.importStartedAt = importStarted
+            session?.importPreparedAt = importPreparedAt
             if let jobID { try services().mediaJobs.recordMetric(jobID, "editor_open", seconds: ProcessInfo.processInfo.systemUptime - began) }
         }
         catch { self.error = error.localizedDescription }
     }
-    func importPhoto(_ item: NSItemProvider) async {
+    func importPhoto(_ item: NSItemProvider, policy: BJJPhotoImportPolicy = .configured) async {
         var imported: BJJProject?
         var importedJobID: String?
         guard begin(BJJPhotoImportStatus.title, cancellable: true) else { return }
         activityDetail = BJJPhotoImportStatus.detail
         do {
             let service = try services(), job = try service.mediaJobs.create(); mediaID = job.jobId; importedJobID = job.jobId
+            service.mediaJobs.configurePhoto(job.jobId, policy: policy)
             awaitingPhoto = true
             BJJDiagnostics.shared.record(.photosRequest, operation: job.jobId)
             let downloadStart = ProcessInfo.processInfo.systemUptime
+            importStarted = downloadStart
             let polling = pollMedia(job.jobId); defer { polling.cancel(); awaitingPhoto = false }
             do {
                 let (target, worker) = try service.mediaJobs.beginImport(job.jobId, waitingForPhotos: true)
@@ -223,39 +246,58 @@ struct BJJNativeDeletedReview: Identifiable {
                     Task {
                         while !completion.finished {
                             do { try worker.cancellation.check() }
-                            catch { completion.finish(.failure(error)); return }
+                            catch { completion.cancel(error); return }
                             try? await Task.sleep(nanoseconds: 200_000_000)
                         }
                     }
                     photoLoad = item.loadFileRepresentation(forTypeIdentifier: UTType.movie.identifier) { url, providerError in
-                        BJJDiagnostics.shared.record(.photosReady, operation: job.jobId, error: providerError,
-                            value: ProcessInfo.processInfo.systemUptime - downloadStart)
-                        worker.metric("provider_wait", seconds: ProcessInfo.processInfo.systemUptime - downloadStart)
-                        worker.endPhotosWait()
-                        // Provider URLs expire on return from this callback. Stream into our
-                        // owned source here; never load a whole video into memory.
+                        // Claim callback ownership before touching a temporary URL. A cancel
+                        // settles immediately only while no callback owns disk work.
+                        guard completion.claimCallback() else {
+                            BJJDiagnostics.shared.record(.photosCallbackIgnored, operation: job.jobId); return
+                        }
                         do {
                             try worker.cancellation.check()
-                            guard let url else { throw providerError ?? BJJError.invalid("The video could not download from Photos. Download it there and try again.") }
+                            if let providerError { throw providerError }
+                            guard let url, url.isFileURL else { throw BJJError.domain("PHOTOS_PROVIDER_FAILED", "Photos did not supply a video. Select it again and keep Fresh Frame open.") }
+                            guard worker.acceptProviderURL(operation: job.jobId) else { throw BJJError.cancelled }
+                            // Must finish the owned copy before returning from this callback.
                             try BJJMediaWork.copy(url, target, store: store, work: worker)
                             completion.finish(.success(()))
-                        } catch { completion.finish(.failure(error)) }
+                        } catch {
+                            let cancelled = (try? worker.cancellation.check()) == nil
+                            if worker.diagnosticState().0 == .waitingForPhotos {
+                                worker.providerFinished(cancelled ? "cancelled" : "failed")
+                                BJJDiagnostics.shared.record(cancelled ? .photosCancelled : .photosFailed, operation: job.jobId, phase: "waiting_for_photos", error: cancelled ? nil : error)
+                            }
+                            completion.finish(.failure(error))
+                        }
                     }
                 }
                 awaitingPhoto = false
                 service.mediaJobs.recordMetric(job.jobId, "provider_and_copy", seconds: ProcessInfo.processInfo.systemUptime - downloadStart)
                 imported = try await service.mediaJobs.finishImport(job.jobId, originalName: item.suggestedName ?? "New review.mov")
-            } catch { photoLoad?.cancel(); service.mediaJobs.failure(job.jobId, error); throw error }
+            } catch {
+                photoLoad?.cancel(); service.mediaJobs.failure(job.jobId, error)
+                if let stopped = try? service.mediaJobs.get(job.jobId), ["cancelled", "interrupted"].contains(stopped.providerOutcome ?? "") {
+                    BJJDiagnostics.shared.record(.photosCancelled, operation: job.jobId, phase: stopped.phaseAtStop)
+                }
+                throw error
+            }
         } catch { report(error) }
+        if imported != nil { importPreparedAt = ProcessInfo.processInfo.systemUptime }
         await finish()
         if let imported { openImported(imported, jobID: importedJobID) }
     }
     private func report(_ error: Error) {
-        BJJDiagnostics.shared.record(.libraryError, operation: mediaID ?? packageID, error: error)
-        if let mediaID, let job = try? service?.mediaJobs.get(mediaID), job.errorCode == "MEDIA_BACKGROUND_EXPIRED" {
-            self.error = job.error; return
+        let finalJob = mediaID.flatMap { try? service?.mediaJobs.get($0) }
+        let canonical: Error
+        if let code = finalJob?.errorCode { canonical = BJJError.domain(code, "") } else { canonical = error }
+        BJJDiagnostics.shared.record(.libraryError, operation: mediaID ?? packageID, phase: finalJob?.phaseAtStop, error: canonical)
+        if let finalJob, finalJob.terminal {
+            if finalJob.status != "cancelled" { self.error = finalJob.error }
+            return
         }
-        if let mediaID, (try? service?.mediaJobs.get(mediaID).status) == "cancelled" { return }
         if (error as? BJJError)?.code != "JOB_CANCELLED" { self.error = error.localizedDescription }
     }
     func change(_ review: BJJNativeReview, action: String, name: String = "") async {
@@ -296,9 +338,9 @@ struct BJJNativeDeletedReview: Identifiable {
                 let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
                 let records = files.filter { $0.pathExtension == "json" }.sorted { $0.path < $1.path }.prefix(256).compactMap { file -> BJJJSON? in
                     guard let job = (try? store.readJSON(file))?["job"] as? BJJJSON else { return nil }
-                    return job.filter { ["operation", "status", "stage", "copiedBytes", "totalBytes", "timings", "mediaProfile", "createdAt", "errorCode", "appVersion", "appBuild", "importPhase", "lastCheckpointAt", "providerProgress", "stopReason"].contains($0.key) }
+                    return job.filter { ["operation", "status", "stage", "copiedBytes", "totalBytes", "timings", "mediaProfile", "createdAt", "errorCode", "appVersion", "appBuild", "importPhase", "lastCheckpointAt", "providerProgress", "stopReason", "phaseAtStop", "sessionId", "operationId", "attemptId", "retryOf", "requestedRepresentation", "importPolicyVersion", "providerOutcome", "lifecycleState", "lifecycleSource", "backgroundTaskGranted", "backgroundTimeRemainingSec"].contains($0.key) }
                 }
-                return ["version": 2, "createdAt": BJJProject.now(), "appVersion": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown", "appBuild": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown", "osVersion": ProcessInfo.processInfo.operatingSystemVersionString, "imports": records, "diagnostics": BJJDiagnostics.shared.snapshot()]
+                return ["version": 3, "createdAt": BJJProject.now(), "appVersion": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown", "appBuild": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown", "osVersion": ProcessInfo.processInfo.operatingSystemVersionString, "imports": records, "diagnostics": BJJDiagnostics.shared.snapshot()]
             }
             BJJDiagnostics.shared.record(.share)
             let path = FileManager.default.temporaryDirectory.appendingPathComponent("FreshFrame-diagnostics-\(UUID().uuidString).json")
@@ -335,19 +377,29 @@ struct BJJNativeDeletedReview: Identifiable {
     }
 }
 
+enum BJJPhotoImportPolicy: String {
+    case automatic, compatible
+    static var configured: Self {
+        // Embedded in the signed app, not a DEBUG-only switch or a home preference.
+        Self(rawValue: Bundle.main.object(forInfoDictionaryKey: "BJJPhotoImportPolicy") as? String ?? "") ?? .compatible
+    }
+    var representation: PHPickerConfiguration.AssetRepresentationMode { self == .automatic ? .automatic : .compatible }
+}
+
 struct BJJNativePhotoPicker: UIViewControllerRepresentable {
+    var policy: BJJPhotoImportPolicy = .configured
     let selected: (NSItemProvider?) -> Void
-    static func configuration() -> PHPickerConfiguration {
+    static func configuration(policy: BJJPhotoImportPolicy = .configured) -> PHPickerConfiguration {
         var configuration = PHPickerConfiguration()
         configuration.filter = .videos; configuration.selectionLimit = 1
-        // Current can deliver Dolby Vision that our verified color pipeline
-        // rejects. Ask Photos for its compatible rendition before importing.
-        configuration.preferredAssetRepresentationMode = .compatible
+        // Configure before creating the picker. Compatible remains the default;
+        // automatic is a signed, separately labeled experiment with identical guards.
+        configuration.preferredAssetRepresentationMode = policy.representation
         return configuration
     }
     func makeCoordinator() -> Coordinator { Coordinator(selected: selected) }
     func makeUIViewController(context: Context) -> PHPickerViewController {
-        let picker = PHPickerViewController(configuration: Self.configuration()); picker.delegate = context.coordinator
+        let picker = PHPickerViewController(configuration: Self.configuration(policy: policy)); picker.delegate = context.coordinator
         return picker
     }
     func updateUIViewController(_ controller: PHPickerViewController, context: Context) { }
@@ -360,7 +412,7 @@ struct BJJNativePhotoPicker: UIViewControllerRepresentable {
 
 enum BJJPhotoImportStatus {
     static let title = "Getting video from Photos…"
-    static let detail = "Photos may be downloading from iCloud or converting to a compatible video. Copying into Fresh Frame has not started yet."
+    static let detail = "Photos may download from iCloud or prepare this video. Copying has not started."
     static func progress(_ value: Progress?) -> Double? {
         // NSItemProvider reports aggregate loading, not a cloud-only download.
         // Unknown/zero totals must not appear as a stuck 0% progress bar.
@@ -372,9 +424,22 @@ enum BJJPhotoImportStatus {
 
 /// Providers may finish after Cancel, or never invoke their callback after their
 /// Progress is cancelled. Settle once; the worker token fences every late copy.
-private final class BJJPhotoImportCompletion: @unchecked Sendable {
+final class BJJPhotoImportCompletion: @unchecked Sendable {
     private let lock = NSLock()
     private var continuation: CheckedContinuation<Void, Error>?
+    private var callbackClaimed = false
+    func claimCallback() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        guard continuation != nil, !callbackClaimed else { return false }
+        callbackClaimed = true; return true
+    }
+    func cancel(_ error: Error) {
+        lock.lock()
+        // The callback's cooperative copy will settle after closing its handles.
+        guard !callbackClaimed else { lock.unlock(); return }
+        let pending = continuation; continuation = nil; lock.unlock()
+        pending?.resume(throwing: error)
+    }
     init(_ continuation: CheckedContinuation<Void, Error>) { self.continuation = continuation }
     var finished: Bool { lock.lock(); defer { lock.unlock() }; return continuation == nil }
     func finish(_ result: Result<Void, Error>) {
