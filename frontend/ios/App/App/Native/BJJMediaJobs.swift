@@ -329,7 +329,10 @@ final class BJJMediaWork {
         job.sessionId = BJJDiagnostics.shared.sessionID
         job.operationId = job.jobId; job.attemptId = UUID().uuidString.lowercased()
         job.lifecycleState = lifecycleState; job.lifecycleSource = lifecycleSource
-        try persist(job); jobs[job.jobId] = job; work[job.jobId] = BJJMediaWork()
+        try persist(job); jobs[job.jobId] = job
+        let worker = BJJMediaWork()
+        worker.transition(project == nil ? .copying : .inspecting)
+        work[job.jobId] = worker
         return job
     }
     private func update(_ id: String, _ change: (inout BJJMediaJob) -> Void) throws {

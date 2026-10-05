@@ -1,6 +1,6 @@
 # Photos import diagnostic repair and policy experiment
 
-October 5, 2026. Implementation is a candidate; physical acceptance and performance remain open. No TestFlight or production publication is authorized by this change.
+October 5, 2026. Implementation is a candidate; physical acceptance and performance remain open. Steve subsequently authorized source upload and a TestFlight validation release after required CI passes. Production publication remains out of scope.
 
 ## Baseline and scope
 
@@ -53,4 +53,4 @@ Only after measured policy/quality acceptance implement Phase 3 recovery and con
 
 Local verification passed 216 backend tests, 111 frontend tests, 19 repository tests, backend/script lint, frontend lint, TypeScript, production web build and formatting. The required browser command was attempted: all 21 cases could not launch because the pinned Chromium executable was absent. Installing that pinned browser returned an invalid/empty ZIP, so browser acceptance remains open. Docker is unavailable on this host. Native Swift/StoreKit/UI tests and the archive require macOS CI and have not run for this change.
 
-The GitHub push was rejected by automatic approval review, which interpreted the no-publication instruction as excluding source upload. No workaround was used. The focused local commits and this record are ready for review; approval to push the branch and open a draft PR is needed before CI can validate them. Main, preview, tags and TestFlight have not been changed.
+The initial GitHub push was rejected by automatic approval review, which interpreted the no-publication instruction as excluding source upload. Steve then explicitly approved upload and TestFlight release after completion. Draft PR #38 is stacked on #37; GitHub macOS/full CI is now the release gate. No main merge, tag or production App Store submission is authorized. Physical comparisons are required before adopting automatic as the default.
