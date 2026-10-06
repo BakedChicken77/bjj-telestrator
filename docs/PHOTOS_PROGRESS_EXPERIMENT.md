@@ -1,0 +1,25 @@
+# Photos provider-progress isolation — October 6, 2026
+
+## Finding and limits
+
+The latest cumulative report contains seven imports, not seven new attempts. The three new compatible 36.1 attempts waited 11.743 / 11.424 / 11.615 seconds for Photos and reached editor readiness in 15.089 / 14.810 / 15.105 seconds. Two briefly backgrounded; the first was foreground-only. Automatic 37.1 waited 121.292 / 11.437 / 11.374 seconds and reached readiness in 124.760 / 14.780 / 14.780 seconds. The earlier compatible attempt waited 267.587 seconds. All completed. Cache/local/cloud conditions are unknown; repeat results are not cold measurements. Steve confirmed correct preview and exported MP4 appearance/audio on 37.1 for this clip. This does not establish broader Dolby/HDR acceptance.
+
+Automatic has not demonstrated a material causal advantage. Repeated compatible and automatic performance is similar. The first automatic stall occurred while active, so backgrounding is not required to reproduce a stall. Delivered metadata agrees on 17.333 seconds, portrait 2160x3840, H.264/SDR, 55,345,792 bytes; differing rendition hashes do not establish different original selections or prove conversion. Do not sum overlapping reports or infer network transfer from elapsed time.
+
+Source comparison: 30.2 `3553980a3678834da79781bc8f345dd58ad44c61` to 31.1 `4227fcd033eb2dd048349ab86b79092a503f391c` retained the automatic picker mode, `loadFileRepresentation(UTType.movie)` call and selection-dismissal/Task ordering. UI polling already existed; 31.1 added repeated reads of the returned Progress fraction, a cancellation-monitor task, measurements and post-import editor presentation. Current code reads multiple Progress properties every 200 ms and at checkpoints/foreground return. This is a testable scheduling/contention hypothesis, not proof that Progress reads block Photos. Editor construction, source hashing and rendering occur after delivery and cannot directly account for the measured pre-callback wait; broader scheduling effects remain unproven.
+
+## Candidate
+
+Based on 37.1 source `0fec08a69e3f304721e4a7d247de07d4eb410f31`, restore compatible as control policy and set signed `BJJ_PHOTO_PROGRESS_SAMPLING=disabled` in both app configurations. Compare with **36.1**, not 37.1, to isolate progress sampling while keeping representation compatible. Missing/invalid sampling configuration falls back to historical sampled behavior. Native importer captures the mode at request start; no permanent home setting is added. Legacy importer is unchanged.
+
+The only intended behavioral difference from 36.1 is omitting provider-progress property reads (UI tick, checkpoint, foreground return). A spinner replaces aggregate percentage while waiting. UI polling cadence, five-second checkpoints, elapsed helper, cancellation token monitor, Progress.cancel(), callback ownership, background protection, copy/prepare progress, media validation, Dolby/color safeguards and editor presentation remain. No temporary URL leaves its callback validity scope. Saved projects/media are unchanged.
+
+Add optional `providerProgressSampling` to persisted jobs and envelope-v3 import rows: `sampled` or `disabled`. Historic missing values remain unknown. With disabled sampling, absent providerProgress means unobserved, not zero. Timings and terminal providerOutcome remain recorded independently. This additive field does not change project or job schema versions.
+
+## Validation and next phone step
+
+Native tests check lazy suppression of provider reads, both sampling modes, signed configuration presence, actual library cancellation of a stalled provider with sampling disabled, foreground checkpoint behavior, exported mode, preserved partial wait and no publication. Existing expiration, late callback, provider success/error, renderer/StoreKit/UI tests remain required. Run repository tests and full CI; inspect signed IPA for compatible + disabled and verify TestFlight processing/tester receipt. Do not call an upload alone a completed release.
+
+On the new candidate, import the same problem video once after an ordinary gap, then twice more, foregrounded throughout. Do not force cache eviction or delete media. Label first observation and repeats; record Photos local/cloud availability as unknown unless independently established. Export diagnostics and verify preview/export quality. If a minute-long provider wait remains with sampling disabled, progress reads are not necessary for that stall. Fast warm repeats alone prove nothing. For causal comparison, retain foreground-only sampled compatible control trials, alternate order and expand fixtures (fresh local SDR, HEVC, edited Photos, Dolby/HDR) before adoption. No untested claim of a performance fix.
+
+If inconclusive, inspect cancellation-monitor scheduling and picker lifetime independently, retaining cancellation safety; do not roll back the whole app or silently expand into PhotoKit permissions. Phase 3 automatic adoption/recovery remains gated. Steve authorized investigation and warranted isolated TestFlight experiments; no main merge, tag or production submission.

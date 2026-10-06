@@ -712,6 +712,44 @@ import UniformTypeIdentifiers
         XCTAssertEqual(BJJNativePhotoPicker.configuration(policy: .compatible).preferredAssetRepresentationMode, .compatible)
         XCTAssertTrue(["automatic", "compatible"].contains(Bundle.main.object(forInfoDictionaryKey: "BJJPhotoImportPolicy") as? String ?? ""))
     }
+    func testDisabledPhotoProgressDoesNotEvaluateProviderReader() {
+        var reads = 0
+        let read: () -> Double? = { reads += 1; return 0.5 }
+        XCTAssertNil(BJJPhotoProgressSampling.disabled.sample(read))
+        XCTAssertEqual(reads, 0)
+        XCTAssertEqual(BJJPhotoProgressSampling.sampled.sample(read), 0.5)
+        XCTAssertEqual(reads, 1)
+        XCTAssertTrue(["sampled", "disabled"].contains(Bundle.main.object(forInfoDictionaryKey: "BJJPhotoProgressSampling") as? String ?? ""))
+    }
+    func testDisabledPhotoProgressStillCancelsAndExportsObservedMode() async throws {
+        let library = BJJNativeLibrary(root: root.appendingPathComponent("progress-off"), originalRoot: root.appendingPathComponent("originals"))
+        let provider = NSItemProvider()
+        provider.registerFileRepresentation(forTypeIdentifier: UTType.movie.identifier, fileOptions: [], visibility: .all) { _ in
+            let progress = Progress(totalUnitCount: 100); progress.completedUnitCount = 50
+            return progress
+        }
+        let operation = Task { await library.importPhoto(provider, policy: .compatible, progressSampling: .disabled) }
+        for _ in 0..<100 {
+            if library.busy && library.canCancel { break }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertTrue(library.busy)
+        try await Task.sleep(nanoseconds: 250_000_000)
+        library.suspend(); library.resume()
+        XCTAssertNil(library.progress)
+        library.cancel(); await operation.value
+        XCTAssertFalse(library.busy); XCTAssertNil(library.session); XCTAssertTrue(library.reviews.isEmpty)
+        await library.shareImportDiagnostics()
+        let report = try library.services().store.readJSON(XCTUnwrap(library.shareURL))
+        let record = try XCTUnwrap((report["imports"] as? [BJJJSON])?.first)
+        XCTAssertEqual(record.s("providerProgressSampling"), "disabled")
+        XCTAssertEqual(record.s("requestedRepresentation"), "compatible")
+        XCTAssertEqual(record.s("stopReason"), "user_cancelled")
+        XCTAssertEqual(record.s("phaseAtStop"), "waiting_for_photos")
+        XCTAssertNil(record["providerProgress"])
+        XCTAssertNotNil((record["timings"] as? BJJJSON)?["provider_wait_elapsed"])
+        library.endShare()
+    }
     func testPhotosWaitBackgroundExpirationIsActionableAndDoesNotHang() async throws {
         let library = BJJNativeLibrary(root: root.appendingPathComponent("background-photos"), originalRoot: root.appendingPathComponent("originals"))
         let provider = NSItemProvider()

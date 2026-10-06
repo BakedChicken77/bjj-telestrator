@@ -491,7 +491,8 @@
 				);
 				MARKETING_VERSION = 2.1.0;
 				OTHER_SWIFT_FLAGS = "$(inherited) \"-D\" \"COCOAPODS\" \"-DDEBUG\"";
-				BJJ_PHOTO_IMPORT_POLICY = automatic;
+				BJJ_PHOTO_IMPORT_POLICY = compatible;
+				BJJ_PHOTO_PROGRESS_SAMPLING = disabled;
 				PRODUCT_BUNDLE_IDENTIFIER = com.bakedchicken77.bjjtelestrator;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
@@ -513,7 +514,8 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 2.1.0;
-				BJJ_PHOTO_IMPORT_POLICY = automatic;
+				BJJ_PHOTO_IMPORT_POLICY = compatible;
+				BJJ_PHOTO_PROGRESS_SAMPLING = disabled;
 				PRODUCT_BUNDLE_IDENTIFIER = com.bakedchicken77.bjjtelestrator;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
