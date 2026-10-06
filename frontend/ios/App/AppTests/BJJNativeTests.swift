@@ -794,8 +794,10 @@ import UniformTypeIdentifiers
         XCTAssertTrue(BJJMedia.needsCompatibleCopy(subtype: "dvhe", atoms: [:]))
         XCTAssertFalse(BJJMedia.needsCompatibleCopy(subtype: "hvc1", atoms: [:]))
         XCTAssertFalse(BJJMedia.needsCompatibleCopy(subtype: "avc1", atoms: [:]))
-        let configuration = BJJNativePhotoPicker.configuration()
+        let configuration = BJJNativePhotoPicker.configuration(policy: .compatible)
         XCTAssertEqual(configuration.preferredAssetRepresentationMode, .compatible)
+        XCTAssertEqual(BJJNativePhotoPicker.configuration().preferredAssetRepresentationMode,
+                       BJJPhotoImportPolicy.configured.representation)
         XCTAssertEqual(configuration.selectionLimit, 1)
         XCTAssertNil(BJJPhotoImportStatus.progress(nil))
         XCTAssertNil(BJJPhotoImportStatus.progress(Progress(totalUnitCount: 0)))

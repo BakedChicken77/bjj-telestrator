@@ -1,5 +1,15 @@
 # Photos import diagnostic repair and policy experiment
 
+## October 6 automatic comparison candidate
+
+Steve authorized the automatic-policy TestFlight comparison. This candidate changes only the two signed app-target policy settings from compatible to automatic; diagnostics, provider/copy ownership, cancellation, hashes, Dolby/color guards and media preparation remain identical to control build 2.1.0 (36.1), preview SHA `41ff232540ecfe98607938981e7a914ccfeefa0d`. The compatible picker unit test now requests compatible explicitly and also checks that default construction follows the embedded configuration. This is an experiment, not adoption of a proven faster shipping policy. No main merge, production release, media migration or automatic retry is included.
+
+The October 6 control report recorded one 17.333-second video: provider wait 267.587 seconds, copy 0.098 seconds, preparation 3.180 seconds, editor ready 271.063 seconds. A brief background/return was observed and did not cancel the import; no expiration occurred. Cache/local/cloud condition is unknown. This is not a controlled foreground-only baseline and cannot establish conversion or speed improvement. The 36.1 release passed full CI and its TestFlight receipt verified availability; older pending-automation statements below are historical.
+
+Phone handoff: update without uninstalling, select that same video, keep the app foregrounded and screen-record picker processing if practical. Repeat three times, retain failures, label repeats as warm, export diagnostics, and check preview plus MP4 color/audio/orientation. Compare against three foreground-only compatible-control runs using TestFlight's 36.1 build, alternating policy order where practical; do not install 30.2 or older project software. Preserve backups and saved reviews. If automatic rejects Dolby, export diagnostics and use the compatible control for now: explicit in-app compatible reselection is still Phase 3 work, not implemented here. Stop testing if colors are wrong or prior reviews are affected.
+
+Required candidate release gates: exact-head full CI, signed IPA policy `automatic`, matching SHA/version/build receipt, Apple processing VALID and intended internal tester availability. Actual physical performance/quality acceptance remains open.
+
 October 5, 2026. Implementation is a candidate; physical acceptance and performance remain open. Steve subsequently authorized source upload and a TestFlight validation release after required CI passes. Production publication remains out of scope.
 
 ## Baseline and scope
