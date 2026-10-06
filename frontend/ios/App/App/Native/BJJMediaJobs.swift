@@ -28,6 +28,7 @@ struct BJJMediaJob: Codable {
     var importPhase: String?
     var lastCheckpointAt: String?
     var providerProgress: Double?
+    var providerProgressSampling: String?
     var stopReason: String?
     var phaseAtStop: String?
     var sessionId: String?
@@ -310,9 +311,11 @@ final class BJJMediaWork {
         job.backgroundTimeRemainingSec = remaining.isFinite && remaining >= 0 && remaining < Double.greatestFiniteMagnitude ? remaining : nil
         jobs[id] = job; try? persist(job)
     }
-    func configurePhoto(_ id: String, policy: BJJPhotoImportPolicy) {
+    func configurePhoto(_ id: String, policy: BJJPhotoImportPolicy,
+                        progressSampling: BJJPhotoProgressSampling = .configured) {
         guard var job = jobs[id], job.status == "queued" else { return }
         job.requestedRepresentation = policy.rawValue; job.importPolicyVersion = "photos-ab-v1"
+        job.providerProgressSampling = progressSampling.rawValue
         jobs[id] = job; try? persist(job)
     }
     func create(_ project: BJJProject? = nil) throws -> BJJMediaJob {

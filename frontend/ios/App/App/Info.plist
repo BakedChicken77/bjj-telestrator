@@ -4,6 +4,8 @@
 <dict>
 	<key>BJJPhotoImportPolicy</key>
 	<string>$(BJJ_PHOTO_IMPORT_POLICY)</string>
+	<key>BJJPhotoProgressSampling</key>
+	<string>$(BJJ_PHOTO_PROGRESS_SAMPLING)</string>
 	<key>CAPACITOR_DEBUG</key>
 	<string>$(CAPACITOR_DEBUG)</string>
 	<key>CFBundleDevelopmentRegion</key>

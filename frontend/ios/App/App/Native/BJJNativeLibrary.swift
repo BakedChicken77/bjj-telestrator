@@ -29,6 +29,10 @@ struct BJJNativeDeletedReview: Identifiable {
     private var mediaID: String?
     private var packageID: String?
     private var photoLoad: Progress?
+    private var photoProgressSampling = BJJPhotoProgressSampling.configured
+    private func sampledPhotoProgress() -> Double? {
+        photoProgressSampling.sample { BJJPhotoImportStatus.progress(photoLoad) }
+    }
     private var awaitingPhoto = false
     private var isBackground = false
     private(set) var sceneState: BJJImportSceneState = .unknown
@@ -106,7 +110,7 @@ struct BJJNativeDeletedReview: Identifiable {
     func resume() {
         isBackground = false
         BJJDiagnostics.shared.record(.foreground, operation: mediaID ?? packageID)
-        if let mediaID { service?.mediaJobs.checkpoint(mediaID, providerProgress: BJJPhotoImportStatus.progress(photoLoad)) }
+        if let mediaID { service?.mediaJobs.checkpoint(mediaID, providerProgress: sampledPhotoProgress()) }
         if let pending = pendingImported { pendingImported = nil; openImported(pending.0, jobID: pending.1) }
     }
     func open(_ review: BJJNativeReview) async {
@@ -157,11 +161,11 @@ struct BJJNativeDeletedReview: Identifiable {
                 if !self.canCancel { return }
                 let now = ProcessInfo.processInfo.systemUptime
                 if now - lastCheckpoint >= 5 {
-                    self.service?.mediaJobs.checkpoint(id, providerProgress: BJJPhotoImportStatus.progress(self.photoLoad))
+                    self.service?.mediaJobs.checkpoint(id, providerProgress: self.sampledPhotoProgress())
                     lastCheckpoint = now
                 }
                 if self.awaitingPhoto && job.totalBytes == nil {
-                    self.progress = BJJPhotoImportStatus.progress(self.photoLoad)
+                    self.progress = self.sampledPhotoProgress()
                     self.activity = BJJPhotoImportStatus.title
                     self.activityDetail = BJJPhotoImportStatus.detail
                     if let importStarted = self.importStarted, now - importStarted >= 15 {
@@ -225,14 +229,16 @@ struct BJJNativeDeletedReview: Identifiable {
         }
         catch { self.error = error.localizedDescription }
     }
-    func importPhoto(_ item: NSItemProvider, policy: BJJPhotoImportPolicy = .configured) async {
+    func importPhoto(_ item: NSItemProvider, policy: BJJPhotoImportPolicy = .configured,
+                     progressSampling: BJJPhotoProgressSampling = .configured) async {
         var imported: BJJProject?
         var importedJobID: String?
         guard begin(BJJPhotoImportStatus.title, cancellable: true) else { return }
+        photoProgressSampling = progressSampling
         activityDetail = BJJPhotoImportStatus.detail
         do {
             let service = try services(), job = try service.mediaJobs.create(); mediaID = job.jobId; importedJobID = job.jobId
-            service.mediaJobs.configurePhoto(job.jobId, policy: policy)
+            service.mediaJobs.configurePhoto(job.jobId, policy: policy, progressSampling: progressSampling)
             awaitingPhoto = true
             BJJDiagnostics.shared.record(.photosRequest, operation: job.jobId)
             let downloadStart = ProcessInfo.processInfo.systemUptime
@@ -338,7 +344,7 @@ struct BJJNativeDeletedReview: Identifiable {
                 let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
                 let records = files.filter { $0.pathExtension == "json" }.sorted { $0.path < $1.path }.prefix(256).compactMap { file -> BJJJSON? in
                     guard let job = (try? store.readJSON(file))?["job"] as? BJJJSON else { return nil }
-                    return job.filter { ["operation", "status", "stage", "copiedBytes", "totalBytes", "timings", "mediaProfile", "createdAt", "errorCode", "appVersion", "appBuild", "importPhase", "lastCheckpointAt", "providerProgress", "stopReason", "phaseAtStop", "sessionId", "operationId", "attemptId", "retryOf", "requestedRepresentation", "importPolicyVersion", "providerOutcome", "lifecycleState", "lifecycleSource", "backgroundTaskGranted", "backgroundTimeRemainingSec"].contains($0.key) }
+                    return job.filter { ["operation", "status", "stage", "copiedBytes", "totalBytes", "timings", "mediaProfile", "createdAt", "errorCode", "appVersion", "appBuild", "importPhase", "lastCheckpointAt", "providerProgress", "providerProgressSampling", "stopReason", "phaseAtStop", "sessionId", "operationId", "attemptId", "retryOf", "requestedRepresentation", "importPolicyVersion", "providerOutcome", "lifecycleState", "lifecycleSource", "backgroundTaskGranted", "backgroundTimeRemainingSec"].contains($0.key) }
                 }
                 return ["version": 3, "createdAt": BJJProject.now(), "appVersion": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown", "appBuild": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown", "osVersion": ProcessInfo.processInfo.operatingSystemVersionString, "imports": records, "diagnostics": BJJDiagnostics.shared.snapshot()]
             }
@@ -375,6 +381,16 @@ struct BJJNativeDeletedReview: Identifiable {
         } catch { self.error = error.localizedDescription }
         await finish()
     }
+}
+
+/// Internal experiment only. Disabling observations never disables Progress.cancel()
+/// or the independent cancellation-token monitor. The reader is intentionally lazy.
+enum BJJPhotoProgressSampling: String {
+    case sampled, disabled
+    static var configured: Self {
+        Self(rawValue: Bundle.main.object(forInfoDictionaryKey: "BJJPhotoProgressSampling") as? String ?? "") ?? .sampled
+    }
+    func sample(_ read: () -> Double?) -> Double? { self == .sampled ? read() : nil }
 }
 
 enum BJJPhotoImportPolicy: String {
