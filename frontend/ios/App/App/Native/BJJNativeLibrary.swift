@@ -19,6 +19,7 @@ struct BJJNativeDeletedReview: Identifiable {
     @Published var activity = ""
     @Published var activityDetail = "Keep the app open while your video is prepared."
     @Published var progress: Double?
+    @Published private(set) var compatibleRetryOf: String?
     @Published var error: String? { didSet { if error != nil { BJJDiagnostics.shared.record(.libraryError) } } }
     @Published var session: BJJNativeEditorSession?
     @Published var shareURL: URL?
@@ -74,6 +75,7 @@ struct BJJNativeDeletedReview: Identifiable {
     private func begin(_ title: String, cancellable: Bool = false) -> Bool {
         guard !busy, session == nil else { return false }
         refreshGeneration += 1
+        compatibleRetryOf = nil
         busy = true; activity = title; progress = nil; canCancel = cancellable
         BJJDiagnostics.shared.record(.libraryStart)
         activityDetail = "Keep the app open while your video is prepared."
@@ -175,6 +177,9 @@ struct BJJNativeDeletedReview: Identifiable {
                 }
                 self.progress = job.progress
                 self.activityDetail = "Keep the app open while your video is prepared."
+                if job.stage == "preparing_preview", job.conversionRoute == "dolby84_to_sdr" {
+                    self.activityDetail = "Preparing a standard-color preview. Your original Dolby Vision video is retained. Keep Fresh Frame open."
+                }
                 self.activity = job.stage == "copying" ? "Copying video…" : job.stage == "preparing_preview" ? "Preparing video…" : "Checking video…"
                 try? await Task.sleep(nanoseconds: 200_000_000)
             }
@@ -230,7 +235,7 @@ struct BJJNativeDeletedReview: Identifiable {
         catch { self.error = error.localizedDescription }
     }
     func importPhoto(_ item: NSItemProvider, policy: BJJPhotoImportPolicy = .configured,
-                     progressSampling: BJJPhotoProgressSampling = .configured) async {
+                     progressSampling: BJJPhotoProgressSampling = .configured, retryOf: String? = nil) async {
         var imported: BJJProject?
         var importedJobID: String?
         guard begin(BJJPhotoImportStatus.title, cancellable: true) else { return }
@@ -238,7 +243,7 @@ struct BJJNativeDeletedReview: Identifiable {
         activityDetail = BJJPhotoImportStatus.detail
         do {
             let service = try services(), job = try service.mediaJobs.create(); mediaID = job.jobId; importedJobID = job.jobId
-            service.mediaJobs.configurePhoto(job.jobId, policy: policy, progressSampling: progressSampling)
+            service.mediaJobs.configurePhoto(job.jobId, policy: policy, progressSampling: progressSampling, retryOf: retryOf)
             awaitingPhoto = true
             BJJDiagnostics.shared.record(.photosRequest, operation: job.jobId)
             let downloadStart = ProcessInfo.processInfo.systemUptime
@@ -301,10 +306,20 @@ struct BJJNativeDeletedReview: Identifiable {
         if let code = finalJob?.errorCode { canonical = BJJError.domain(code, "") } else { canonical = error }
         BJJDiagnostics.shared.record(.libraryError, operation: mediaID ?? packageID, phase: finalJob?.phaseAtStop, error: canonical)
         if let finalJob, finalJob.terminal {
-            if finalJob.status != "cancelled" { self.error = finalJob.error }
+            if finalJob.status != "cancelled" {
+                compatibleRetryOf = Self.compatibleRecovery(for: finalJob) ? finalJob.jobId : nil
+                self.error = finalJob.error
+                if compatibleRetryOf == nil, finalJob.errorCode == "MEDIA_DOLBY_UNSUPPORTED" {
+                    self.error = "This Dolby Vision video could not be prepared safely. Choose an SDR copy and share diagnostics so support can be investigated. Your original video and saved reviews were not changed."
+                }
+            }
             return
         }
         if (error as? BJJError)?.code != "JOB_CANCELLED" { self.error = error.localizedDescription }
+    }
+    static func compatibleRecovery(for job: BJJMediaJob) -> Bool {
+        job.operation == "import" && job.status == "failed" && job.errorCode == "MEDIA_DOLBY_UNSUPPORTED" &&
+            job.retryOf == nil && (job.importSource == "files" || (job.importSource == "photos" && job.requestedRepresentation == "automatic"))
     }
     func change(_ review: BJJNativeReview, action: String, name: String = "") async {
         guard review.preview, review.problem == nil, begin("\(action)…", cancellable: action == "Back up") else { return }
@@ -344,9 +359,9 @@ struct BJJNativeDeletedReview: Identifiable {
                 let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
                 let records = files.filter { $0.pathExtension == "json" }.sorted { $0.path < $1.path }.prefix(256).compactMap { file -> BJJJSON? in
                     guard let job = (try? store.readJSON(file))?["job"] as? BJJJSON else { return nil }
-                    return job.filter { ["operation", "status", "stage", "copiedBytes", "totalBytes", "timings", "mediaProfile", "createdAt", "errorCode", "appVersion", "appBuild", "importPhase", "lastCheckpointAt", "providerProgress", "providerProgressSampling", "stopReason", "phaseAtStop", "sessionId", "operationId", "attemptId", "retryOf", "requestedRepresentation", "importPolicyVersion", "providerOutcome", "lifecycleState", "lifecycleSource", "backgroundTaskGranted", "backgroundTimeRemainingSec"].contains($0.key) }
+                    return job.filter { ["descriptor", "supportPolicyVersion", "importSource", "conversionRoute", "supportDecision", "rejectionReason", "operation", "status", "stage", "copiedBytes", "totalBytes", "timings", "mediaProfile", "createdAt", "errorCode", "appVersion", "appBuild", "importPhase", "lastCheckpointAt", "providerProgress", "providerProgressSampling", "stopReason", "phaseAtStop", "sessionId", "operationId", "attemptId", "retryOf", "requestedRepresentation", "importPolicyVersion", "providerOutcome", "lifecycleState", "lifecycleSource", "backgroundTaskGranted", "backgroundTimeRemainingSec"].contains($0.key) }
                 }
-                return ["version": 3, "createdAt": BJJProject.now(), "appVersion": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown", "appBuild": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown", "osVersion": ProcessInfo.processInfo.operatingSystemVersionString, "imports": records, "diagnostics": BJJDiagnostics.shared.snapshot()]
+                return ["version": 4, "createdAt": BJJProject.now(), "appVersion": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown", "appBuild": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown", "osVersion": ProcessInfo.processInfo.operatingSystemVersionString, "imports": records, "diagnostics": BJJDiagnostics.shared.snapshot()]
             }
             BJJDiagnostics.shared.record(.share)
             let path = FileManager.default.temporaryDirectory.appendingPathComponent("FreshFrame-diagnostics-\(UUID().uuidString).json")

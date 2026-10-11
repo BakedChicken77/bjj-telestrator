@@ -100,6 +100,12 @@ enum BJJValidate {
         for key in ["transferFunction", "colorPrimaries", "colorMatrix", "colorRange", "averageFrameRateRational", "nominalFrameRateRational", "timeBase"] {
             if let value = m[key], !(value is NSNull) { try string(value, key, max: 100) }
         }
+        for key in ["dolbyProfile", "dolbyLevel", "dolbyCompatibilityID", "bitDepth"] {
+            if let value = m[key] { try number(value, key, 0...127, integer: true) }
+        }
+        for key in ["dolbyBaseLayer", "dolbyEnhancementLayer", "dolbyRPU"] {
+            if let value = m[key] { try bool(value, key) }
+        }
         if let value = m["dolbyVision"], !(value is NSNull) { try bool(value, "Dolby Vision flag") }
     }
 }
@@ -127,6 +133,7 @@ struct BJJProject {
         try BJJValidate.timestamp(value["updatedAt"])
         let source = try BJJValidate.object(value["source"], "source")
         try BJJValidate.media(source)
+        try BJJMediaSupport.validateSavedSource(source, capabilities: value["requiredCapabilities"] as! [String])
         if BJJColor.isHDR(source) && !(value["requiredCapabilities"] as! [String]).contains(BJJColor.capability) {
             throw BJJError.invalid("The HDR delivery capability is missing.")
         }

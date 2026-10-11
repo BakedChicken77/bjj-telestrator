@@ -12,6 +12,16 @@ const fixtures = JSON.parse(
   cases: { name: string; valid: boolean; document: unknown }[];
 };
 describe('shared project conformance', () => {
+  it('refuses native Dolby reviews before mutation', () => {
+    const document = {
+      ...(fixtures.migrationExpected as Record<string, unknown>),
+      requiredCapabilities: ['project.revisions.v1', 'media.dolby84-to-sdr.v1'],
+    };
+    const before = structuredClone(document);
+    expect(() => migrateDocument(document)).toThrow();
+    expect(projectSchema.safeParse(document).success).toBe(false);
+    expect(document).toEqual(before);
+  });
   for (const item of fixtures.cases)
     it(item.name, () => {
       expect(projectSchema.safeParse(item.document).success).toBe(item.valid);

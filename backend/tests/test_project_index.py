@@ -55,6 +55,7 @@ def test_bad_index_rebuilds_without_changing_project_or_source(tmp_path, damage)
 @pytest.mark.parametrize(('field', 'value', 'code'), [
     ('schemaVersion', 99, 'SCHEMA_UNSUPPORTED'),
     ('requiredCapabilities', ['project.revisions.v1', 'unknown.required'], 'CAPABILITY_UNSUPPORTED'),
+    ('requiredCapabilities', ['project.revisions.v1', 'media.dolby84-to-sdr.v1'], 'CAPABILITY_UNSUPPORTED'),
     ('annotations', [{'bad': 'cue'}], 'PROJECT_CORRUPT'),
 ])
 def test_replaced_document_invalidates_index_and_still_blocks_open(tmp_path, field, value, code):
@@ -68,6 +69,8 @@ def test_replaced_document_invalidates_index_and_still_blocks_open(tmp_path, fie
     with pytest.raises(DomainError) as error:
         store.load(project.projectId)
     assert error.value.code == code
+    assert json.loads(path.read_bytes()) == document
+    assert (path.parent / project.source.asset).read_bytes() == b'source'
 
 
 def test_index_write_failure_does_not_report_a_committed_save_as_failed(tmp_path, monkeypatch):

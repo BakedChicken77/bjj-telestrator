@@ -27,9 +27,6 @@ enum BJJColor {
 }
 
 struct BJJMedia {
-    static func needsCompatibleCopy(subtype: String, atoms: [String: Any]) -> Bool {
-        atoms["dvcC"] != nil || atoms["dvvC"] != nil || ["dvh1", "dvhe"].contains(subtype)
-    }
     let asset: AVURLAsset
     let video: AVAssetTrack
     let videoRange: CMTimeRange
@@ -39,7 +36,7 @@ struct BJJMedia {
     let fps: Double
     let json: BJJJSON
 
-    static func inspect(_ url: URL, reference: String, originalName: String) async throws -> BJJMedia {
+    static func inspect(_ url: URL, reference: String, originalName: String, observed: (@MainActor (BJJMediaDescriptor) -> Void)? = nil) async throws -> BJJMedia {
         let asset = AVURLAsset(url: url, options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
         guard try await asset.load(.isReadable), let video = try await asset.loadTracks(withMediaType: .video).first else {
             throw BJJError.invalid("This video cannot be decoded on iPhone. Choose a complete MP4 or MOV with H.264 or HEVC video.")
@@ -61,12 +58,23 @@ struct BJJMedia {
             throw BJJError.invalid("This video has a non-right-angle rotation. Rotate it to 0, 90, 180 or 270 degrees before importing.")
         }
         let extensions = (CMFormatDescriptionGetExtensions(format) as NSDictionary?) ?? NSDictionary()
-        let atoms = extensions[kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms] as? [String: Any] ?? [:]
-        let subtype = fourCC(CMFormatDescriptionGetMediaSubType(format))
-        if needsCompatibleCopy(subtype: subtype, atoms: atoms) {
-            BJJDiagnostics.shared.record(.dolbyRejected, value: Double(CMFormatDescriptionGetMediaSubType(format)))
-            throw BJJError.domain("MEDIA_DOLBY_UNSUPPORTED", "This video is still in an unsupported Dolby Vision format. Try importing it from Photos, which requests a compatible copy. If Photos cannot convert it, choose an SDR copy and share a diagnostic report from Previous reviews. Your original video was not changed.")
+        func descriptor(_ description: CMFormatDescription) -> BJJMediaDescriptor {
+            let ext = (CMFormatDescriptionGetExtensions(description) as NSDictionary?) ?? NSDictionary()
+            let matrix = BJJColor.canonical(ext[kCMFormatDescriptionExtension_YCbCrMatrix])
+            return BJJMediaSupport.describe(codec: fourCC(CMFormatDescriptionGetMediaSubType(description)),
+                atoms: ext[kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms] as? [String: Any] ?? [:],
+                transfer: BJJColor.canonical(ext[kCMFormatDescriptionExtension_TransferFunction]),
+                primaries: BJJColor.canonical(ext[kCMFormatDescriptionExtension_ColorPrimaries]),
+                matrix: matrix == "bt2020" ? "bt2020nc" : matrix)
         }
+        var support = descriptor(format)
+        if formats.dropFirst().contains(where: { descriptor($0) != support }) {
+            support.rejectionReason = "mixed_sample_descriptions"
+        }
+        support.durationSec = range.duration.seconds.isFinite ? range.duration.seconds : nil
+        support.width = Int(coded.width); support.height = Int(coded.height)
+        await observed?(support)
+        try BJJMediaSupport.require(support)
         let seconds = range.duration.seconds
         guard seconds.isFinite, seconds >= 0.05, seconds <= 86400,
               oriented.width >= 2, oriented.height >= 2, max(oriented.width, oriented.height) <= 4096 else {
@@ -98,7 +106,16 @@ struct BJJMedia {
         // Absence of range/timestamp-index evidence is explicit. Nominal frame
         // rate is not a per-frame PTS index and cannot prove constant frame rate.
         metadata["colorRange"] = (extensions[kCMFormatDescriptionExtension_FullRangeVideo] as? Bool) == true ? "pc" : "tv"
-        metadata["dolbyVision"] = false
+        metadata["dolbyVision"] = support.dolbyVision
+        if support.dolbyVision {
+            metadata["dolbyProfile"] = support.dolbyProfile
+            metadata["dolbyLevel"] = support.dolbyLevel
+            metadata["dolbyCompatibilityID"] = support.compatibilityID
+            metadata["dolbyBaseLayer"] = support.baseLayer
+            metadata["dolbyEnhancementLayer"] = support.enhancementLayer
+            metadata["dolbyRPU"] = support.rpu
+            metadata["bitDepth"] = support.bitDepth
+        }
         if BJJColor.isHDR(metadata) && (metadata["colorPrimaries"] as? String != "bt2020" || metadata["colorMatrix"] as? String != "bt2020nc") {
             throw BJJError.domain("MEDIA_UNSUPPORTED", "HDR needs valid Rec.2020 primaries and matrix metadata. Choose a complete original or an SDR copy.")
         }
