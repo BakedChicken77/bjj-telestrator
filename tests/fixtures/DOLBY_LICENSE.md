@@ -18,8 +18,14 @@ The fixture JSON records the excerpt checksum. Reproduction with FFmpeg:
 
 ```sh
 ffmpeg -i original.mp4 -map 0:v:0 -c copy -bsf:v hevc_mp4toannexb,extract_extradata -strict unofficial remux.mp4
-ffmpeg -ss 20 -i remux.mp4 -t 2 -map 0:v:0 -c copy -strict unofficial -movflags +faststart excerpt.mp4
+ffmpeg -ss 20 -i remux.mp4 -t 2 -map 0:v:0 -c copy -tag:v hvc1 -strict unofficial -movflags +faststart excerpt.mp4
 ```
+
+The reproducible generator is `scripts/generate_dolby_fixture.py`; it verifies
+the upstream checksum. The first CI attempt used `hev1` packaging and Apple's
+decoder rejected it (-11833 / -12906). The fixture now uses `hvc1` with extracted
+parameter sets, as iPhone-compatible HEVC does. This does not assert support for
+arbitrary `hev1` sources and does not alter or synthesize Dolby metadata.
 
 Parameter-set extraction makes the selected random-access segment independently
 decodable. It preserves the actual video and Dolby RPU data. Confirm with
