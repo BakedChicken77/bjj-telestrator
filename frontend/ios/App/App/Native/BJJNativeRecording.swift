@@ -17,6 +17,7 @@ import UIKit
     private var clockTimer: Timer?
     private var pausePreparing = false
     private var lastSpaceCheck = -5.0
+    private var peakPower: Float = -160
     var videoPaused: Bool { pauseStart != nil || pausePreparing }
     var liveElapsed: Double { recorder?.currentTime ?? 0 }
     func toggleVideoPause() async throws {
@@ -96,6 +97,7 @@ import UIKit
             try audio.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
             try audio.setPreferredSampleRate(48000)
             try audio.setActive(true)
+            guard audio.isInputAvailable else { throw BJJError.invalid("No microphone is available. Check your audio connection and try again.") }
             try lifecycle.advance(token, from: .preparing, to: .prepared)
             let path = try store.safeURL(project.id, "voiceover/\(UUID().uuidString.lowercased()).wav")
             url = path
@@ -119,7 +121,7 @@ import UIKit
             start = max(0, player.currentTime().seconds - capture.currentTime)
             capture.isMeteringEnabled = true; capture.delegate = self; recorder = capture
             try lifecycle.advance(token, from: .prepared, to: .recording)
-            newHolds = []; pausedDuration = 0; pauseStart = nil; lastSpaceCheck = -5
+            newHolds = []; pausedDuration = 0; pauseStart = nil; lastSpaceCheck = -5; peakPower = -160
             clockTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
                 Task { @MainActor in self?.checkClock() }
             }
@@ -130,7 +132,9 @@ import UIKit
     }
     func checkClock() {
         guard lifecycle.phase == .recording, let player, let recorder else { return }
-        meterChanged?(level)
+        let power = level
+        if power.isFinite { peakPower = max(peakPower, power) }
+        meterChanged?(power)
         if recorder.currentTime >= 3600 || project!.outputDuration + pausedDuration + (pauseStart.map { recorder.currentTime - $0 } ?? 0) >= 86400 {
             stop(reason: "The take reached its one-hour recording limit."); return
         }
@@ -148,6 +152,10 @@ import UIKit
         guard active else { return }
         BJJDiagnostics.shared.record(.recordingStop, value: reason == nil ? 0 : 1)
         let capture = recorder, path = url, document = project, storage = store
+        let lastPower = level
+        if lastPower.isFinite { peakPower = max(peakPower, lastPower) }
+        if capture != nil { BJJDiagnostics.shared.record(.recordingSignal, value: Double(max(-160, min(0, peakPower))).rounded()) }
+        let savedReason = reason ?? (peakPower < -80 ? "No microphone signal was detected. The take was preserved. Check the microphone connection and watch the level meter while speaking before recording again." : nil)
         let startSec = start
         if let began = pauseStart, let capture {
             let ticks = ((capture.currentTime - began) * 48000).rounded()
@@ -175,7 +183,7 @@ import UIKit
                     "durationSec": length, "endSec": startSec + length, "gain": 1.0, "muted": false,
                     "timingOffsetMs": 0.0, "recordedAt": BJJProject.now(), "codec": "pcm_s16le",
                     "sampleRate": Int(audio.fileFormat.sampleRate), "channels": Int(audio.fileFormat.channelCount)]
-                try storage.registerClip(document.id, clip: clip); finished?(clip, nil, reason)
+                try storage.registerClip(document.id, clip: clip); finished?(clip, nil, savedReason)
             } else {
                 let ordered = (document.reviewTimeline.holds + holds).enumerated().sorted {
                     $0.element.n("sourceTicks") == $1.element.n("sourceTicks") ? $0.offset < $1.offset : $0.element.n("sourceTicks") < $1.element.n("sourceTicks")
@@ -188,7 +196,7 @@ import UIKit
                 let receipt: BJJJSON = ["kind": "review-narration-v1", "operationId": UUID().uuidString.lowercased(),
                     "baseRevision": document.revision, "baseProject": document.json, "take": take, "holds": holds]
                 try storage.registerReviewReceipt(document.id, receipt: receipt)
-                finished?(receipt, nil, reason)
+                finished?(receipt, nil, savedReason)
             }
             _ = capture // retain until the file has closed and its metadata was read
         } catch { finished?(nil, error, "The take could not be committed. Its audio file was preserved.") }

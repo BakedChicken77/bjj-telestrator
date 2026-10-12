@@ -402,6 +402,7 @@ struct BJJNativeTransportState: Codable {
             guard !closed, generation == previewGeneration else { try? FileManager.default.removeItem(at: path); return }
             playbackTimeline = project.reviewTimeline
             player.replaceCurrentItem(with: item); player.volume = 1; player.isMuted = false
+            BJJDiagnostics.shared.record(.audioPreviewReady)
             seekOutput(position)
             // The previous item is no longer using these files.
             for old in previewFiles where old != path { try? FileManager.default.removeItem(at: old) }
@@ -420,7 +421,10 @@ struct BJJNativeTransportState: Codable {
                     }
                 }
             }
-        } catch { self.error = "Audio preview could not be prepared. \(error.localizedDescription)" }
+        } catch {
+            BJJDiagnostics.shared.record(.audioPreviewError, error: error)
+            self.error = "Audio preview could not be prepared. \(error.localizedDescription)"
+        }
     }
     func startRecording() async {
         guard !closed, !recording, !preparingAudio, !exporting else { return }

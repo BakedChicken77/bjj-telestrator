@@ -218,6 +218,80 @@ import UniformTypeIdentifiers
         XCTAssertGreaterThan(fallbackFrames.count, 10)
         XCTAssertTrue(fallbackFrames.allSatisfy { $0.rgb[2] > 200 && $0.rgb[1] < 64 }, "Unacknowledged pause must repeat the picture covering 0.99 seconds, before the green transition")
     }
+    func testPausedFrameDurationUsesValidBoundariesAndClampsTrackEnd() throws {
+        func time(_ seconds: Double) -> CMTime { CMTime(seconds: seconds, preferredTimescale: 60000) }
+        let range = CMTimeRange(start: time(2), end: time(6))
+        for invalid in [CMTime.invalid, .zero, time(-1)] {
+            let frame = try BJJReviewTimeline.pausedFrameRange(first: time(3), next: time(3.04), sampleDuration: invalid, range: range)
+            XCTAssertEqual(frame.duration.seconds, 0.04, accuracy: 0.00001)
+            let last = try BJJReviewTimeline.pausedFrameRange(first: time(5.97), next: nil, sampleDuration: invalid, range: range)
+            XCTAssertEqual(last.duration.seconds, 0.03, accuracy: 0.00001)
+        }
+        let duplicate = try BJJReviewTimeline.pausedFrameRange(first: time(3), next: time(3), sampleDuration: time(0.04), range: range)
+        XCTAssertEqual(duplicate.duration.seconds, 0.04, accuracy: 0.00001)
+        let clamped = try BJJReviewTimeline.pausedFrameRange(first: time(5.97), next: time(6.02), sampleDuration: .invalid, range: range)
+        XCTAssertEqual(clamped.duration.seconds, 0.03, accuracy: 0.00001)
+        for first in [time(1.99), time(6), time(7), .invalid] {
+            XCTAssertThrowsError(try BJJReviewTimeline.pausedFrameRange(first: first, next: nil, sampleDuration: .invalid, range: range))
+        }
+    }
+    func testMultipleNarrationHoldsIncludingFinalFrameOnSDRVFRAndDolby() async throws {
+        executionTimeAllowance = 600
+        var sources = [try await sourceVideo(audio: true, moving: true)]
+        let fixture = try XCTUnwrap(Bundle(for: BJJNativeTests.self).url(forResource: "media-timing-conformance", withExtension: "json"))
+        let cases = try XCTUnwrap(try store.readJSON(fixture)["cases"] as? [BJJJSON])
+        for name in ["variable-frame-rate", "120fps-original"] {
+            let item = try XCTUnwrap(cases.first(where: { $0.s("name") == name }))
+            let path = root.appendingPathComponent("multi-\(name).mp4")
+            try XCTUnwrap(Data(base64Encoded: item.s("movieBase64"))).write(to: path); sources.append(path)
+        }
+        let dolbyFixture = try XCTUnwrap(Bundle(for: BJJNativeTests.self).url(forResource: "dolby84-conformance", withExtension: "json"))
+        let dolby = root.appendingPathComponent("multi-dolby.mp4")
+        try XCTUnwrap(Data(base64Encoded: try store.readJSON(dolbyFixture).s("movieBase64"))).write(to: dolby); sources.append(dolby)
+        for (index, original) in sources.enumerated() {
+            let originalHash = try BJJAssets.digest(original)
+            let initial = try await BJJService(store: store).importFile(original, originalName: "multi.mp4")
+            let media = try await BJJMedia.inspect(original, reference: initial.source.s("asset"), originalName: "multi.mp4")
+            let generator = AVAssetImageGenerator(asset: media.asset)
+            generator.requestedTimeToleranceBefore = .zero; generator.requestedTimeToleranceAfter = .zero
+            var holds = [BJJJSON]()
+            for boundary in [initial.duration * 0.25, initial.duration * 0.5, initial.duration - 0.02] {
+                let frame = try await generator.image(at: CMTime(seconds: media.videoRange.start.seconds + boundary, preferredTimescale: 48000))
+                holds.append(["id": UUID().uuidString.lowercased(), "sourceTicks": (boundary * 48000).rounded(),
+                    "durationTicks": 24000, "frozenPTS": max(0, frame.actualTime.seconds - media.videoRange.start.seconds), "frameResolved": true])
+            }
+            let timeline = BJJReviewTimeline(sourceDuration: initial.duration, holds: holds)
+            let takeID = UUID().uuidString.lowercased(), reference = "voiceover/\(takeID).wav"
+            // Stop while the third hold is active; retain its full microphone interval.
+            let takeLength = (timeline.spans.last(where: { $0.hold != nil })!.end * 48000).rounded() / 48000
+            let wave = try store.safeURL(initial.id, reference)
+            try tone(wave, frequency: 880, duration: takeLength, pcm16: true)
+            let count = try AVAudioFile(forReading: wave).length
+            let duration = Double(count) / 48000
+            let take: BJJJSON = ["id": takeID, "asset": reference, "durationSec": duration, "sampleCount": count,
+                "gain": 1.0, "muted": false, "recordedAt": BJJProject.now(), "codec": "pcm_s16le", "sampleRate": 48000,
+                "channels": 1, "placements": timeline.placements(start: 0, duration: duration)]
+            let receipt: BJJJSON = ["kind": "review-narration-v1", "operationId": UUID().uuidString.lowercased(),
+                "baseRevision": initial.revision, "take": take, "holds": holds]
+            try store.registerReviewReceipt(initial.id, receipt: receipt)
+            let reopened = try BJJStore(root: root).loadRecoveringRecordings(initial.id)
+            let waveHash = try BJJAssets.digest(wave)
+            let mix = root.appendingPathComponent("multi-mix-\(index).caf")
+            _ = try await BJJAudioComposition.preview(project: reopened, store: store, target: mix)
+            let exported = root.appendingPathComponent("multi-export-\(index).mp4")
+            try await BJJRenderer().render(media: media, project: reopened, store: store, output: exported) { _ in }
+            for span in timeline.spans where span.hold != nil {
+                for url in [mix, exported] {
+                    let energy = try await audioEnergy(url, from: span.output + 0.1, to: span.end - 0.1)
+                    XCTAssertGreaterThan(energy, 0.05, "Narration must remain audible inside every hold, fixture \(index)")
+                }
+            }
+            let result = try await BJJMedia.inspect(exported, reference: "exports/multi.mp4", originalName: "multi.mp4")
+            XCTAssertEqual(result.videoRange.duration.seconds, timeline.duration, accuracy: 0.08)
+            XCTAssertEqual(try BJJAssets.digest(original), originalHash)
+            XCTAssertEqual(try BJJAssets.digest(wave), waveHash)
+        }
+    }
     func testPauseNarrationReceiptReopenUndoPreviewAndMP4() async throws {
         executionTimeAllowance = 300
         let service = try BJJService(store: store)

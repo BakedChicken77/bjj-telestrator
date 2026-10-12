@@ -143,21 +143,46 @@ struct BJJReviewTimeline {
                 }
                 guard let sample = pictureSample() else { throw reader.error ?? BJJError.invalid("The paused frame is unavailable.") }
                 let first = CMSampleBufferGetPresentationTimeStamp(sample)
-                var frameDuration = CMSampleBufferGetOutputDuration(sample)
-                if let next = pictureSample() {
-                    let interval = CMTimeSubtract(CMSampleBufferGetPresentationTimeStamp(next), first)
-                    if interval.isNumeric && interval.seconds > 0 { frameDuration = interval }
-                } else if !frameDuration.isNumeric || frameDuration.seconds <= 0 {
-                    frameDuration = CMTimeSubtract(CMTimeRangeGetEnd(range), first)
+                var nextPTS: CMTime?
+                // Decoder preroll/repeated timestamps are not a frame boundary.
+                // Keep reading until a strictly later picture or real EOF.
+                while let next = pictureSample() {
+                    let time = CMSampleBufferGetPresentationTimeStamp(next)
+                    if time.isNumeric, CMTimeCompare(time, first) > 0 { nextPTS = time; break }
                 }
+                if cancelled() { throw BJJError.cancelled }
+                if reader.status == .failed { throw reader.error ?? BJJError.invalid("Cannot decode the paused frame.") }
+                let sampleDuration = CMSampleBufferGetDuration(sample)
+                let frame = try Self.pausedFrameRange(first: first, next: nextPTS,
+                    sampleDuration: sampleDuration, range: range)
                 reader.cancelReading()
-                guard frameDuration.seconds > 0 else { throw BJJError.invalid("Paused frame has no duration.") }
-                try track.insertTimeRange(CMTimeRange(start: first, duration: frameDuration), of: source, at: at)
-                track.scaleTimeRange(CMTimeRange(start: at, duration: frameDuration), toDuration: CMTime(seconds: span.duration, preferredTimescale: 48000))
+                try track.insertTimeRange(frame, of: source, at: at)
+                track.scaleTimeRange(CMTimeRange(start: at, duration: frame.duration), toDuration: CMTime(seconds: span.duration, preferredTimescale: 48000))
             } else {
                 try track.insertTimeRange(CMTimeRange(start: CMTimeAdd(range.start, CMTime(seconds: span.source, preferredTimescale: 48000)), duration: CMTime(seconds: span.duration, preferredTimescale: 48000)), of: source, at: at)
             }
         }
+    }
+    /// Use observed picture boundaries, not nominal FPS or a trimmed output
+    /// duration. A final picture lasts only to the validated track end.
+    static func pausedFrameRange(first: CMTime, next: CMTime?, sampleDuration: CMTime,
+                                 range: CMTimeRange) throws -> CMTimeRange {
+        let end = CMTimeRangeGetEnd(range)
+        guard first.isNumeric, end.isNumeric, CMTimeCompare(first, range.start) >= 0,
+              CMTimeCompare(first, end) < 0 else {
+            throw BJJError.domain("MEDIA_PAUSED_FRAME_INVALID", "The paused frame is outside the video. Your review and narration were preserved.")
+        }
+        let boundary: CMTime
+        if let next, next.isNumeric, CMTimeCompare(next, first) > 0 {
+            boundary = CMTimeMinimum(next, end)
+        } else if sampleDuration.isNumeric, sampleDuration.seconds > 0 {
+            boundary = CMTimeMinimum(CMTimeAdd(first, sampleDuration), end)
+        } else { boundary = end }
+        let duration = CMTimeSubtract(boundary, first)
+        guard duration.isNumeric, duration.seconds > 0 else {
+            throw BJJError.domain("MEDIA_PAUSED_FRAME_INVALID", "The paused frame timing could not be resolved. Your review and narration were preserved.")
+        }
+        return CMTimeRange(start: first, duration: duration)
     }
 }
 
