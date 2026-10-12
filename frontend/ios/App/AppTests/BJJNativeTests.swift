@@ -1399,7 +1399,7 @@ import UniformTypeIdentifiers
         XCTAssertTrue((imported.json["requiredCapabilities"] as! [String]).contains(BJJMediaSupport.capability))
         var invalid = imported.json; invalid["requiredCapabilities"] = ["project.revisions.v1", BJJColor.capability]
         XCTAssertThrowsError(try BJJProject(invalid))
-        let take = try clip(imported)
+        let take = try clip(imported, pcm16: true)
         var document = try store.load(imported.id).json
         document["annotations"] = [annotation(start: 0.5, end: 1.5)]
         let project = try store.save(BJJProject(document))
@@ -2023,12 +2023,12 @@ import UniformTypeIdentifiers
         let file = try AVAudioFile(forWriting: url, settings: pcm16 ? AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 48000, channels: 1, interleaved: true)!.settings : format.settings)
         try file.write(from: buffer)
     }
-    private func clip(_ p: BJJProject) throws -> BJJJSON {
+    private func clip(_ p: BJJProject, pcm16: Bool = false) throws -> BJJJSON {
         let id = UUID().uuidString.lowercased(), reference = "voiceover/\(UUID().uuidString.lowercased()).wav"
-        try tone(store.directory(p.id).appendingPathComponent(reference), frequency: 880, duration: 1)
+        try tone(store.directory(p.id).appendingPathComponent(reference), frequency: 880, duration: 1, pcm16: pcm16)
         let value: BJJJSON = ["id": id, "asset": reference, "startSec": 1.0, "durationSec": 1.0, "endSec": 2.0,
             "gain": 1.0, "muted": false, "timingOffsetMs": 125.0, "recordedAt": BJJProject.now(),
-            "codec": "pcm_f32le", "sampleRate": 48000, "channels": 1]
+            "codec": pcm16 ? "pcm_s16le" : "pcm_f32le", "sampleRate": 48000, "channels": 1]
         try store.registerClip(p.id, clip: value)
         return value
     }
