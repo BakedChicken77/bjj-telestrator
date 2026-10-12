@@ -444,6 +444,9 @@ public class BJJNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDeleg
             guard let item = results.first?.itemProvider else { _ = try? service.mediaJobs.cancel(jobId); call.resolve(["cancelled": true]); return }
             let name = item.suggestedName ?? "Rolling video.mov"
             do {
+                // Legacy browser bridge intentionally retains its compatible picker.
+                // Do not misattribute its delivered rendition to the Files path.
+                service.mediaJobs.configurePhoto(jobId, policy: .compatible, progressSampling: .disabled)
                 let (target, worker) = try service.mediaJobs.beginImport(jobId)
                 let store = service.store
                 // The provider URL expires when its callback returns. Stream it

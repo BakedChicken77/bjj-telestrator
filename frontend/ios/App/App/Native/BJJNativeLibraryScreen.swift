@@ -14,7 +14,8 @@ struct BJJNativeHome: View {
     @State private var previousReviews = false
     @State private var afterLibrary: (() -> Void)?
     @State private var photos = false
-    private let photoPolicy = BJJPhotoImportPolicy.configured
+    @State private var photoPolicy = BJJPhotoImportPolicy.configured
+    @State private var photoRetryOf: String?
     @State private var files = false
     @State private var backupImport = false
     @State private var recentlyDeleted = false
@@ -39,7 +40,7 @@ struct BJJNativeHome: View {
                             .accessibilityHidden(true)
                         Text("Your next perspective starts here.").font(.headline).foregroundStyle(.white)
                         Menu {
-                            Button("Choose from Photos", systemImage: "photo.on.rectangle") { photos = true }
+                            Button("Choose from Photos", systemImage: "photo.on.rectangle") { photoPolicy = .configured; photoRetryOf = nil; photos = true }
                             Button("Choose from Files", systemImage: "folder") { backupImport = false; files = true }
                             Button("Previous reviews", systemImage: "clock") { previousReviews = true }
                         } label: { Label("Select a video", systemImage: "plus.circle.fill").frame(minHeight: 44) }
@@ -84,9 +85,11 @@ struct BJJNativeHome: View {
                 }
             }
             .sheet(isPresented: $photos) {
-                BJJNativePhotoPicker(policy: photoPolicy) { item in
+                let policy = photoPolicy
+                let retryOf = photoRetryOf
+                BJJNativePhotoPicker(policy: policy) { item in
                     photos = false
-                    if let item { Task { await library.importPhoto(item, policy: photoPolicy) } }
+                    if let item { Task { await library.importPhoto(item, policy: policy, retryOf: retryOf) } }
                 }.ignoresSafeArea()
             }
             .fileImporter(isPresented: $files,
@@ -119,6 +122,12 @@ struct BJJNativeHome: View {
                 }
             } message: { Text("You can restore this review later. Original reviews remain unchanged.") }
             .alert("Review needs attention", isPresented: Binding(get: { library.error != nil }, set: { if !$0 { library.error = nil } })) {
+                if let retryOf = library.compatibleRetryOf {
+                    Button("Choose compatible copy") {
+                        photoPolicy = .compatible; photoRetryOf = retryOf
+                        library.error = nil; photos = true
+                    }.accessibilityHint("Select the same video again in Photos. Preparing a compatible copy may take time.")
+                }
                 Button("Share diagnostics") { library.error = nil; Task { await library.shareImportDiagnostics() } }
                 Button("OK") { library.error = nil }
             } message: { Text(library.error ?? "") }
@@ -129,7 +138,7 @@ struct BJJNativeHome: View {
         List {
                 Section {
                     Menu {
-                        Button("Choose from Photos", systemImage: "photo.on.rectangle") { closeLibrary { photos = true } }
+                        Button("Choose from Photos", systemImage: "photo.on.rectangle") { closeLibrary { photoPolicy = .configured; photoRetryOf = nil; photos = true } }
                         Button("Choose from Files", systemImage: "folder") { closeLibrary { backupImport = false; files = true } }
                         Button("Restore project backup", systemImage: "arrow.down.doc") { closeLibrary { backupImport = true; files = true } }
                     } label: { Label("New review", systemImage: "plus.circle.fill").font(.headline).frame(minHeight: 44) }

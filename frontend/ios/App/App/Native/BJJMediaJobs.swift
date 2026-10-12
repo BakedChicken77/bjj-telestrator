@@ -22,6 +22,12 @@ struct BJJMediaJob: Codable {
     var projectRevision: Int?
     var timings: [String: Double]?
     var mediaProfile: [String: String]?
+    var descriptor: BJJMediaDescriptor?
+    var supportPolicyVersion: String?
+    var importSource: String?
+    var conversionRoute: String?
+    var supportDecision: String?
+    var rejectionReason: String?
     // Optional so historical records remain readable without inventing provenance.
     var appVersion: String?
     var appBuild: String?
@@ -312,8 +318,9 @@ final class BJJMediaWork {
         jobs[id] = job; try? persist(job)
     }
     func configurePhoto(_ id: String, policy: BJJPhotoImportPolicy,
-                        progressSampling: BJJPhotoProgressSampling = .configured) {
+                        progressSampling: BJJPhotoProgressSampling = .configured, retryOf: String? = nil) {
         guard var job = jobs[id], job.status == "queued" else { return }
+        job.importSource = "photos"; job.retryOf = retryOf
         job.requestedRepresentation = policy.rawValue; job.importPolicyVersion = "photos-ab-v1"
         job.providerProgressSampling = progressSampling.rawValue
         jobs[id] = job; try? persist(job)
@@ -329,6 +336,7 @@ final class BJJMediaWork {
                               appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
                               appBuild: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String,
                               createdAt: BJJProject.now())
+        job.importSource = project == nil ? "files" : "retained_source"
         job.sessionId = BJJDiagnostics.shared.sessionID
         job.operationId = job.jobId; job.attemptId = UUID().uuidString.lowercased()
         job.lifecycleState = lifecycleState; job.lifecycleSource = lifecycleSource
@@ -453,7 +461,17 @@ final class BJJMediaWork {
             }
             worker.metric("source_hash_before", seconds: ProcessInfo.processInfo.systemUptime - stageStart)
             stageStart = ProcessInfo.processInfo.systemUptime
-            let media = try await BJJMedia.inspect(source, reference: sourceReference, originalName: originalName)
+            let media = try await BJJMedia.inspect(source, reference: sourceReference, originalName: originalName) { [weak self] descriptor in
+                guard let self, let current = self.jobs[id], !current.terminal, current.stopReason == nil else { return }
+                try? self.update(id) {
+                    $0.descriptor = descriptor; $0.supportPolicyVersion = BJJMediaSupport.version
+                    $0.conversionRoute = descriptor.route; $0.supportDecision = descriptor.decision
+                    $0.rejectionReason = descriptor.rejectionReason
+                }
+            }
+            if snapshot == nil, media.json["dolbyVision"] as? Bool == true, !BJJMediaSupport.dolbyImportsEnabled {
+                throw BJJError.domain("MEDIA_DOLBY_UNSUPPORTED", "New Dolby Vision imports are temporarily disabled. Existing reviews are unchanged. Choose a compatible copy from Photos or an SDR copy.")
+            }
             worker.metric("inspect", seconds: ProcessInfo.processInfo.systemUptime - stageStart)
             try update(id) { $0.mediaProfile = ["sourceSHA256": hash, "codec": media.json.s("codec"), "durationSec": String(media.videoRange.duration.seconds), "dimensions": "\(Int(media.orientedSize.width))x\(Int(media.orientedSize.height))", "fps": String(media.fps), "hdr": String(BJJColor.isHDR(media.json))] }
             if let snapshot {
@@ -499,7 +517,7 @@ final class BJJMediaWork {
                     let now = BJJProject.now()
                     let title = String(URL(fileURLWithPath: originalName).deletingPathExtension().lastPathComponent.prefix(160)).trimmingCharacters(in: .whitespacesAndNewlines)
                     json = ["schemaVersion": 1, "projectId": job.projectId, "projectName": title.isEmpty ? "Rolling review" : title,
-                            "requiredCapabilities": BJJColor.isHDR(media.json) ? [BJJColor.capability] : [String](),
+                            "requiredCapabilities": BJJMediaSupport.capabilities(media.json),
                             "createdAt": now, "updatedAt": now, "source": media.json, "proxy": proxy,
                             "settings": ["defaultAnnotationDuration": 5.0, "seekStepSec": 0.1, "largeSeekStepSec": 1.0, "originalAudioGain": 1.0, "originalAudioMuted": false, "voiceoverMasterGain": 1.0],
                             "exportSettings": ["fps": min(60, media.fps), "crf": 23, "preset": "medium"], "annotations": [BJJJSON](), "voiceovers": [BJJJSON]()]

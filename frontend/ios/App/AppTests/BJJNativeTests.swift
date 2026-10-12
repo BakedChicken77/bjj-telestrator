@@ -655,7 +655,7 @@ import UniformTypeIdentifiers
         XCTAssertEqual(record.s("providerOutcome"), "failed")
         XCTAssertEqual(record.s("importPhase"), "waiting_for_photos")
         XCTAssertEqual(record.s("requestedRepresentation"), "automatic")
-        XCTAssertEqual(report["version"] as? Int, 3)
+        XCTAssertEqual(report["version"] as? Int, 4)
         let events = (report["diagnostics"] as? BJJJSON)?["events"] as? [BJJJSON] ?? []
         let operationID = try XCTUnwrap(record["operationId"] as? String)
         // Launch/global breadcrumbs legitimately have no operation correlation.
@@ -826,12 +826,6 @@ import UniformTypeIdentifiers
         XCTAssertEqual(recovered.errorCode, "JOB_CANCELLED")
     }
     func testPhotoPickerRequestsCompatibleVideoAndReportsHonestProgress() {
-        XCTAssertTrue(BJJMedia.needsCompatibleCopy(subtype: "hvc1", atoms: ["dvcC": Data([1])]))
-        XCTAssertTrue(BJJMedia.needsCompatibleCopy(subtype: "hev1", atoms: ["dvvC": Data([1])]))
-        XCTAssertTrue(BJJMedia.needsCompatibleCopy(subtype: "dvh1", atoms: [:]))
-        XCTAssertTrue(BJJMedia.needsCompatibleCopy(subtype: "dvhe", atoms: [:]))
-        XCTAssertFalse(BJJMedia.needsCompatibleCopy(subtype: "hvc1", atoms: [:]))
-        XCTAssertFalse(BJJMedia.needsCompatibleCopy(subtype: "avc1", atoms: [:]))
         let configuration = BJJNativePhotoPicker.configuration(policy: .compatible)
         XCTAssertEqual(configuration.preferredAssetRepresentationMode, .compatible)
         XCTAssertEqual(BJJNativePhotoPicker.configuration().preferredAssetRepresentationMode,
@@ -1347,6 +1341,137 @@ import UniformTypeIdentifiers
             }
             XCTAssertFalse(FileManager.default.fileExists(atPath: staging.path), item.s("name"))
         }
+    }
+    private func dolbyDescriptor(_ record: Data?, codec: String = "hvc1", transfer: String = "arib-std-b67") -> BJJMediaDescriptor {
+        var hvc = Data(repeating: 0, count: 23); hvc[17] = 2
+        var atoms: [String: Any] = ["hvcC": hvc]
+        if let record { atoms["dvvC"] = record }
+        return BJJMediaSupport.describe(codec: codec, atoms: atoms, transfer: transfer, primaries: "bt2020", matrix: "bt2020nc")
+    }
+    func testDolbyConfigurationParsingFailsClosed() throws {
+        var record = Data([1, 0, 16, 29, 64] + Array(repeating: 0, count: 19))
+        let supported = dolbyDescriptor(record)
+        XCTAssertEqual(supported.dolbyProfile, 8); XCTAssertEqual(supported.compatibilityID, 4)
+        XCTAssertEqual(supported.bitDepth, 10); XCTAssertEqual(supported.route, "dolby84_to_sdr")
+        XCTAssertNoThrow(try BJJMediaSupport.require(supported))
+        for length in 0..<24 { XCTAssertThrowsError(try BJJMediaSupport.require(dolbyDescriptor(Data(record.prefix(length))))) }
+        XCTAssertThrowsError(try BJJMediaSupport.require(dolbyDescriptor(nil, codec: "dvh1")))
+        XCTAssertThrowsError(try BJJMediaSupport.require(dolbyDescriptor(record, transfer: "smpte2084")))
+        for (index, value) in [(0, 2), (1, 1), (2, 10), (4, 16), (3, 31), (3, 25), (3, 28)] {
+            var invalid = record; invalid[index] = UInt8(value)
+            XCTAssertThrowsError(try BJJMediaSupport.require(dolbyDescriptor(invalid)))
+        }
+        record.append(0)
+        XCTAssertThrowsError(try BJJMediaSupport.require(dolbyDescriptor(record)))
+        XCTAssertFalse(dolbyDescriptor(nil, codec: "avc1", transfer: "bt709").dolbyVision)
+        var hvc = Data(repeating: 0, count: 23); hvc[17] = 2
+        let conflict = BJJMediaSupport.describe(codec: "hvc1", atoms: ["dvcC": Data(record.dropLast()), "dvvC": Data([1]), "hvcC": hvc], transfer: "arib-std-b67", primaries: "bt2020", matrix: "bt2020nc")
+        XCTAssertThrowsError(try BJJMediaSupport.require(conflict))
+    }
+    func testCompatibleRecoveryRequiresSpecificFailureAndNeverLoops() throws {
+        let jobs = try BJJMediaJobs(store: store)
+        var job = try jobs.create(); job.status = "failed"; job.errorCode = "MEDIA_DOLBY_UNSUPPORTED"
+        XCTAssertTrue(BJJNativeLibrary.compatibleRecovery(for: job))
+        job.importSource = "photos"; job.requestedRepresentation = "automatic"
+        XCTAssertTrue(BJJNativeLibrary.compatibleRecovery(for: job))
+        job.requestedRepresentation = "compatible"
+        XCTAssertFalse(BJJNativeLibrary.compatibleRecovery(for: job))
+        job.importSource = "files"; job.retryOf = UUID().uuidString.lowercased()
+        XCTAssertFalse(BJJNativeLibrary.compatibleRecovery(for: job))
+        job.retryOf = nil
+        for code in ["JOB_CANCELLED", "MEDIA_BACKGROUND_EXPIRED", "STORAGE_LOW", "MEDIA_UNSUPPORTED"] {
+            job.errorCode = code; XCTAssertFalse(BJJNativeLibrary.compatibleRecovery(for: job))
+        }
+    }
+    func testRealDolby84RetainsOriginalAcrossImportNarrationRepairAndBackup() async throws {
+        let fixture = try XCTUnwrap(Bundle(for: BJJNativeTests.self).url(forResource: "dolby84-conformance", withExtension: "json"))
+        let item = try store.readJSON(fixture)
+        let original = root.appendingPathComponent("dolby.mp4")
+        try XCTUnwrap(Data(base64Encoded: item.s("movieBase64"))).write(to: original)
+        XCTAssertEqual(try BJJAssets.digest(original), item.s("sha256"))
+        var observed: BJJMediaDescriptor?
+        let media = try await BJJMedia.inspect(original, reference: "source/dolby.mp4", originalName: "dolby.mp4") { observed = $0 }
+        XCTAssertEqual(observed?.route, "dolby84_to_sdr")
+        XCTAssertEqual(media.json["dolbyVision"] as? Bool, true)
+        XCTAssertEqual(media.json["dolbyProfile"] as? Int, 8)
+        let service = try BJJService(store: store)
+        let imported = try await service.importFile(original, originalName: "dolby.mp4")
+        XCTAssertTrue((imported.json["requiredCapabilities"] as! [String]).contains(BJJMediaSupport.capability))
+        var invalid = imported.json; invalid["requiredCapabilities"] = ["project.revisions.v1", BJJColor.capability]
+        XCTAssertThrowsError(try BJJProject(invalid))
+        let take = try clip(imported, pcm16: true)
+        var document = try store.load(imported.id).json
+        document["annotations"] = [annotation(start: 0.5, end: 1.5)]
+        let project = try store.save(BJJProject(document))
+        XCTAssertEqual(project.voiceovers.first?.s("id"), take.s("id"))
+        let reopened = try BJJStore(root: root).load(project.id)
+        let mix = root.appendingPathComponent("dolby-preview.caf")
+        _ = try await BJJAudioComposition.preview(project: reopened, store: store, target: mix)
+        let energy = try await audioEnergy(mix, from: 1.2, to: 1.8)
+        XCTAssertGreaterThan(energy, 0.05)
+        let result = root.appendingPathComponent("dolby-export.mp4")
+        try await BJJRenderer().render(media: media, project: reopened, store: store, output: result) { _ in }
+        for url in [try store.asset(project.id, project.proxy.s("asset")), result] {
+            let output = try await BJJMedia.inspect(url, reference: "proxy/output.mp4", originalName: "output.mp4")
+            XCTAssertEqual(output.json.s("codec"), "avc1")
+            XCTAssertEqual(output.json.s("transferFunction"), "bt709")
+            XCTAssertEqual(output.json.s("colorPrimaries"), "bt709")
+            XCTAssertEqual(output.json["dolbyVision"] as? Bool, false)
+            XCTAssertEqual(output.videoRange.duration.seconds, media.videoRange.duration.seconds, accuracy: 0.1)
+            XCTAssertEqual(output.orientedSize, media.orientedSize)
+        }
+        func thumbnail(_ url: URL) throws -> [UInt8] {
+            let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+            generator.requestedTimeToleranceBefore = .zero; generator.requestedTimeToleranceAfter = .zero
+            let image = try generator.copyCGImage(at: CMTime(seconds: 0.25, preferredTimescale: 600), actualTime: nil)
+            var bytes = [UInt8](repeating: 0, count: 32 * 18 * 4)
+            bytes.withUnsafeMutableBytes { raw in
+                let context = CGContext(data: raw.baseAddress, width: 32, height: 18, bitsPerComponent: 8, bytesPerRow: 128,
+                    space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+                context.draw(image, in: CGRect(x: 0, y: 0, width: 32, height: 18))
+            }
+            return bytes.enumerated().filter { $0.offset % 4 != 3 }.map { $0.element }
+        }
+        let previewRGB = try thumbnail(store.asset(project.id, project.proxy.s("asset")))
+        let exportRGB = try thumbnail(result)
+        let differences = zip(previewRGB, exportRGB).map { abs(Int($0) - Int($1)) }
+        XCTAssertLessThan(Double(differences.reduce(0, +)) / Double(differences.count), 8)
+        XCTAssertGreaterThan(Int(exportRGB.max()!) - Int(exportRGB.min()!), 100, "Dolby image collapsed to flat tones")
+        let exported = try await BJJMedia.inspect(result, reference: "exports/output.mp4", originalName: "output.mp4")
+        XCTAssertEqual(exported.json.s("audioCodec"), "aac")
+        let exportEnergy = try await audioEnergy(result, from: 1.2, to: 1.8)
+        XCTAssertGreaterThan(exportEnergy, 0.05)
+        XCTAssertGreaterThan(try redPixels(result, time: 0.75), 1500)
+        XCTAssertEqual(try redPixels(result, time: 2), 0)
+        let repair = try service.mediaJobs.repair(project.id, revision: project.revision)
+        while !(try service.mediaJobs.get(repair.jobId)).terminal { try await Task.sleep(nanoseconds: 20_000_000) }
+        XCTAssertEqual(try service.mediaJobs.get(repair.jobId).status, "completed")
+        let repaired = try store.load(project.id)
+        let backup = root.appendingPathComponent("dolby.bjjproj")
+        try BJJProjectPackage.backup(store, project: repaired, output: backup, includeProxy: false, work: BJJPackageWork())
+        let restored = try await BJJProjectPackage.restore(store, source: backup, staging: root.appendingPathComponent("dolby-restore"), id: UUID().uuidString.lowercased(), work: BJJPackageWork())
+        XCTAssertEqual(restored.source["dolbyVision"] as? Bool, true)
+        XCTAssertEqual(restored.voiceovers.count, 1)
+        for p in [repaired, restored] {
+            XCTAssertEqual(try BJJAssets.digest(store.asset(p.id, p.source.s("asset"))), item.s("sha256"))
+        }
+        // Unsupported profile evidence must survive failure, reload and export.
+        var bytes = try Data(contentsOf: original)
+        let atom = try XCTUnwrap(bytes.range(of: Data("dvvC".utf8)))
+        bytes[atom.upperBound + 2] = 10 // Deliberately invalid *negative* fixture: profile 5 marker, HLG payload.
+        let rejected = root.appendingPathComponent("unsupported.mp4"); try bytes.write(to: rejected)
+        let job = try service.mediaJobs.create()
+        let (target, worker) = try service.mediaJobs.beginImport(job.jobId)
+        try BJJMediaWork.copy(rejected, target, store: store, work: worker)
+        do { _ = try await service.mediaJobs.finishImport(job.jobId, originalName: "private-name.mp4"); XCTFail("Unsupported profile accepted") }
+        catch { XCTAssertEqual((error as? BJJError)?.code, "MEDIA_DOLBY_UNSUPPORTED") }
+        let failed = try service.mediaJobs.get(job.jobId)
+        XCTAssertEqual(failed.phaseAtStop, "inspecting"); XCTAssertEqual(failed.descriptor?.dolbyProfile, 5)
+        XCTAssertEqual(failed.supportDecision, "rejected"); XCTAssertEqual(failed.conversionRoute, "unsupported")
+        let reload = try BJJMediaJobs(store: store)
+        XCTAssertEqual(try reload.get(job.jobId).descriptor, failed.descriptor)
+        XCTAssertEqual(try store.load(project.id).source["dolbyVision"] as? Bool, true)
+        print("Dolby 8.4 conformance: original hash preserved, SDR proxy/export, AAC narration, repair and source-only backup restored")
     }
     func testRealPQAndHLGProduceSDRBeforeCompositing() async throws {
         let fixture = try XCTUnwrap(Bundle(for: BJJNativeTests.self).url(forResource: "hdr-conformance", withExtension: "json"))
@@ -1898,12 +2023,12 @@ import UniformTypeIdentifiers
         let file = try AVAudioFile(forWriting: url, settings: pcm16 ? AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 48000, channels: 1, interleaved: true)!.settings : format.settings)
         try file.write(from: buffer)
     }
-    private func clip(_ p: BJJProject) throws -> BJJJSON {
+    private func clip(_ p: BJJProject, pcm16: Bool = false) throws -> BJJJSON {
         let id = UUID().uuidString.lowercased(), reference = "voiceover/\(UUID().uuidString.lowercased()).wav"
-        try tone(store.directory(p.id).appendingPathComponent(reference), frequency: 880, duration: 1)
+        try tone(store.directory(p.id).appendingPathComponent(reference), frequency: 880, duration: 1, pcm16: pcm16)
         let value: BJJJSON = ["id": id, "asset": reference, "startSec": 1.0, "durationSec": 1.0, "endSec": 2.0,
             "gain": 1.0, "muted": false, "timingOffsetMs": 125.0, "recordedAt": BJJProject.now(),
-            "codec": "pcm_f32le", "sampleRate": 48000, "channels": 1]
+            "codec": pcm16 ? "pcm_s16le" : "pcm_f32le", "sampleRate": 48000, "channels": 1]
         try store.registerClip(p.id, clip: value)
         return value
     }

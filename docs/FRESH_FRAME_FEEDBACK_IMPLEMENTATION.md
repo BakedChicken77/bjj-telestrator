@@ -105,3 +105,7 @@ Remaining physical iPhone validation, controlled import benchmarks and exact fin
 ## October 5: diagnostic reliability and policy experiment candidate
 
 See [Photos import experiment](PHOTOS_IMPORT_EXPERIMENT.md) for the focused Phase 1 changes, diagnostic envelope v3, signed configuration selection, reproducible run sheet and physical gates. Compatible remains the default. The automatic comparison is prepared, not a measured fix; Phase 3 adoption/recovery and TestFlight publication remain gated.
+
+## October 11 native media expansion candidate
+
+See [native media expansion](NATIVE_MEDIA_IMPORT_EXPANSION.md) for the current support boundary, diagnostic envelope 4, tests and outstanding phone gates. Photos policy and provider progress experiment remain unchanged from 38.1. Historic unsupported-Dolby descriptions above apply to earlier builds.

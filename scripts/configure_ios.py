@@ -157,6 +157,7 @@ def main() -> None:
     child(group, "children", export_fixture)
     child(resources, "files", export_build)
     for name, fixture_ref, fixture_build in [
+        ("dolby84-conformance", "AA243CEAFC1646D598FBC030", "BB243CEAFC1646D598FBC030"),
         ("hdr-conformance", "C79F983F1064F0A52BAD2C31", "028C1F41097071DDEB55A7F7"),
         ("package-conformance", "365DDA6A67754651C623496B", "5715EDCC5112F33CC022E77E"),
         ("media-timing-conformance", "D2F40119B6AEE101CE409B21", "9E7C12F412DE8F0B499CFB9A"),
