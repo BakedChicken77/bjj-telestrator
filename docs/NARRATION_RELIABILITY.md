@@ -22,8 +22,7 @@ the reported voice silence cannot yet be attributed to capture versus mixing.
   pictures. Invalid/out-of-range timestamps still fail safely with a specific
   error code and preservation guidance.
 - Recording checks microphone availability and reports one finite, rounded peak
-  meter value (`recordingSignal`, dBFS) at stop. Extremely low observed signal
-  produces a warning while preserving the take; no speech recognition or audio
+  meter value (`recordingSignal`, dBFS) at stop. No speech recognition or audio
   content enters diagnostics. This is capture-meter evidence, not proof that
   the persisted WAV or mixed output contains the voice.
 - Saved takes are separately scanned off the main actor with bounded PCM buffers;
@@ -34,6 +33,8 @@ the reported voice silence cannot yet be attributed to capture versus mixing.
 - Preview preparation has separate success/failure breadcrumbs; errors retain
   the bounded domain/code chain. Historical `audioPreview` means an attempt,
   not successful preparation. Existing diagnostic retention/export rules remain.
+  A failed preparation no longer lets Play run a stale, muted player item:
+  Play retries preparation, and new recording is blocked until it succeeds.
 - Regression tests combine three pauses (including the final source frame),
   stop while paused, PCM16 narration, reopen, preview and MP4 energy checks on
   SDR, VFR, high-frame-rate and real Dolby 8.4 media. Source/WAV hashes must not

@@ -218,6 +218,30 @@ import UniformTypeIdentifiers
         XCTAssertGreaterThan(fallbackFrames.count, 10)
         XCTAssertTrue(fallbackFrames.allSatisfy { $0.rgb[2] > 200 && $0.rgb[1] < 64 }, "Unacknowledged pause must repeat the picture covering 0.99 seconds, before the green transition")
     }
+    func testFailedAudioPreviewCannotPlayStaleMutedItemAndCanRecover() async throws {
+        let initial = try await BJJService(store: store).importFile(try await sourceVideo(audio: true), originalName: "retry.mp4")
+        let editor = try BJJNativeEditorSession(project: initial, store: store, preferences: nil)
+        defer { editor.close() }
+        await editor.prepareAudio()
+        XCTAssertFalse(editor.audioPreviewFailed)
+        let proxy = try store.asset(initial.id, initial.proxy.s("asset"))
+        let held = root.appendingPathComponent("held-test-proxy.mp4")
+        try FileManager.default.moveItem(at: proxy, to: held)
+        defer { if FileManager.default.fileExists(atPath: held.path) { try? FileManager.default.moveItem(at: held, to: proxy) } }
+        await editor.prepareAudio()
+        XCTAssertTrue(editor.audioPreviewFailed)
+        XCTAssertTrue(editor.player.isMuted)
+        editor.seekOutput(0, resume: true)
+        try await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertEqual(editor.player.rate, 0)
+        await editor.startRecording()
+        XCTAssertFalse(editor.recording)
+        try FileManager.default.moveItem(at: held, to: proxy)
+        await editor.prepareAudio()
+        XCTAssertFalse(editor.audioPreviewFailed)
+        XCTAssertFalse(editor.player.isMuted)
+        XCTAssertEqual(try store.load(initial.id).revision, initial.revision)
+    }
     func testRecordedPCMCheckDistinguishesSilenceWithoutChangingFiles() throws {
         for pcm16 in [true, false] {
             let audible = root.appendingPathComponent("signal-\(pcm16).wav")

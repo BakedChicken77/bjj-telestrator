@@ -155,7 +155,6 @@ import UIKit
         let lastPower = level
         if lastPower.isFinite { peakPower = max(peakPower, lastPower) }
         if capture != nil { BJJDiagnostics.shared.record(.recordingSignal, value: Double(max(-160, min(0, peakPower))).rounded()) }
-        let savedReason = reason ?? (peakPower < -80 ? "No microphone signal was detected. The take was preserved. Check the microphone connection and watch the level meter while speaking before recording again." : nil)
         let startSec = start
         if let began = pauseStart, let capture {
             let ticks = ((capture.currentTime - began) * 48000).rounded()
@@ -183,7 +182,7 @@ import UIKit
                     "durationSec": length, "endSec": startSec + length, "gain": 1.0, "muted": false,
                     "timingOffsetMs": 0.0, "recordedAt": BJJProject.now(), "codec": "pcm_s16le",
                     "sampleRate": Int(audio.fileFormat.sampleRate), "channels": Int(audio.fileFormat.channelCount)]
-                try storage.registerClip(document.id, clip: clip); finished?(clip, nil, savedReason)
+                try storage.registerClip(document.id, clip: clip); finished?(clip, nil, reason)
             } else {
                 let ordered = (document.reviewTimeline.holds + holds).enumerated().sorted {
                     $0.element.n("sourceTicks") == $1.element.n("sourceTicks") ? $0.offset < $1.offset : $0.element.n("sourceTicks") < $1.element.n("sourceTicks")
@@ -196,7 +195,7 @@ import UIKit
                 let receipt: BJJJSON = ["kind": "review-narration-v1", "operationId": UUID().uuidString.lowercased(),
                     "baseRevision": document.revision, "baseProject": document.json, "take": take, "holds": holds]
                 try storage.registerReviewReceipt(document.id, receipt: receipt)
-                finished?(receipt, nil, savedReason)
+                finished?(receipt, nil, reason)
             }
             _ = capture // retain until the file has closed and its metadata was read
         } catch { finished?(nil, error, "The take could not be committed. Its audio file was preserved.") }
