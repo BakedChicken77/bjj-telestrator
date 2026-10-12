@@ -26,6 +26,11 @@ the reported voice silence cannot yet be attributed to capture versus mixing.
   produces a warning while preserving the take; no speech recognition or audio
   content enters diagnostics. This is capture-meter evidence, not proof that
   the persisted WAV or mixed output contains the voice.
+- Saved takes are separately scanned off the main actor with bounded PCM buffers;
+  `recordingFileSignal` records rounded peak dBFS with the app-owned take UUID.
+  Near-silent recordings show a preservation/microphone-check warning rather
+  than an unqualified success message. Tests distinguish PCM16/float tone from
+  silence and verify the original file hash remains unchanged.
 - Preview preparation has separate success/failure breadcrumbs; errors retain
   the bounded domain/code chain. Historical `audioPreview` means an attempt,
   not successful preparation. Existing diagnostic retention/export rules remain.

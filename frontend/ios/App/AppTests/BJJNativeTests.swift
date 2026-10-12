@@ -218,6 +218,19 @@ import UniformTypeIdentifiers
         XCTAssertGreaterThan(fallbackFrames.count, 10)
         XCTAssertTrue(fallbackFrames.allSatisfy { $0.rgb[2] > 200 && $0.rgb[1] < 64 }, "Unacknowledged pause must repeat the picture covering 0.99 seconds, before the green transition")
     }
+    func testRecordedPCMCheckDistinguishesSilenceWithoutChangingFiles() throws {
+        for pcm16 in [true, false] {
+            let audible = root.appendingPathComponent("signal-\(pcm16).wav")
+            try tone(audible, frequency: 880, duration: 0.75, pcm16: pcm16)
+            let digest = try BJJAssets.digest(audible)
+            XCTAssertGreaterThan(try BJJAudio.peakDecibels(audible), -20)
+            XCTAssertEqual(try BJJAssets.digest(audible), digest)
+            let silent = root.appendingPathComponent("silence-\(pcm16).wav")
+            try tone(silent, frequency: 0, duration: 0.75, pcm16: pcm16)
+            XCTAssertEqual(try BJJAudio.peakDecibels(silent), -160)
+        }
+        XCTAssertThrowsError(try BJJAudio.peakDecibels(root.appendingPathComponent("absent.wav")))
+    }
     func testPausedFrameDurationUsesValidBoundariesAndClampsTrackEnd() throws {
         func time(_ seconds: Double) -> CMTime { CMTime(seconds: seconds, preferredTimescale: 60000) }
         let range = CMTimeRange(start: time(2), end: time(6))

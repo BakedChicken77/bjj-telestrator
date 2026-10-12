@@ -263,6 +263,22 @@ struct BJJNativeTransportState: Codable {
                     else { json["voiceovers"] = self.project.voiceovers + [clip] }
                     try self.commitDocument(json)
                     self.notice = reason ?? "Take saved. Play it back to check the timing."
+                    let take = clip["take"] as? BJJJSON ?? clip
+                    let takeID = take.s("id")
+                    let path = try self.store.asset(self.id, take.s("asset"))
+                    Task { [weak self] in
+                        do {
+                            let peak = try await BJJAssets.offMain { try BJJAudio.peakDecibels(path) }
+                            BJJDiagnostics.shared.record(.recordingFileSignal, operation: takeID, value: peak.rounded())
+                            guard let self, !self.closed, !self.recording,
+                                  self.project.allTakes.contains(where: { $0.s("id") == takeID }) else { return }
+                            if peak < -80 {
+                                self.notice = "The saved take has almost no audio signal. It was preserved. Check your microphone connection and watch the level meter while speaking before recording again."
+                            }
+                        } catch {
+                            BJJDiagnostics.shared.record(.recordingError, operation: takeID, error: error)
+                        }
+                    }
                 } catch { self.error = "The audio was preserved, but the review could not save. Reopen it to recover the take. \(error.localizedDescription)" }
             } else { self.notice = reason }
         }

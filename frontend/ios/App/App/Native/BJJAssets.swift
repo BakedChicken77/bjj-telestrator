@@ -7,7 +7,7 @@ final class BJJDiagnostics: @unchecked Sendable {
     enum Event: String { case launch, background, foreground, backgroundExpired, libraryStart, libraryFinish, libraryError, cancel,
         photosRequest, photosReady, photosSucceeded, photosFailed, photosCancelled, photosCallbackIgnored, copyStarted, sceneState, backgroundDenied, mediaStage, mediaError, mediaUnderlyingError, dolbyRejected, packageStage, packageError,
         editorOpen, editorClose, editorError, editSaved, history, playback, audioPreview, audioPreviewReady, audioPreviewError,
-        recordingStart, recordingStop, recordingPause, recordingError, recordingSignal, exportStage, exportError, share }
+        recordingStart, recordingStop, recordingPause, recordingError, recordingSignal, recordingFileSignal, exportStage, exportError, share }
     static let shared = BJJDiagnostics()
     private let queue = DispatchQueue(label: "FreshFrame.diagnostics", qos: .utility)
     private let file: URL
