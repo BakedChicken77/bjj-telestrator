@@ -500,6 +500,29 @@ final class BJJRenderer {
 }
 
 enum BJJAudio {
+    /// Inspect saved PCM with bounded memory, off the main actor. This records
+    /// signal strength only, never audio content or device/file identifiers.
+    static func peakDecibels(_ url: URL) throws -> Double {
+        let file = try AVAudioFile(forReading: url, commonFormat: .pcmFormatFloat32, interleaved: false)
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 8192) else {
+            throw BJJError.invalid("The saved narration could not be checked.")
+        }
+        var peak: Float = 0
+        while file.framePosition < file.length {
+            try file.read(into: buffer)
+            guard buffer.frameLength > 0, let channels = buffer.floatChannelData else {
+                throw BJJError.invalid("The saved narration ended unexpectedly.")
+            }
+            for channel in 0..<Int(buffer.format.channelCount) {
+                for frame in 0..<Int(buffer.frameLength) {
+                    let value = channels[channel][frame]
+                    guard value.isFinite else { throw BJJError.invalid("The saved narration contains invalid audio.") }
+                    peak = max(peak, abs(value))
+                }
+            }
+        }
+        return max(-160, min(0, 20 * log10(max(Double(peak), 0.00000001))))
+    }
     static func scale(_ sample: CMSampleBuffer, gain: Float, offset: Double = 0) throws -> CMSampleBuffer {
         guard let source = CMSampleBufferGetDataBuffer(sample), let format = CMSampleBufferGetFormatDescription(sample) else {
             throw BJJError.invalid("An audio sample could not be decoded.")

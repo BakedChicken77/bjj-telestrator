@@ -211,6 +211,7 @@ struct BJJNativeTransportState: Codable {
     private var endObserver: NSObjectProtocol?
     private var seekTask: Task<Void, Never>?
     private var seeking = false
+    private(set) var audioPreviewFailed = false
     private let preferences: UserDefaults?
     var importJobID: String?
     var importStartedAt: Double?
@@ -263,6 +264,22 @@ struct BJJNativeTransportState: Codable {
                     else { json["voiceovers"] = self.project.voiceovers + [clip] }
                     try self.commitDocument(json)
                     self.notice = reason ?? "Take saved. Play it back to check the timing."
+                    let take = clip["take"] as? BJJJSON ?? clip
+                    let takeID = take.s("id")
+                    let path = try self.store.asset(self.id, take.s("asset"))
+                    Task { [weak self] in
+                        do {
+                            let peak = try await BJJAssets.offMain { try BJJAudio.peakDecibels(path) }
+                            BJJDiagnostics.shared.record(.recordingFileSignal, operation: takeID, value: peak.rounded())
+                            guard let self, !self.closed, !self.recording,
+                                  self.project.allTakes.contains(where: { $0.s("id") == takeID }) else { return }
+                            if peak < -80 {
+                                self.notice = "The saved take has almost no audio signal. It was preserved. Check your microphone connection and watch the level meter while speaking before recording again."
+                            }
+                        } catch {
+                            BJJDiagnostics.shared.record(.recordingError, operation: takeID, error: error)
+                        }
+                    }
                 } catch { self.error = "The audio was preserved, but the review could not save. Reopen it to recover the take. \(error.localizedDescription)" }
             } else { self.notice = reason }
         }
@@ -283,7 +300,15 @@ struct BJJNativeTransportState: Codable {
     }
     func togglePlayback() {
         BJJDiagnostics.shared.record(.playback)
-        guard !recording, !preparingAudio else { return }
+        guard !closed, !recording, !preparingAudio else { return }
+        if audioPreviewFailed {
+            Task { [weak self] in
+                guard let self else { return }
+                await self.prepareAudio()
+                if !self.closed, !self.audioPreviewFailed { self.togglePlayback() }
+            }
+            return
+        }
         if playing { pause(); return }
         drawing = false
         let target: Double
@@ -312,7 +337,7 @@ struct BJJNativeTransportState: Codable {
                     if finished {
                         let resolved = self.player.currentTime().seconds
                         if resolved.isFinite { self.outputTime = min(self.project.outputDuration, max(0, resolved)); self.time = self.playbackTimeline.source(at: self.outputTime) }
-                        if resume { self.player.playImmediately(atRate: self.speed); self.playing = true }
+                        if resume, !self.audioPreviewFailed, !self.preparingAudio { self.player.playImmediately(atRate: self.speed); self.playing = true }
                     }
                     self.savePosition()
                 }
@@ -401,7 +426,9 @@ struct BJJNativeTransportState: Codable {
             let item = try await BJJAudioComposition.preview(project: project, store: store, target: path)
             guard !closed, generation == previewGeneration else { try? FileManager.default.removeItem(at: path); return }
             playbackTimeline = project.reviewTimeline
+            audioPreviewFailed = false
             player.replaceCurrentItem(with: item); player.volume = 1; player.isMuted = false
+            BJJDiagnostics.shared.record(.audioPreviewReady)
             seekOutput(position)
             // The previous item is no longer using these files.
             for old in previewFiles where old != path { try? FileManager.default.removeItem(at: old) }
@@ -420,10 +447,18 @@ struct BJJNativeTransportState: Codable {
                     }
                 }
             }
-        } catch { self.error = "Audio preview could not be prepared. \(error.localizedDescription)" }
+        } catch {
+            audioPreviewFailed = true
+            BJJDiagnostics.shared.record(.audioPreviewError, error: error)
+            self.error = "Audio preview could not be prepared. \(error.localizedDescription)"
+        }
     }
     func startRecording() async {
         guard !closed, !recording, !preparingAudio, !exporting else { return }
+        guard !audioPreviewFailed else {
+            self.error = "Audio preview is unavailable. Tap Play to retry preparation before recording. Your saved takes are unchanged."
+            return
+        }
         cancelCueEdit(); pause(); drawing = false; speed = 1; loopEnabled = false
         recording = true
         BJJDiagnostics.shared.record(.recordingStart)
