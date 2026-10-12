@@ -37,6 +37,11 @@ picker, asks the user to select the same video, creates a fresh job linked by
 retries cannot trigger another recovery loop. Storage, cancellation, background
 expiration and generic decode errors do not offer this recovery.
 
+The legacy browser bridge also retains compatible Photos selection and records
+that provenance; it uses shared source inspection. The explicit recovery action
+is on the native library screen. A supported descriptor identifies an eligible
+route, not a promise that decoding, storage or publication will succeed.
+
 ## Diagnostic envelope 4
 
 Additive optional job fields preserve historic decoding:
