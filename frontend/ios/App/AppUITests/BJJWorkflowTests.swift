@@ -45,6 +45,9 @@ final class BJJWorkflowTests: XCTestCase {
         expectation(for: NSPredicate { _, _ in self.app.frame.width > self.app.frame.height && select.isHittable }, evaluatedWith: app)
         waitForExpectations(timeout: 10)
         XCTAssertTrue(app.buttons["home.reviews"].isHittable)
+        let continuation = app.buttons["home.continue"]
+        XCTAssertTrue(continuation.isHittable, "Continue must be visible without scrolling in landscape")
+        XCTAssertLessThanOrEqual(continuation.frame.maxY, app.buttons["home.reviews"].frame.minY)
         let landscape = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         landscape.name = "larger-home-logo-landscape"; landscape.lifetime = .keepAlways; add(landscape)
     }

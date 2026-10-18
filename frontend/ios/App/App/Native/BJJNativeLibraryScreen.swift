@@ -34,6 +34,9 @@ struct BJJNativeHome: View {
                     Color.black
                     GeometryReader { geometry in
                     ScrollView {
+                    let returningLandscape = library.continuation != nil && geometry.size.width > geometry.size.height
+                    let layout = returningLandscape ? AnyLayout(HStackLayout(spacing: 24)) : AnyLayout(VStackLayout(spacing: 16))
+                    layout {
                     VStack(spacing: library.continuation == nil ? 24 : 16) {
                         Image("FreshFrameLogo").resizable().scaledToFit()
                             .frame(width: logoSize(geometry.size), height: logoSize(geometry.size))
@@ -45,6 +48,7 @@ struct BJJNativeHome: View {
                             Button("Previous reviews", systemImage: "clock") { previousReviews = true }
                         } label: { Label("Select a video", systemImage: "plus.circle.fill").frame(minHeight: 44) }
                             .buttonStyle(.borderedProminent).accessibilityIdentifier("home.selectVideo")
+                    }.frame(maxWidth: .infinity)
                         if let review = library.continuation {
                             BJJContinueReviewCard(library: library, review: review)
                                 .frame(maxWidth: 500)
