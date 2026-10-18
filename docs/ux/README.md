@@ -2,7 +2,7 @@
 
 This folder preserves the **October 16, 2026** comprehensive iPhone UX/UI review and explains how to manage its 32 recommendations in GitHub. Backlog established October 17, 2026.
 
-**Start here:** [Tracking issue #43](https://github.com/BakedChicken77/bjj-telestrator/issues/43) · [Open UX feature requests](https://github.com/BakedChicken77/bjj-telestrator/issues?q=is%3Aissue%20is%3Aopen%20label%3Aux-review%20label%3Aenhancement%20UX-%20in%3Atitle) · [Quick wins](https://github.com/BakedChicken77/bjj-telestrator/issues?q=is%3Aissue%20is%3Aopen%20label%3Aux-review%20label%3Aeffort%3Aeasy)
+**Start here:** [Project board](https://github.com/users/BakedChicken77/projects/1) · [Tracking issue #43](https://github.com/BakedChicken77/bjj-telestrator/issues/43) · [Open UX feature requests](https://github.com/BakedChicken77/bjj-telestrator/issues?q=is%3Aissue%20is%3Aopen%20label%3Aux-review%20label%3Aenhancement%20UX-%20in%3Atitle) · [Quick wins](https://github.com/BakedChicken77/bjj-telestrator/issues?q=is%3Aissue%20is%3Aopen%20label%3Aux-review%20label%3Aeffort%3Aeasy)
 
 All recommendations were created **open, unassigned, Backlog, and not selected for development**. There are no release commitments, due dates, milestones, or coding-agent assignments. Neither a high priority nor assignment to this backlog authorizes implementation.
 
@@ -149,7 +149,7 @@ The issue section **Prerequisite decisions / integration** names the required co
 - [Narration](https://github.com/BakedChicken77/bjj-telestrator/issues?q=is%3Aissue%20label%3Aux-review%20label%3Aarea%3Anarration)
 - [Resolved UX issues](https://github.com/BakedChicken77/bjj-telestrator/issues?q=is%3Aissue%20is%3Aclosed%20label%3Aux-review)
 
-A GitHub Projects board was **not created**: the connected operations do not expose Projects management, and the browser session was signed out. The working issue-based backlog is complete and does not depend on a board. If Projects access becomes available, add the existing 32 issues to one board with Backlog / Ready / In progress / In review / Done views; do not create duplicate draft cards. Use labels and issue state as authoritative, or explicitly migrate authority before adding duplicate custom fields. Native sub-issues/blocking links were likewise not created.
+**Project board added October 18, 2026:** [Fresh Frame — UX/UI Backlog](https://github.com/users/BakedChicken77/projects/1) contains the 32 existing feature requests, all initially Backlog and unassigned. Views: Workflow board (Backlog → Ready → In Progress → In Review → Done), Original ranking, and six-item Quick wins. Keep project Status and issue status labels aligned; no automatic label synchronization is implied. Issue state and labels remain authoritative. Moving a card to Done does not automatically close its issue; closure requires the evidence or explicit resolution described above. Native sub-issue/blocking links remain normal cross-references, not automatic blockers.
 
 ## Repository and development safeguards
 
