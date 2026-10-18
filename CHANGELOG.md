@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.1.1] - 2026-10-18
+
+### Recording and returning to a review
+- Add a focused narration dock with elapsed capture time, a labeled microphone meter, explicit frozen-video status, and large Pause/Resume video and Stop recording actions.
+- Show the active microphone before capture, remember guidance for the acknowledged audio connection, and offer an optional three-second countdown in Recording options.
+- Distinguish preparation, capture, saving, and interruptions while retaining existing recoverable-take handling.
+- Add a Continue review card with thumbnail, name, and last edit time; open at the saved position and omit unavailable or deleted reviews.
+
 ## [2.1.0] - 2026-09-28
 
 ### Optional tips (TestFlight)

@@ -3,6 +3,7 @@ import UniformTypeIdentifiers
 
 struct BJJNativeHome: View {
     @StateObject var library: BJJNativeLibrary
+    @Environment(\.scenePhase) private var scenePhase
     init(library: BJJNativeLibrary? = nil) {
         #if DEBUG
         _library = StateObject(wrappedValue: library ?? BJJUITestFixture.library() ?? BJJNativeLibrary())
@@ -33,10 +34,9 @@ struct BJJNativeHome: View {
                     Color.black
                     GeometryReader { geometry in
                     ScrollView {
-                    VStack(spacing: 24) {
+                    VStack(spacing: library.continuation == nil ? 24 : 16) {
                         Image("FreshFrameLogo").resizable().scaledToFit()
-                            .frame(width: min(geometry.size.width * 0.82, max(48, geometry.size.height - 180)),
-                                   height: min(geometry.size.width * 0.82, max(48, geometry.size.height - 180)))
+                            .frame(width: logoSize(geometry.size), height: logoSize(geometry.size))
                             .accessibilityHidden(true)
                         Text("Your next perspective starts here.").font(.headline).foregroundStyle(.white)
                         Menu {
@@ -45,6 +45,10 @@ struct BJJNativeHome: View {
                             Button("Previous reviews", systemImage: "clock") { previousReviews = true }
                         } label: { Label("Select a video", systemImage: "plus.circle.fill").frame(minHeight: 44) }
                             .buttonStyle(.borderedProminent).accessibilityIdentifier("home.selectVideo")
+                        if let review = library.continuation {
+                            BJJContinueReviewCard(library: library, review: review)
+                                .frame(maxWidth: 500)
+                        }
                     }.padding().frame(maxWidth: .infinity)
                         .frame(minHeight: geometry.size.height)
                     }
@@ -68,6 +72,9 @@ struct BJJNativeHome: View {
                 }
             }
             .refreshable { await library.refresh() }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active, library.session == nil { Task { await library.refresh() } }
+            }
             .task {
                 #if DEBUG
                 await BJJUITestFixture.prepare(library)
@@ -132,6 +139,10 @@ struct BJJNativeHome: View {
                 Button("OK") { library.error = nil }
             } message: { Text(library.error ?? "") }
         }
+    }
+    private func logoSize(_ size: CGSize) -> CGFloat {
+        if library.continuation != nil { return min(140, max(48, size.height * 0.20)) }
+        return min(size.width * 0.82, max(48, size.height - 180))
     }
     private func closeLibrary(_ action: @escaping () -> Void) { afterLibrary = action; previousReviews = false }
     private var reviewList: some View {
@@ -202,17 +213,44 @@ struct BJJNativeHome: View {
     }
 }
 
+private struct BJJContinueReviewCard: View {
+    @ObservedObject var library: BJJNativeLibrary
+    let review: BJJNativeReview
+    @State private var thumbnail: UIImage?
+    var body: some View {
+        Button { Task { await library.open(review) } } label: {
+            HStack(spacing: 12) {
+                Group {
+                    if let thumbnail { Image(uiImage: thumbnail).resizable().scaledToFit() }
+                    else { Image(systemName: "film").font(.title2) }
+                }.frame(width: 72, height: 54).background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Continue review").font(.headline)
+                    Text(review.name).font(.subheadline).lineLimit(2)
+                    if let date = review.editedDate {
+                        Text("Edited \(date.formatted(date: .abbreviated, time: .shortened))")
+                            .font(.caption).foregroundStyle(.white.opacity(0.8))
+                    }
+                }.frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "play.circle.fill").font(.title2).accessibilityHidden(true)
+            }.padding(16).foregroundStyle(.white)
+                .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
+                .contentShape(RoundedRectangle(cornerRadius: 16))
+        }.buttonStyle(.plain).accessibilityIdentifier("home.continue")
+            .accessibilityHint("Opens this review at its saved position")
+            .task(id: "\(review.key)-\(review.updatedAt)") {
+                thumbnail = nil
+                let image = await library.thumbnail(review)
+                if !Task.isCancelled { thumbnail = image }
+            }
+    }
+}
+
 private struct BJJNativeLibraryRow: View {
     @ObservedObject var library: BJJNativeLibrary
     let review: BJJNativeReview
     @State private var thumbnail: UIImage?
-    private var editedDate: Date? {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = formatter.date(from: review.updatedAt) { return date }
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter.date(from: review.updatedAt)
-    }
     var body: some View {
         HStack(spacing: 12) {
             Group {
@@ -225,7 +263,7 @@ private struct BJJNativeLibraryRow: View {
                 if review.problem != nil { Text("Tap for details · original retained").font(.caption).foregroundStyle(.secondary) }
                 else {
                     Text("\(Int(review.duration / 60))m \(Int(review.duration) % 60)s").font(.caption).foregroundStyle(.secondary)
-                    if let date = editedDate {
+                    if let date = review.editedDate {
                         Text(date, style: .date).font(.caption2).foregroundStyle(.secondary)
                     }
                 }

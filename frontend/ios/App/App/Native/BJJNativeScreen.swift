@@ -22,6 +22,7 @@ struct BJJNativeEditorScreen: View {
     @State private var showAudio = false
     @State private var showExport = false
     @State private var confirmRecord = false
+    @AppStorage("native-recording.countdown") private var recordingCountdown = false
     @State private var showAnnotations = false
     @State private var showText = false
     @State private var showProperties = false
@@ -32,7 +33,18 @@ struct BJJNativeEditorScreen: View {
         NavigationStack {
             GeometryReader { geometry in
                 let landscape = geometry.size.width > geometry.size.height
-                if showProperties, let cue = session.selectedCue {
+                if session.recordingDockVisible {
+                    let layout = landscape ? AnyLayout(HStackLayout(spacing: 0)) : AnyLayout(VStackLayout(spacing: 0))
+                    layout {
+                        videoSurface
+                        ScrollView {
+                            BJJRecordingDock(session: session).padding(16)
+                        }
+                        .frame(width: landscape ? min(380, geometry.size.width * 0.48) : nil)
+                        .frame(maxHeight: landscape ? .infinity : geometry.size.height * 0.60)
+                        .background(.bar)
+                    }.frame(width: geometry.size.width, height: geometry.size.height)
+                } else if showProperties, let cue = session.selectedCue {
                     let layout = landscape ? AnyLayout(HStackLayout(spacing: 0)) : AnyLayout(VStackLayout(spacing: 0))
                     layout {
                         videoSurface.frame(height: landscape || propertiesCollapsed ? nil : geometry.size.height * 0.60)
@@ -57,7 +69,7 @@ struct BJJNativeEditorScreen: View {
             .navigationTitle(session.project.name)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                if !showProperties {
+                if !showProperties && !session.recordingDockVisible {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Done") { session.close(); dismiss() }.disabled(session.exporting || session.recording || session.preparingAudio).accessibilityIdentifier("editor.done")
                 }
@@ -74,9 +86,28 @@ struct BJJNativeEditorScreen: View {
             .sheet(isPresented: Binding(get: { session.exportURL != nil }, set: { if !$0 { session.releaseExport() } })) {
                 if let url = session.exportURL { BJJNativeExportPreview(url: url) }
             }
-            .confirmationDialog("Record narration at 1×", isPresented: $confirmRecord, titleVisibility: .visible) {
-                Button("Start recording") { Task { await session.startRecording() } }
-            } message: { Text("Use headphones to avoid recording the speaker. Bluetooth can switch to its microphone audio quality. Playback begins before capture, and recording stops if the route changes.") }
+            .sheet(isPresented: $confirmRecord, onDismiss: { session.cancelRecordingSetup() }) {
+                NavigationStack {
+                    Form {
+                        Section("Microphone and playback") {
+                            Label(session.audioRoute, systemImage: "mic.fill").accessibilityIdentifier("narration.input")
+                            Text("Use headphones to keep the video's sound out of your narration. Bluetooth may use its headset microphone and change sound quality.")
+                            Text("Pause video freezes the picture while your microphone keeps recording. Stop recording ends the take. A connection change or interruption stops and preserves the take for review.")
+                        }
+                        Section {
+                            Toggle("3-second countdown", isOn: $recordingCountdown).accessibilityIdentifier("narration.countdown.option")
+                            Text("Recording uses 1× playback. This guidance appears on first use and when your audio connection changes. Reopen Recording options any time.")
+                                .font(.footnote).foregroundStyle(.secondary)
+                            Button("Start recording", systemImage: "mic.fill") {
+                                confirmRecord = false
+                                Task { await session.startRecording(countdown: recordingCountdown ? 3 : 0) }
+                            }.frame(minHeight: 44).accessibilityIdentifier("narration.start")
+                        }
+                    }
+                    .navigationTitle("Record narration").navigationBarTitleDisplayMode(.inline)
+                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { confirmRecord = false } } }
+                }.presentationDetents([.medium, .large])
+            }
             .sheet(isPresented: $showAnnotations, onDismiss: {
                 if let id = listCueID { listCueID = nil; openProperties(id) }
             }) { annotationList }
@@ -109,8 +140,14 @@ struct BJJNativeEditorScreen: View {
                 }
             }
             .task { await session.prepareAudio(); await session.prepareThumbnails() }
-            .onChange(of: scenePhase) { _, phase in if phase == .background { BJJDiagnostics.shared.record(.background); session.stopRecording(); session.cancelCueGesture(); session.pause() } else if phase != .active && !session.recording { session.cancelCueGesture(); session.pause() } }
-            .interactiveDismissDisabled(session.recording || session.exporting || session.preparingAudio)
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .background {
+                    BJJDiagnostics.shared.record(.background); confirmRecord = false
+                    session.stopRecording(reason: "Recording interrupted when the app moved to the background. Review any saved take before continuing.")
+                    session.cancelCueGesture(); session.pause()
+                } else if phase != .active && !session.recording { session.cancelCueGesture(); session.pause() }
+            }
+            .interactiveDismissDisabled(session.recordingDockVisible || session.exporting || session.preparingAudio)
             .onDisappear { session.close() }
         }
     }
@@ -158,24 +195,25 @@ struct BJJNativeEditorScreen: View {
     }
     private var controls: some View {
         VStack(spacing: 8) {
-            if session.recording {
                 HStack {
-                    Label(session.recordingVideoPaused ? "Recording · video paused" : "Recording at 1×", systemImage: "mic.fill").foregroundStyle(.red)
-                    ProgressView(value: Double(max(0, min(1, (session.recordingLevel + 60) / 60))))
-                    Button(session.recordingVideoPaused ? "Resume video" : "Pause video", systemImage: session.recordingVideoPaused ? "play.fill" : "pause.fill") { Task { await session.toggleRecordingVideo() } }
-                        .accessibilityIdentifier("narration.video.pause")
-                    Button("Stop", systemImage: "stop.fill") { session.stopRecording() }.buttonStyle(.borderedProminent).tint(.red)
-                }
-                Text(session.audioRoute).font(.caption).foregroundStyle(.secondary)
-            } else {
-                HStack {
-                    Button("Record", systemImage: "mic.fill") { session.pause(); confirmRecord = true }
+                    Button("Record", systemImage: "mic.fill") {
+                        guard session.prepareRecordingRoute() else { return }
+                        if session.recordingRouteNeedsGuidance { confirmRecord = true }
+                        else { Task { await session.startRecording(countdown: recordingCountdown ? 3 : 0) } }
+                    }.accessibilityIdentifier("narration.record")
+                    Button("Recording options", systemImage: "slider.horizontal.3") {
+                        if session.prepareRecordingRoute() { confirmRecord = true }
+                    }.labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44).accessibilityIdentifier("narration.options")
                     Spacer()
                     Button("Narration", systemImage: "waveform") { session.pause(); showAudio = true }
                 }.frame(minHeight: 44).disabled(session.preparingAudio || session.exporting)
                 if session.preparingAudio { ProgressView("Preparing audio preview…") }
-                if let notice = session.notice { Text(notice).font(.caption).foregroundStyle(.secondary) }
-            }
+                if let notice = session.notice {
+                    VStack(alignment: .leading, spacing: 4) {
+                        if session.recordingPresentation == .interrupted { Label("Recording interrupted", systemImage: "exclamationmark.circle").font(.headline) }
+                        Text(notice).font(.caption).foregroundStyle(.secondary)
+                    }.frame(maxWidth: .infinity, alignment: .leading).accessibilityIdentifier("narration.notice")
+                }
             HStack(spacing: 12) {
                 Picker("Editor mode", selection: $session.drawing) {
                     Text("Review").tag(false)
@@ -279,6 +317,77 @@ struct BJJNativeEditorScreen: View {
             .navigationTitle("Cues").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showAnnotations = false }.accessibilityIdentifier("cues.done") } }
         }.presentationDetents([.medium, .large])
+    }
+}
+
+struct BJJRecordingDock: View {
+    @ObservedObject var session: BJJNativeEditorSession
+    @Environment(\.dynamicTypeSize) private var textSize
+    private var title: String {
+        switch session.recordingPresentation {
+        case .countdown(let seconds): return "Starting in \(seconds)"
+        case .preparing: return "Preparing microphone…"
+        case .saving: return "Saving narration…"
+        case .capturing: return "Recording"
+        case .interrupted: return "Recording interrupted"
+        case .idle: return "Ready to record"
+        }
+    }
+    private var elapsed: String {
+        let seconds = Int(max(0, session.recordingElapsed))
+        return String(format: "%02d:%02d", seconds / 60, seconds % 60)
+    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            let header = textSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4)) : AnyLayout(HStackLayout(spacing: 12))
+            header {
+                Label(title, systemImage: session.recordingPresentation == .capturing ? "record.circle.fill" : "mic.fill")
+                    .font(.headline).foregroundStyle(session.recordingPresentation == .capturing ? Color.red : Color.primary)
+                    .accessibilityIdentifier("narration.status")
+                if session.recordingPresentation == .capturing {
+                    Text(elapsed).font(.title2.monospacedDigit()).fixedSize()
+                        .accessibilityLabel("Recording time").accessibilityValue("\(Int(session.recordingElapsed)) seconds")
+                        .accessibilityIdentifier("narration.elapsed")
+                }
+            }
+            if session.recordingPresentation == .capturing {
+                Text(session.recordingVideoPaused ? "Video frozen · microphone recording" : "Video playing at 1× · microphone recording")
+                    .font(.subheadline).accessibilityIdentifier("narration.captureState")
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Microphone level").font(.caption)
+                    ProgressView(value: Double(max(0, min(1, (session.recordingLevel + 60) / 60))))
+                        .tint(.red).accessibilityLabel("Microphone level")
+                        .accessibilityValue(session.recordingLevel < -60 ? "Very quiet" : "Receiving audio")
+                }
+            } else {
+                Text(session.recordingPresentation == .saving ? "Your take is preserved while its playback preview is prepared." : "The microphone is not recording yet.")
+                    .font(.subheadline)
+                if session.recordingPresentation == .preparing || session.recordingPresentation == .saving { ProgressView() }
+            }
+            Text(session.audioRoute).font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if session.recordingPresentation == .capturing {
+                let actions = textSize.isAccessibilitySize ? AnyLayout(VStackLayout(spacing: 8)) : AnyLayout(HStackLayout(spacing: 12))
+                actions { pauseButton; stopButton }
+            } else if session.recording {
+                Button("Cancel recording", role: .cancel) { session.stopRecording() }
+                    .frame(maxWidth: .infinity, minHeight: 44).buttonStyle(.bordered)
+                    .accessibilityIdentifier("narration.cancel")
+            }
+        }.accessibilityElement(children: .contain).accessibilityIdentifier("narration.dock")
+    }
+    private var pauseButton: some View {
+        Button { Task { await session.toggleRecordingVideo() } } label: {
+            Label(session.recordingVideoPaused ? "Resume video" : "Pause video", systemImage: session.recordingVideoPaused ? "play.fill" : "pause.fill")
+                .fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, minHeight: 44)
+        }.buttonStyle(.bordered).accessibilityIdentifier("narration.video.pause")
+            .accessibilityHint("The microphone continues recording")
+    }
+    private var stopButton: some View {
+        Button { session.stopRecording() } label: {
+            Label("Stop recording", systemImage: "stop.fill").fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, minHeight: 44)
+        }.buttonStyle(.borderedProminent).tint(.red).accessibilityIdentifier("narration.stop")
     }
 }
 

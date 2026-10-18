@@ -65,7 +65,33 @@ import UIKit
     var level: Float { recorder?.updateMeters(); return recorder?.averagePower(forChannel: 0) ?? -160 }
     var route: String {
         let session = AVAudioSession.sharedInstance()
-        return (session.currentRoute.inputs + session.currentRoute.outputs).map(\.portName).joined(separator: " → ")
+        let input = session.currentRoute.inputs.map(\.portName).joined(separator: ", ")
+        let output = session.currentRoute.outputs.map(\.portName).joined(separator: ", ")
+        return "Microphone: \(input.isEmpty ? "Unavailable" : input) · Output: \(output)"
+    }
+    var routeSignature: String {
+        let route = AVAudioSession.sharedInstance().currentRoute
+        return (route.inputs + route.outputs).map { "\($0.portType.rawValue):\($0.uid)" }.joined(separator: "|")
+    }
+    /// Resolve the actual input before showing guidance or starting a countdown.
+    /// Permission and recorder creation remain in begin(), with its existing token fence.
+    func prepareInputRoute() throws {
+        let audio = AVAudioSession.sharedInstance()
+        try audio.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
+        try audio.setPreferredSampleRate(48000)
+        try audio.setActive(true)
+        guard audio.isInputAvailable else { throw BJJError.invalid("No microphone is available. Check your audio connection and try again.") }
+    }
+    func restorePlaybackRoute() {
+        guard !active else { return }
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+        try? AVAudioSession.sharedInstance().setActive(true)
+    }
+    func requestPermission() async throws {
+        let allowed = await withCheckedContinuation { continuation in
+            AVAudioSession.sharedInstance().requestRecordPermission { continuation.resume(returning: $0) }
+        }
+        guard allowed else { throw BJJError.invalid("Allow microphone access in Settings to record narration.") }
     }
     override init() {
         super.init()
@@ -93,11 +119,7 @@ import UIKit
             guard lifecycle.sessionID == token else { throw BJJError.cancelled }
             guard permission else { throw BJJError.invalid("Allow microphone access in Settings to record narration.") }
             try store.checkSpace(required: Int64(min(86400, project.outputDuration + 3600) * 96000) + 100_000_000)
-            let audio = AVAudioSession.sharedInstance()
-            try audio.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
-            try audio.setPreferredSampleRate(48000)
-            try audio.setActive(true)
-            guard audio.isInputAvailable else { throw BJJError.invalid("No microphone is available. Check your audio connection and try again.") }
+            try prepareInputRoute()
             try lifecycle.advance(token, from: .preparing, to: .prepared)
             let path = try store.safeURL(project.id, "voiceover/\(UUID().uuidString.lowercased()).wav")
             url = path

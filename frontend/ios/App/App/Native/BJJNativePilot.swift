@@ -11,6 +11,13 @@ struct BJJNativeReview: Identifiable {
     var updatedAt: String = ""
     var problem: String? = nil
     var key: String { "\(preview ? "native" : "original")-\(id)" }
+    var editedDate: Date? {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatter.date(from: updatedAt) { return date }
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: updatedAt)
+    }
 }
 
 /// Pilot projects have a separate root. Reading the original library never calls
@@ -157,6 +164,10 @@ struct BJJNativeTransportState: Codable {
     }
 }
 
+enum BJJRecordingPresentation: Equatable {
+    case idle, preparing, countdown(Int), capturing, saving, interrupted
+}
+
 @MainActor final class BJJNativeEditorSession: ObservableObject, Identifiable {
     let id: String
     let store: BJJStore
@@ -192,6 +203,11 @@ struct BJJNativeTransportState: Codable {
     @Published private(set) var undoCount = 0
     @Published private(set) var redoCount = 0
     @Published var recording = false
+    @Published var recordingPresentation: BJJRecordingPresentation = .idle
+    @Published var recordingElapsed = 0.0
+    private var recordingRequest: UUID?
+    private var recordingInterruption: String?
+    var recordingDockVisible: Bool { recording || recordingPresentation == .saving }
     @Published var preparingAudio = false
     @Published var recordingVideoPaused = false
     @Published var outputTime = 0.0
@@ -255,8 +271,11 @@ struct BJJNativeTransportState: Codable {
         }
         capture.finished = { [weak self] clip, failure, reason in
             guard let self else { return }
+            self.recordingRequest = nil
+            self.recordingInterruption = reason
+            self.recordingPresentation = .saving
             self.recording = false; self.recordingVideoPaused = false; self.playing = false
-            if let failure { self.error = failure.localizedDescription; return }
+            if let failure { self.recordingPresentation = .interrupted; self.error = failure.localizedDescription; return }
             if let clip {
                 do {
                     var json = self.project.json
@@ -280,10 +299,19 @@ struct BJJNativeTransportState: Codable {
                             BJJDiagnostics.shared.record(.recordingError, operation: takeID, error: error)
                         }
                     }
-                } catch { self.error = "The audio was preserved, but the review could not save. Reopen it to recover the take. \(error.localizedDescription)" }
-            } else { self.notice = reason }
+                } catch {
+                    self.recordingPresentation = .interrupted
+                    self.error = "The audio was preserved, but the review could not save. Reopen it to recover the take. \(error.localizedDescription)"
+                }
+            } else { self.notice = reason; self.recordingPresentation = reason == nil ? .idle : .interrupted }
         }
-        capture.meterChanged = { [weak self] value in self?.recordingLevel = value }
+        capture.meterChanged = { [weak self] value in
+            guard let self else { return }
+            self.recordingLevel = value
+            // Recorder time continues while video is frozen; the player's clock does not.
+            let seconds = floor(self.capture.elapsed)
+            if seconds != self.recordingElapsed { self.recordingElapsed = seconds }
+        }
         if let data = preferences?.data(forKey: "native-review.\(id)"),
            let saved = try? JSONDecoder().decode(BJJNativeTransportState.self, from: data) {
             let state = saved.validated(duration: project.duration)
@@ -419,7 +447,12 @@ struct BJJNativeTransportState: Codable {
             position = span.output + min(span.duration, oldPosition - oldSpan.output)
         }
         player.isMuted = true
-        defer { preparingAudio = false }
+        defer {
+            preparingAudio = false
+            if recordingPresentation == .saving {
+                recordingPresentation = recordingInterruption == nil && !audioPreviewFailed ? .idle : .interrupted
+            }
+        }
         do {
             let path = try store.safeURL(id, "temp/mix-\(UUID().uuidString).caf")
             previewFiles.append(path)
@@ -453,30 +486,71 @@ struct BJJNativeTransportState: Codable {
             self.error = "Audio preview could not be prepared. \(error.localizedDescription)"
         }
     }
-    func startRecording() async {
-        guard !closed, !recording, !preparingAudio, !exporting else { return }
+    var recordingRouteNeedsGuidance: Bool {
+        preferences?.string(forKey: "native-recording.acknowledged-route") != capture.routeSignature
+    }
+    @discardableResult func prepareRecordingRoute() -> Bool {
+        guard !closed, !recordingDockVisible, !preparingAudio, !exporting else { return false }
+        pause()
+        do { try capture.prepareInputRoute(); audioRoute = capture.route; return true }
+        catch { self.error = error.localizedDescription; capture.restorePlaybackRoute(); return false }
+    }
+    func cancelRecordingSetup() { if !recording { capture.restorePlaybackRoute() } }
+    func startRecording(countdown: Int = 0) async {
+        guard !closed, !recordingDockVisible, !preparingAudio, !exporting else { return }
         guard !audioPreviewFailed else {
             self.error = "Audio preview is unavailable. Tap Play to retry preparation before recording. Your saved takes are unchanged."
             return
         }
         cancelCueEdit(); pause(); drawing = false; speed = 1; loopEnabled = false
-        recording = true
+        let request = UUID(); recordingRequest = request
+        recording = true; recordingPresentation = .preparing
+        recordingElapsed = 0; recordingLevel = -160; recordingVideoPaused = false
+        recordingInterruption = nil; notice = nil
         BJJDiagnostics.shared.record(.recordingStart)
         do {
+            try await capture.requestPermission()
+            guard recordingRequest == request, !closed, recording else { return }
+            try capture.prepareInputRoute(); audioRoute = capture.route
+            let route = capture.routeSignature
+            if countdown > 0 {
+                for remaining in stride(from: min(3, countdown), through: 1, by: -1) {
+                    recordingPresentation = .countdown(remaining)
+                    try await Task.sleep(nanoseconds: 1_000_000_000)
+                    guard recordingRequest == request, !closed, recording else { return }
+                }
+            }
+            guard capture.routeSignature == route else {
+                throw BJJError.invalid("The microphone connection changed. Tap Record to check the new input before starting.")
+            }
+            recordingPresentation = .preparing
             try await capture.begin(project: project, store: store, player: player)
-            guard !closed, recording else { capture.stop(); return }
-            audioRoute = capture.route; playing = true
+            guard recordingRequest == request, !closed, recording else { return }
+            preferences?.set(capture.routeSignature, forKey: "native-recording.acknowledged-route")
+            audioRoute = capture.route; recordingPresentation = .capturing; playing = true
         } catch {
-            recording = false; pause()
+            guard recordingRequest == request else { return }
+            recordingRequest = nil; recording = false; pause(); capture.restorePlaybackRoute()
+            recordingPresentation = .interrupted
             BJJDiagnostics.shared.record(.recordingError, error: error)
             if !(error is CancellationError), (error as? BJJError)?.code != "CANCELLED" { self.error = error.localizedDescription }
         }
     }
     func toggleRecordingVideo() async {
+        guard recordingPresentation == .capturing else { return }
         do { try await capture.toggleVideoPause(); recordingVideoPaused = capture.videoPaused; playing = !recordingVideoPaused && recording }
         catch { self.error = error.localizedDescription }
     }
-    func stopRecording() { capture.stop() }
+    func stopRecording(reason: String? = nil) {
+        guard recording else { return }
+        recordingRequest = nil
+        if capture.active { recordingPresentation = .saving; capture.stop(reason: reason) }
+        else {
+            recording = false; recordingVideoPaused = false
+            recordingPresentation = reason == nil ? .idle : .interrupted
+            notice = reason; pause(); capture.restorePlaybackRoute()
+        }
+    }
     func removeNarrationPause(_ id: String) {
         do {
             var json = project.json
@@ -574,7 +648,7 @@ struct BJJNativeTransportState: Codable {
     func close() {
         BJJDiagnostics.shared.record(.editorClose)
         guard !closed else { return }
-        capture.stop(); closed = true; previewGeneration += 1; cancelCueEdit(); pause(); cancelExport(); releaseExport()
+        stopRecording(); capture.restorePlaybackRoute(); closed = true; previewGeneration += 1; cancelCueEdit(); pause(); cancelExport(); releaseExport()
         if let observer { player.removeTimeObserver(observer); self.observer = nil }
         if let endObserver { NotificationCenter.default.removeObserver(endObserver); self.endObserver = nil }
         player.replaceCurrentItem(with: nil)

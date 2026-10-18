@@ -48,6 +48,44 @@ final class BJJWorkflowTests: XCTestCase {
         let landscape = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         landscape.name = "larger-home-logo-landscape"; landscape.lifetime = .keepAlways; add(landscape)
     }
+    func testContinueReviewReopensSavedPositionWithoutLibrarySheet() throws {
+        app.launch()
+        let resume = app.buttons["home.continue"]
+        XCTAssertTrue(resume.waitForExistence(timeout: 60))
+        XCTAssertTrue(app.buttons["home.selectVideo"].isHittable)
+        resume.tap()
+        XCTAssertTrue(app.buttons["editor.export"].waitForExistence(timeout: 20))
+        expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: app.buttons["editor.export"])
+        waitForExpectations(timeout: 30)
+        let position = app.sliders["Video position"]
+        position.adjust(toNormalizedSliderPosition: 0.5)
+        let saved = position.value as? String
+        app.buttons["editor.done"].tap()
+        app.terminate(); app.launch()
+        XCTAssertTrue(resume.waitForExistence(timeout: 60)); resume.tap()
+        XCTAssertTrue(position.waitForExistence(timeout: 20))
+        expectation(for: NSPredicate(format: "value == %@", saved ?? ""), evaluatedWith: position)
+        waitForExpectations(timeout: 15)
+        app.buttons["editor.done"].tap()
+    }
+    func testRecordingSetupShowsInputAndOptionalCountdownAndCancelsSafely() throws {
+        app.launch(); openReview()
+        app.buttons["narration.options"].tap()
+        XCTAssertTrue(app.navigationBars["Record narration"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.descendants(matching: .any)["narration.input"].firstMatch.exists)
+        let countdown = app.switches["narration.countdown.option"]
+        if !countdown.isHittable { app.swipeUp() }
+        XCTAssertTrue(countdown.exists)
+        countdown.tap()
+        let portrait = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        portrait.name = "native-recording-setup"; portrait.lifetime = .keepAlways; add(portrait)
+        XCUIDevice.shared.orientation = .landscapeLeft
+        let cancel = app.buttons["Cancel"]
+        expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: cancel)
+        waitForExpectations(timeout: 10); cancel.tap()
+        XCTAssertTrue(app.buttons["editor.done"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["editor.done"].isEnabled)
+    }
     func testOptionalTipsCustomValidationAndLandscapeDismissal() throws {
         app.launchEnvironment["BJJ_UI_TEST_TIPS"] = "1"
         app.launch()

@@ -14,6 +14,7 @@ struct BJJNativeDeletedReview: Identifiable {
 /// are only read and copied until native editing parity is accepted.
 @MainActor final class BJJNativeLibrary: ObservableObject {
     @Published var reviews: [BJJNativeReview] = []
+    @Published private(set) var continuation: BJJNativeReview?
     @Published var deleted: [BJJNativeDeletedReview] = []
     @Published var busy = false
     @Published var activity = ""
@@ -66,11 +67,20 @@ struct BJJNativeDeletedReview: Identifiable {
             let result = try await BJJAssets.offMain {
                 let native = try BJJNativePilot.reviews(store, preview: true)
                 let original = try originalRoot.map { try BJJNativePilot.reviews(BJJStore(root: $0), preview: false) } ?? []
-                return (native + original, try BJJProjectVersions(store: store).deleted().map(BJJNativeDeletedReview.init))
+                let continuation = native.first { review in
+                    guard review.problem == nil,
+                          let project = try? BJJProject(store.readJSON(store.directory(review.id).appendingPathComponent("project.json"))) else { return false }
+                    let assets = [project.source.s("asset"), project.proxy.s("asset")] + project.allTakes.map { $0.s("asset") }
+                    return assets.allSatisfy { asset in
+                        guard let url = try? BJJAssets.file(store, review.id, asset) else { return false }
+                        return FileManager.default.isReadableFile(atPath: url.path)
+                    }
+                }
+                return (native + original, try BJJProjectVersions(store: store).deleted().map(BJJNativeDeletedReview.init), continuation)
             }
             guard generation == refreshGeneration else { return }
-            reviews = result.0; deleted = result.1
-        } catch { self.error = error.localizedDescription }
+            reviews = result.0; deleted = result.1; continuation = result.2
+        } catch { continuation = nil; self.error = error.localizedDescription }
     }
     private func begin(_ title: String, cancellable: Bool = false) -> Bool {
         guard !busy, session == nil else { return false }

@@ -1110,6 +1110,69 @@ import UniformTypeIdentifiers
         XCTAssertEqual(unsafe.time, 0); XCTAssertEqual(unsafe.speed, 1)
         XCTAssertEqual(unsafe.loopStart, 0); XCTAssertEqual(unsafe.loopEnd, 1)
     }
+    func testContinueReviewSelectsLatestAvailableAndRestoresPosition() async throws {
+        let source = root.appendingPathComponent("continue.mp4")
+        try await silentVideo(source)
+        let library = BJJNativeLibrary(root: root.appendingPathComponent("native"), originalRoot: root.appendingPathComponent("original"))
+        await library.refresh(); XCTAssertNil(library.continuation); XCTAssertNil(library.session)
+        await library.importFile(source, openWhenReady: false)
+        let older = try XCTUnwrap(library.continuation)
+        await library.importFile(source, openWhenReady: false)
+        let nativeStore = try library.services().store
+        let newer = try XCTUnwrap(library.reviews.first { $0.id != older.id })
+        for (review, date) in [(older, "2026-01-01T10:00:00.000Z"), (newer, "2026-01-02T10:00:00.000Z")] {
+            let path = try nativeStore.directory(review.id).appendingPathComponent("project.json")
+            var document = try nativeStore.readJSON(path); document["updatedAt"] = date
+            try nativeStore.writeJSON(document, to: path)
+        }
+        await library.refresh()
+        XCTAssertEqual(library.continuation?.id, newer.id)
+        XCTAssertNil(library.session, "Showing Continue must never auto-open a review")
+        let key = "native-review.\(newer.id)"
+        defer { UserDefaults.standard.removeObject(forKey: key) }
+        let position = BJJNativeTransportState(time: 0.6, speed: 0.5, loopStart: 0.2, loopEnd: 0.8, loopEnabled: true)
+        UserDefaults.standard.set(try JSONEncoder().encode(position), forKey: key)
+        await library.open(try XCTUnwrap(library.continuation))
+        let editor = try XCTUnwrap(library.session)
+        XCTAssertEqual(editor.id, newer.id); XCTAssertEqual(editor.time, 0.6, accuracy: 0.02)
+        XCTAssertEqual(editor.speed, 0.5); XCTAssertTrue(editor.loopEnabled)
+        editor.close(); library.session = nil
+        await library.change(newer, action: "Move to Recently Deleted")
+        XCTAssertEqual(library.continuation?.id, older.id)
+        await library.restore(try XCTUnwrap(library.deleted.first).id)
+        let recovered = try nativeStore.load(newer.id)
+        try FileManager.default.removeItem(at: nativeStore.asset(newer.id, recovered.proxy.s("asset")))
+        await library.refresh()
+        XCTAssertEqual(library.continuation?.id, older.id, "Missing media must not leave a broken Continue card")
+        await library.change(older, action: "Move to Recently Deleted")
+        XCTAssertNil(library.continuation)
+    }
+    func testRecordingDockLayoutsAndFrozenVideoWording() async throws {
+        let editor = try BJJNativeEditorSession(project: project(), store: store, preferences: nil)
+        defer { editor.recording = false; editor.close() }
+        // Presentation-only evidence; microphone and route behavior require device checks.
+        editor.recording = true; editor.recordingPresentation = .capturing
+        editor.recordingElapsed = 65; editor.recordingLevel = -18
+        editor.audioRoute = "Microphone: iPhone Microphone · Output: Speaker"
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = scene.windows.first { $0.isKeyWindow }, container = UIViewController()
+        let window = UIWindow(windowScene: scene); window.rootViewController = container; window.makeKeyAndVisible()
+        defer { window.isHidden = true; previous?.makeKeyAndVisible() }
+        for (name, size, text, frozen) in [
+            ("portrait", CGSize(width: 375, height: 340), DynamicTypeSize.large, false),
+            ("landscape", CGSize(width: 340, height: 300), DynamicTypeSize.large, true),
+            ("large-text", CGSize(width: 375, height: 650), DynamicTypeSize.accessibility2, true)
+        ] {
+            editor.recordingVideoPaused = frozen
+            let host = UIHostingController(rootView: BJJRecordingDock(session: editor).padding(16).environment(\.dynamicTypeSize, text))
+            container.addChild(host); container.view.addSubview(host.view); host.didMove(toParent: container)
+            host.view.frame = CGRect(origin: .zero, size: size)
+            try await Task.sleep(nanoseconds: 200_000_000); host.view.layoutIfNeeded()
+            let attachment = XCTAttachment(image: UIGraphicsImageRenderer(size: size).image { _ in host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true) })
+            attachment.name = "native-recording-dock-\(name)"; attachment.lifetime = .keepAlways; add(attachment)
+            host.willMove(toParent: nil); host.view.removeFromSuperview(); host.removeFromParent()
+        }
+    }
     func testNativeLibraryCompactAndLargeTextLayouts() async throws {
         let source = root.appendingPathComponent("library-layout.mp4")
         try await silentVideo(source)
