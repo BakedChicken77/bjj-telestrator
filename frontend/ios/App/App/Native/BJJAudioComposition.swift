@@ -33,8 +33,13 @@ struct BJJAudioComposition {
             return track
         }
         func insert(_ track: AVMutableCompositionTrack, source: AVAssetTrack, audioStart: Double, outputStart: Double, duration: Double) throws {
-            guard duration > 0 else { return }
-            try track.insertTimeRange(CMTimeRange(start: CMTime(seconds: audioStart, preferredTimescale: 48000), duration: CMTime(seconds: duration, preferredTimescale: 48000)), of: source, at: CMTime(seconds: outputStart, preferredTimescale: 48000))
+            // Intersections at a shared pause boundary can leave a positive
+            // floating-point residue (e.g. 8.9e-16 seconds). Check the actual
+            // sample-clock duration before inserting: AVFoundation rejects a
+            // zero-duration edit even though its Double was greater than zero.
+            let sampleDuration = CMTime(seconds: duration, preferredTimescale: 48000)
+            guard sampleDuration.isNumeric, CMTimeCompare(sampleDuration, .zero) > 0 else { return }
+            try track.insertTimeRange(CMTimeRange(start: CMTime(seconds: audioStart, preferredTimescale: 48000), duration: sampleDuration), of: source, at: CMTime(seconds: outputStart, preferredTimescale: 48000))
         }
         for source in try await media.asset.loadTracks(withMediaType: .audio).prefix(1) {
             let range = try await source.load(.timeRange), target = try track(gain: Double(originalGain))
