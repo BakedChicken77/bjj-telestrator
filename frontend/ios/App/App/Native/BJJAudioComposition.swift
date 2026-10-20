@@ -132,6 +132,7 @@ struct BJJAudioComposition {
                 let format = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 2)!
                 let file = try AVAudioFile(forWriting: target, settings: format.settings)
                 var cursor: Int64 = 0
+                let endFrame = Int64((project.outputDuration * 48000).rounded())
                 func silence(until frame: Int64) throws {
                     while cursor < frame {
                         let count = AVAudioFrameCount(min(4096, frame - cursor))
@@ -146,19 +147,27 @@ struct BJJAudioComposition {
                         let scaled = try BJJAudio.scale(sample, gain: Float(audio.scale))
                         let frames = CMSampleBufferGetNumSamples(scaled)
                         let first = Int64((CMSampleBufferGetPresentationTimeStamp(scaled).seconds * 48000).rounded())
-                        try silence(until: max(0, first))
+                        // Reader buffers may include decoder preroll, overlap,
+                        // or a final packet beyond its requested time range.
+                        // Place only the not-yet-written project samples, rather
+                        // than appending whole packets and shifting narration.
+                        let start = max(cursor, max(0, first))
+                        let end = min(endFrame, first + Int64(frames))
+                        guard end > start else { return }
+                        try silence(until: start)
+                        let offset = Int(start - first), count = Int(end - start)
                         guard let block = CMSampleBufferGetDataBuffer(scaled) else { throw BJJError.invalid("Missing mixed audio.") }
                         var values = [Float](repeating: 0, count: frames * 2)
                         let status = values.withUnsafeMutableBytes { CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: frames * 8, destination: $0.baseAddress!) }
                         guard status == noErr else { throw BJJError.invalid("Cannot read mixed audio.") }
-                        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frames))!
-                        buffer.frameLength = AVAudioFrameCount(frames)
-                        for frame in 0..<frames { for channel in 0..<2 { buffer.floatChannelData![channel][frame] = values[frame * 2 + channel] } }
-                        try file.write(from: buffer); cursor += Int64(frames)
+                        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(count))!
+                        buffer.frameLength = AVAudioFrameCount(count)
+                        for frame in 0..<count { for channel in 0..<2 { buffer.floatChannelData![channel][frame] = values[(offset + frame) * 2 + channel] } }
+                        try file.write(from: buffer); cursor += Int64(count)
                     }
                 }
                 guard reader.status == .completed else { throw reader.error ?? BJJError.invalid("Narration preview did not finish.") }
-                try silence(until: Int64((project.outputDuration * 48000).rounded()))
+                try silence(until: endFrame)
             }
             BJJDiagnostics.shared.record(.audioPreviewStage, phase: "preview_audio_attach")
             let asset = AVURLAsset(url: target)
