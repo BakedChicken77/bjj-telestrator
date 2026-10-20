@@ -272,6 +272,68 @@ import UniformTypeIdentifiers
             XCTAssertThrowsError(try BJJReviewTimeline.pausedFrameRange(first: first, next: nil, sampleDuration: .invalid, range: range))
         }
     }
+    func testSecondNarrationAcrossExistingLongHoldAndNewFractionalHold() async throws {
+        executionTimeAllowance = 300
+        // Synthetic media, with the timing topology from the reported 41.1 failure.
+        let videoURL = root.appendingPathComponent("two-take-video.mp4")
+        try await silentVideo(videoURL, moving: true, duration: 8.17)
+        let originalAudio = root.appendingPathComponent("original-44100.wav")
+        try tone(originalAudio, frequency: 220, duration: 8.17, sampleRate: 44100)
+        let sourceComposition = AVMutableComposition()
+        for (type, url) in [(AVMediaType.video, videoURL), (.audio, originalAudio)] {
+            let sources = try await AVURLAsset(url: url).loadTracks(withMediaType: type)
+            let source = try XCTUnwrap(sources.first)
+            let track = try XCTUnwrap(sourceComposition.addMutableTrack(withMediaType: type, preferredTrackID: kCMPersistentTrackID_Invalid))
+            try track.insertTimeRange(CMTimeRange(start: .zero, duration: CMTime(seconds: 8.17, preferredTimescale: 48000)), of: source, at: .zero)
+        }
+        let sourceURL = root.appendingPathComponent("two-take-source.mp4")
+        let export = try XCTUnwrap(AVAssetExportSession(asset: sourceComposition, presetName: AVAssetExportPresetHighestQuality))
+        export.outputURL = sourceURL; export.outputFileType = .mp4
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in export.exportAsynchronously { continuation.resume() } }
+        guard export.status == .completed else { throw export.error! }
+        let initial = try await BJJService(store: store).importFile(sourceURL, originalName: "synthetic-two-takes.mp4")
+        let firstHold = UUID().uuidString.lowercased(), secondHold = UUID().uuidString.lowercased()
+        let hold1: BJJJSON = ["id": firstHold, "sourceTicks": 183345, "durationTicks": 993281, "frozenPTS": 3.8016666666666667, "frameResolved": true]
+        let hold2: BJJJSON = ["id": secondHold, "sourceTicks": 244954, "durationTicks": 169604, "frozenPTS": 5.1016666666666666, "frameResolved": true]
+        func take(samples: Int, placements: [BJJJSON], frequency: Double) throws -> BJJJSON {
+            let id = UUID().uuidString.lowercased(), reference = "voiceover/\(id).wav"
+            try tone(store.safeURL(initial.id, reference), frequency: frequency, duration: Double(samples) / 48000, pcm16: true)
+            return ["id": id, "asset": reference, "durationSec": Double(samples) / 48000, "sampleCount": samples,
+                    "gain": 1.0, "muted": false, "recordedAt": BJJProject.now(), "codec": "pcm_s16le", "sampleRate": 48000,
+                    "channels": 1, "placements": placements]
+        }
+        let oldTake = try take(samples: 1386774, placements: [
+            ["audioStartTicks": 0, "durationTicks": 181888, "sourceTicks": 1457],
+            ["audioStartTicks": 181888, "durationTicks": 993281, "holdId": firstHold, "offsetTicks": 0],
+            ["audioStartTicks": 1175169, "durationTicks": 208815, "sourceTicks": 183345]], frequency: 440)
+        let newTake = try take(samples: 837178, placements: [
+            ["audioStartTicks": 0, "durationTicks": 530625, "holdId": firstHold, "offsetTicks": 462656],
+            ["audioStartTicks": 530625, "durationTicks": 61609, "sourceTicks": 183345],
+            ["audioStartTicks": 592234, "durationTicks": 169604, "holdId": secondHold, "offsetTicks": 0],
+            ["audioStartTicks": 761838, "durationTicks": 75340, "sourceTicks": 244954]], frequency: 880)
+        var json = initial.json
+        json["requiredCapabilities"] = (initial.json["requiredCapabilities"] as! [String]) + [BJJReviewTimeline.capability]
+        json["reviewTimeline"] = BJJReviewTimeline(sourceDuration: initial.duration, holds: [hold1]).json
+        json["reviewNarration"] = [oldTake]
+        let prior = try store.save(BJJProject(json))
+        _ = try await BJJAudioComposition.preview(project: prior, store: store, target: root.appendingPathComponent("prior.caf"))
+        let receipt: BJJJSON = ["kind": "review-narration-v1", "operationId": UUID().uuidString.lowercased(),
+            "baseRevision": prior.revision, "baseProject": prior.json, "take": newTake, "holds": [hold2]]
+        try store.registerReviewReceipt(prior.id, receipt: receipt)
+        let saved = try BJJStore(root: root).loadRecoveringRecordings(prior.id)
+        XCTAssertEqual(saved.reviewNarration.count, 2)
+        let mix = root.appendingPathComponent("second-take.caf")
+        do { _ = try await BJJAudioComposition.preview(project: saved, store: store, target: mix) }
+        catch {
+            let events = BJJDiagnostics.shared.snapshot()["events"] as? [BJJJSON] ?? []
+            XCTFail("Second-take preview failed: \(BJJDiagnostics.errors(error)); last stage: \(events.last(where: { $0.s("event") == "audioPreviewStage" })?.s("phase") ?? "unknown")")
+            throw error
+        }
+        XCTAssertEqual(try AVAudioFile(forReading: mix).length, Int64((saved.outputDuration * 48000).rounded()))
+        let newSpan = try XCTUnwrap(saved.reviewTimeline.spans.first { $0.hold?.s("id") == secondHold })
+        let energy = try await audioEnergy(mix, from: newSpan.output + 0.1, to: newSpan.end - 0.1)
+        XCTAssertGreaterThan(energy, 0.05)
+    }
     func testMultipleNarrationHoldsIncludingFinalFrameOnSDRVFRAndDolby() async throws {
         executionTimeAllowance = 600
         var sources = [try await sourceVideo(audio: true, moving: true)]
@@ -2189,12 +2251,12 @@ import UniformTypeIdentifiers
         XCTAssertEqual(try String(contentsOf: protected, encoding: .utf8), "must remain")
         XCTAssertTrue(NSDictionary(dictionary: try store.load(retained.id).json).isEqual(to: retained.json))
     }
-    private func tone(_ url: URL, frequency: Double, duration: Double, pcm16: Bool = false) throws {
-        let format = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 1)!
-        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(duration * 48000))!
+    private func tone(_ url: URL, frequency: Double, duration: Double, pcm16: Bool = false, sampleRate: Double = 48000) throws {
+        let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)!
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount((duration * sampleRate).rounded()))!
         buffer.frameLength = buffer.frameCapacity
-        for i in 0..<Int(buffer.frameLength) { buffer.floatChannelData![0][i] = Float(0.2 * sin(2 * .pi * frequency * Double(i) / 48000)) }
-        let file = try AVAudioFile(forWriting: url, settings: pcm16 ? AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 48000, channels: 1, interleaved: true)!.settings : format.settings)
+        for i in 0..<Int(buffer.frameLength) { buffer.floatChannelData![0][i] = Float(0.2 * sin(2 * .pi * frequency * Double(i) / sampleRate)) }
+        let file = try AVAudioFile(forWriting: url, settings: pcm16 ? AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: sampleRate, channels: 1, interleaved: true)!.settings : format.settings)
         try file.write(from: buffer)
     }
     private func clip(_ p: BJJProject, pcm16: Bool = false) throws -> BJJJSON {
@@ -2223,7 +2285,7 @@ import UniformTypeIdentifiers
         _ = try store.save(BJJProject(undo))
         XCTAssertEqual(try store.load(p.id).voiceovers.count, 1)
     }
-    private func silentVideo(_ url: URL, rotated: Bool = false, moving: Bool = false) async throws {
+    private func silentVideo(_ url: URL, rotated: Bool = false, moving: Bool = false, duration: Double = 4) async throws {
         let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: [AVVideoCodecKey: AVVideoCodecType.h264,
             AVVideoWidthKey: 320, AVVideoHeightKey: 180])
@@ -2234,7 +2296,7 @@ import UniformTypeIdentifiers
         writer.add(input)
         guard writer.startWriting() else { throw writer.error! }
         writer.startSession(atSourceTime: .zero)
-        for i in 0..<120 {
+        for i in 0..<Int(ceil(duration * 30)) {
             while !input.isReadyForMoreMediaData { try await Task.sleep(nanoseconds: 1_000_000) }
             var buffer: CVPixelBuffer?
             CVPixelBufferPoolCreatePixelBuffer(nil, adaptor.pixelBufferPool!, &buffer)
@@ -2244,11 +2306,12 @@ import UniformTypeIdentifiers
             let stride = CVPixelBufferGetBytesPerRow(frame)
             for y in 0..<180 { for x in 0..<320 {
                 let p = y * stride + x * 4
-                bytes[p] = moving ? UInt8(80 + i) : 80; bytes[p + 1] = 45; bytes[p + 2] = 20; bytes[p + 3] = 255
+                bytes[p] = moving ? UInt8(80 + i % 120) : 80; bytes[p + 1] = 45; bytes[p + 2] = 20; bytes[p + 3] = 255
             } }
             CVPixelBufferUnlockBaseAddress(frame, [])
             guard adaptor.append(frame, withPresentationTime: CMTime(value: Int64(i), timescale: 30)) else { throw writer.error! }
         }
+        writer.endSession(atSourceTime: CMTime(seconds: duration, preferredTimescale: 600))
         input.markAsFinished()
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in writer.finishWriting { continuation.resume() } }
         guard writer.status == .completed else { throw writer.error! }

@@ -6,7 +6,7 @@ import CryptoKit
 final class BJJDiagnostics: @unchecked Sendable {
     enum Event: String { case launch, background, foreground, backgroundExpired, libraryStart, libraryFinish, libraryError, cancel,
         photosRequest, photosReady, photosSucceeded, photosFailed, photosCancelled, photosCallbackIgnored, copyStarted, sceneState, backgroundDenied, mediaStage, mediaError, mediaUnderlyingError, dolbyRejected, packageStage, packageError,
-        editorOpen, editorClose, editorError, editSaved, history, playback, audioPreview, audioPreviewReady, audioPreviewError,
+        editorOpen, editorClose, editorError, editSaved, history, playback, audioPreview, audioPreviewReady, audioPreviewError, audioPreviewStage,
         recordingStart, recordingStop, recordingPause, recordingError, recordingSignal, recordingFileSignal, exportStage, exportError, share }
     static let shared = BJJDiagnostics()
     private let queue = DispatchQueue(label: "FreshFrame.diagnostics", qos: .utility)
@@ -46,7 +46,7 @@ final class BJJDiagnostics: @unchecked Sendable {
             "version": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown",
             "build": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown"]
         if let operation, UUID(uuidString: operation) != nil { row["operation"] = operation }
-        if let phase, ["unknown", "active", "foreground_inactive", "background", "waiting_for_photos", "queued", "running", "failed", "completed", "cancelled", "copying", "inspecting", "preparing_preview", "validating", "ready", "backup", "restore", "import", "repair"].contains(phase) { row["phase"] = phase }
+        if let phase, ["unknown", "active", "foreground_inactive", "background", "waiting_for_photos", "queued", "running", "failed", "completed", "cancelled", "copying", "inspecting", "preparing_preview", "validating", "ready", "backup", "restore", "import", "repair", "preview_source", "preview_audio_tracks", "preview_video_holds", "preview_audio_mix", "preview_audio_attach"].contains(phase) { row["phase"] = phase }
         if let value, value.isFinite { row["value"] = value }
         if let error { row["errors"] = Self.errors(error) }
         let entry = row

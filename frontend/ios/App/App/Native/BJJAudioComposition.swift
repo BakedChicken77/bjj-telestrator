@@ -98,12 +98,15 @@ struct BJJAudioComposition {
     /// Decode the same normalized mix and limiter used by export. Stream into PCM
     /// with bounded memory; a silent bed preserves gaps and the project clock.
     @MainActor static func preview(project: BJJProject, store: BJJStore, target: URL) async throws -> AVPlayerItem {
+        BJJDiagnostics.shared.record(.audioPreviewStage, phase: "preview_source")
         let media = try await BJJMedia.inspect(store.asset(project.id, project.source.s("asset")),
                                               reference: project.source.s("asset"), originalName: project.name)
         let composition = AVMutableComposition()
+        BJJDiagnostics.shared.record(.audioPreviewStage, phase: "preview_audio_tracks")
         let audio = try await build(media: media, project: project, store: store, composition: composition)
         defer { for path in audio.temporaryFiles { try? FileManager.default.removeItem(at: path) } }
         let proxy = AVURLAsset(url: try store.asset(project.id, project.proxy.s("asset")))
+        BJJDiagnostics.shared.record(.audioPreviewStage, phase: "preview_video_holds")
         let videoComposition = AVMutableComposition()
         guard let sourceVideo = try await proxy.loadTracks(withMediaType: .video).first,
               let video = videoComposition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) else {
@@ -114,6 +117,7 @@ struct BJJAudioComposition {
         try await project.reviewTimeline.insertVideo(sourceVideo, range: CMTimeRange(start: .zero, duration: CMTime(seconds: project.duration, preferredTimescale: 48000)), into: video, exactFrame: false)
         video.preferredTransform = try await sourceVideo.load(.preferredTransform)
         if let output = audio.output {
+            BJJDiagnostics.shared.record(.audioPreviewStage, phase: "preview_audio_mix")
             try store.checkSpace(required: Int64(project.outputDuration * 48000 * 8) + 100_000_000)
             try await BJJAssets.offMain {
                 let reader = try AVAssetReader(asset: composition)
@@ -151,6 +155,7 @@ struct BJJAudioComposition {
                 guard reader.status == .completed else { throw reader.error ?? BJJError.invalid("Narration preview did not finish.") }
                 try silence(until: Int64((project.outputDuration * 48000).rounded()))
             }
+            BJJDiagnostics.shared.record(.audioPreviewStage, phase: "preview_audio_attach")
             let asset = AVURLAsset(url: target)
             guard let source = try await asset.loadTracks(withMediaType: .audio).first,
                   let track = videoComposition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else { throw BJJError.invalid("Cannot open narration preview.") }
