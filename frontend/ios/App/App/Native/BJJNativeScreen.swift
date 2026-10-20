@@ -211,6 +211,7 @@ struct BJJNativeEditorScreen: View {
                 if let notice = session.notice {
                     VStack(alignment: .leading, spacing: 4) {
                         if session.recordingPresentation == .interrupted { Label("Recording interrupted", systemImage: "exclamationmark.circle").font(.headline) }
+                        else if session.audioPreviewFailed { Label("Playback needs attention", systemImage: "exclamationmark.circle").font(.headline) }
                         Text(notice).font(.caption).foregroundStyle(.secondary)
                     }.frame(maxWidth: .infinity, alignment: .leading).accessibilityIdentifier("narration.notice")
                 }

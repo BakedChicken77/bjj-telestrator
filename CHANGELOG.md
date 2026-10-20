@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.1.2] - 2026-10-20
+
+### Narration playback reliability
+- Skip empty audio edits caused by rounding at pause boundaries when preparing playback or exporting a review with multiple narration takes.
+- Align mixed preview packets to the review clock and trim decoder preroll or excess tail samples.
+- Keep saved takes distinct from recording interruptions when playback preparation fails, and explain how to retry with Play.
+- Add playback-stage diagnostics and native coverage for adding narration across existing and newly recorded pauses.
+
 ## [2.1.1] - 2026-10-18
 
 ### Recording and returning to a review

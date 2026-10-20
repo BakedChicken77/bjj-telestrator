@@ -33,8 +33,13 @@ struct BJJAudioComposition {
             return track
         }
         func insert(_ track: AVMutableCompositionTrack, source: AVAssetTrack, audioStart: Double, outputStart: Double, duration: Double) throws {
-            guard duration > 0 else { return }
-            try track.insertTimeRange(CMTimeRange(start: CMTime(seconds: audioStart, preferredTimescale: 48000), duration: CMTime(seconds: duration, preferredTimescale: 48000)), of: source, at: CMTime(seconds: outputStart, preferredTimescale: 48000))
+            // Intersections at a shared pause boundary can leave a positive
+            // floating-point residue (e.g. 8.9e-16 seconds). Check the actual
+            // sample-clock duration before inserting: AVFoundation rejects a
+            // zero-duration edit even though its Double was greater than zero.
+            let sampleDuration = CMTime(seconds: duration, preferredTimescale: 48000)
+            guard sampleDuration.isNumeric, CMTimeCompare(sampleDuration, .zero) > 0 else { return }
+            try track.insertTimeRange(CMTimeRange(start: CMTime(seconds: audioStart, preferredTimescale: 48000), duration: sampleDuration), of: source, at: CMTime(seconds: outputStart, preferredTimescale: 48000))
         }
         for source in try await media.asset.loadTracks(withMediaType: .audio).prefix(1) {
             let range = try await source.load(.timeRange), target = try track(gain: Double(originalGain))
@@ -98,12 +103,15 @@ struct BJJAudioComposition {
     /// Decode the same normalized mix and limiter used by export. Stream into PCM
     /// with bounded memory; a silent bed preserves gaps and the project clock.
     @MainActor static func preview(project: BJJProject, store: BJJStore, target: URL) async throws -> AVPlayerItem {
+        BJJDiagnostics.shared.record(.audioPreviewStage, phase: "preview_source")
         let media = try await BJJMedia.inspect(store.asset(project.id, project.source.s("asset")),
                                               reference: project.source.s("asset"), originalName: project.name)
         let composition = AVMutableComposition()
+        BJJDiagnostics.shared.record(.audioPreviewStage, phase: "preview_audio_tracks")
         let audio = try await build(media: media, project: project, store: store, composition: composition)
         defer { for path in audio.temporaryFiles { try? FileManager.default.removeItem(at: path) } }
         let proxy = AVURLAsset(url: try store.asset(project.id, project.proxy.s("asset")))
+        BJJDiagnostics.shared.record(.audioPreviewStage, phase: "preview_video_holds")
         let videoComposition = AVMutableComposition()
         guard let sourceVideo = try await proxy.loadTracks(withMediaType: .video).first,
               let video = videoComposition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) else {
@@ -114,6 +122,7 @@ struct BJJAudioComposition {
         try await project.reviewTimeline.insertVideo(sourceVideo, range: CMTimeRange(start: .zero, duration: CMTime(seconds: project.duration, preferredTimescale: 48000)), into: video, exactFrame: false)
         video.preferredTransform = try await sourceVideo.load(.preferredTransform)
         if let output = audio.output {
+            BJJDiagnostics.shared.record(.audioPreviewStage, phase: "preview_audio_mix")
             try store.checkSpace(required: Int64(project.outputDuration * 48000 * 8) + 100_000_000)
             try await BJJAssets.offMain {
                 let reader = try AVAssetReader(asset: composition)
@@ -123,6 +132,7 @@ struct BJJAudioComposition {
                 let format = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 2)!
                 let file = try AVAudioFile(forWriting: target, settings: format.settings)
                 var cursor: Int64 = 0
+                let endFrame = Int64((project.outputDuration * 48000).rounded())
                 func silence(until frame: Int64) throws {
                     while cursor < frame {
                         let count = AVAudioFrameCount(min(4096, frame - cursor))
@@ -137,20 +147,29 @@ struct BJJAudioComposition {
                         let scaled = try BJJAudio.scale(sample, gain: Float(audio.scale))
                         let frames = CMSampleBufferGetNumSamples(scaled)
                         let first = Int64((CMSampleBufferGetPresentationTimeStamp(scaled).seconds * 48000).rounded())
-                        try silence(until: max(0, first))
+                        // Reader buffers may include decoder preroll, overlap,
+                        // or a final packet beyond its requested time range.
+                        // Place only the not-yet-written project samples, rather
+                        // than appending whole packets and shifting narration.
+                        let start = max(cursor, max(0, first))
+                        let end = min(endFrame, first + Int64(frames))
+                        guard end > start else { return }
+                        try silence(until: start)
+                        let offset = Int(start - first), count = Int(end - start)
                         guard let block = CMSampleBufferGetDataBuffer(scaled) else { throw BJJError.invalid("Missing mixed audio.") }
                         var values = [Float](repeating: 0, count: frames * 2)
                         let status = values.withUnsafeMutableBytes { CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: frames * 8, destination: $0.baseAddress!) }
                         guard status == noErr else { throw BJJError.invalid("Cannot read mixed audio.") }
-                        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frames))!
-                        buffer.frameLength = AVAudioFrameCount(frames)
-                        for frame in 0..<frames { for channel in 0..<2 { buffer.floatChannelData![channel][frame] = values[frame * 2 + channel] } }
-                        try file.write(from: buffer); cursor += Int64(frames)
+                        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(count))!
+                        buffer.frameLength = AVAudioFrameCount(count)
+                        for frame in 0..<count { for channel in 0..<2 { buffer.floatChannelData![channel][frame] = values[(offset + frame) * 2 + channel] } }
+                        try file.write(from: buffer); cursor += Int64(count)
                     }
                 }
                 guard reader.status == .completed else { throw reader.error ?? BJJError.invalid("Narration preview did not finish.") }
-                try silence(until: Int64((project.outputDuration * 48000).rounded()))
+                try silence(until: endFrame)
             }
+            BJJDiagnostics.shared.record(.audioPreviewStage, phase: "preview_audio_attach")
             let asset = AVURLAsset(url: target)
             guard let source = try await asset.loadTracks(withMediaType: .audio).first,
                   let track = videoComposition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else { throw BJJError.invalid("Cannot open narration preview.") }

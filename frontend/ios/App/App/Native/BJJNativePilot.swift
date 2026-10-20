@@ -450,7 +450,9 @@ enum BJJRecordingPresentation: Equatable {
         defer {
             preparingAudio = false
             if recordingPresentation == .saving {
-                recordingPresentation = recordingInterruption == nil && !audioPreviewFailed ? .idle : .interrupted
+                // Playback preparation is separate from capture. A saved take
+                // must not be presented as an interrupted recording.
+                recordingPresentation = recordingInterruption == nil ? .idle : .interrupted
             }
         }
         do {
@@ -459,7 +461,9 @@ enum BJJRecordingPresentation: Equatable {
             let item = try await BJJAudioComposition.preview(project: project, store: store, target: path)
             guard !closed, generation == previewGeneration else { try? FileManager.default.removeItem(at: path); return }
             playbackTimeline = project.reviewTimeline
+            let recoveredPreview = audioPreviewFailed
             audioPreviewFailed = false
+            if recoveredPreview, recordingInterruption == nil { notice = "Audio preview ready. Play it back to check the timing." }
             player.replaceCurrentItem(with: item); player.volume = 1; player.isMuted = false
             BJJDiagnostics.shared.record(.audioPreviewReady)
             seekOutput(position)
@@ -483,7 +487,10 @@ enum BJJRecordingPresentation: Equatable {
         } catch {
             audioPreviewFailed = true
             BJJDiagnostics.shared.record(.audioPreviewError, error: error)
-            self.error = "Audio preview could not be prepared. \(error.localizedDescription)"
+            if recordingPresentation == .saving, recordingInterruption == nil {
+                notice = "Take saved. Tap Play to retry preparing playback."
+            }
+            self.error = "Playback could not be prepared. Your review and saved narration are preserved. Tap Play to retry. \(error.localizedDescription)"
         }
     }
     var recordingRouteNeedsGuidance: Bool {
