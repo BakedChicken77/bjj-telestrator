@@ -228,8 +228,12 @@ import UniformTypeIdentifiers
         let held = root.appendingPathComponent("held-test-proxy.mp4")
         try FileManager.default.moveItem(at: proxy, to: held)
         defer { if FileManager.default.fileExists(atPath: held.path) { try? FileManager.default.moveItem(at: held, to: proxy) } }
+        editor.recordingPresentation = .saving
         await editor.prepareAudio()
         XCTAssertTrue(editor.audioPreviewFailed)
+        XCTAssertEqual(editor.recordingPresentation, .idle, "A saved take is not an interrupted recording when playback preparation fails")
+        XCTAssertEqual(editor.notice, "Take saved. Tap Play to retry preparing playback.")
+        XCTAssertTrue(editor.error?.contains("saved narration are preserved") == true)
         XCTAssertTrue(editor.player.isMuted)
         editor.seekOutput(0, resume: true)
         try await Task.sleep(nanoseconds: 100_000_000)
@@ -240,6 +244,7 @@ import UniformTypeIdentifiers
         await editor.prepareAudio()
         XCTAssertFalse(editor.audioPreviewFailed)
         XCTAssertFalse(editor.player.isMuted)
+        XCTAssertEqual(editor.notice, "Audio preview ready. Play it back to check the timing.")
         XCTAssertEqual(try store.load(initial.id).revision, initial.revision)
     }
     func testRecordedPCMCheckDistinguishesSilenceWithoutChangingFiles() throws {
@@ -333,6 +338,15 @@ import UniformTypeIdentifiers
         let newSpan = try XCTUnwrap(saved.reviewTimeline.spans.first { $0.hold?.s("id") == secondHold })
         let energy = try await audioEnergy(mix, from: newSpan.output + 0.1, to: newSpan.end - 0.1)
         XCTAssertGreaterThan(energy, 0.05)
+        // Export shares the audio compositor and must retain the same saved take.
+        let media = try await BJJMedia.inspect(store.asset(saved.id, saved.source.s("asset")), reference: saved.source.s("asset"), originalName: saved.name)
+        let movie = root.appendingPathComponent("second-take-export.mp4")
+        try await BJJRenderer().render(media: media, project: saved, store: store, output: movie) { _ in }
+        let exported = try await BJJMedia.inspect(movie, reference: "exports/test.mp4", originalName: "test.mp4")
+        XCTAssertEqual(exported.videoRange.duration.seconds, saved.outputDuration, accuracy: 1 / 30.0)
+        let exportedEnergy = try await audioEnergy(movie, from: newSpan.output + 0.1, to: newSpan.end - 0.1)
+        XCTAssertGreaterThan(exportedEnergy, 0.05)
+        XCTAssertEqual(try store.load(saved.id).revision, saved.revision)
     }
     func testMultipleNarrationHoldsIncludingFinalFrameOnSDRVFRAndDolby() async throws {
         executionTimeAllowance = 600
