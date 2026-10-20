@@ -326,11 +326,11 @@ import UniformTypeIdentifiers
             ["audioStartTicks": 530625, "durationTicks": 61609, "sourceTicks": 183345],
             ["audioStartTicks": 592234, "durationTicks": 169604, "holdId": secondHold, "offsetTicks": 0],
             ["audioStartTicks": 761838, "durationTicks": 75340, "sourceTicks": 244954]], frequency: 880)
-        var json = initial.json
-        json["requiredCapabilities"] = (initial.json["requiredCapabilities"] as! [String]) + [BJJReviewTimeline.capability]
-        json["reviewTimeline"] = BJJReviewTimeline(sourceDuration: initial.duration, holds: [hold1]).json
-        json["reviewNarration"] = [oldTake]
-        let prior = try store.save(BJJProject(json))
+        step = "recover prior take"
+        let priorReceipt: BJJJSON = ["kind": "review-narration-v1", "operationId": UUID().uuidString.lowercased(),
+            "baseRevision": initial.revision, "baseProject": initial.json, "take": oldTake, "holds": [hold1]]
+        try store.registerReviewReceipt(initial.id, receipt: priorReceipt)
+        let prior = try store.loadRecoveringRecordings(initial.id)
         step = "preview prior take"
         _ = try await BJJAudioComposition.preview(project: prior, store: store, target: root.appendingPathComponent("prior.caf"))
         step = "recover second take"
