@@ -280,22 +280,32 @@ import UniformTypeIdentifiers
     func testSecondNarrationAcrossExistingLongHoldAndNewFractionalHold() async throws {
         executionTimeAllowance = 300
         // Synthetic media, with the timing topology from the reported 41.1 failure.
+        var step = "generate video"
+        defer {
+            let events = BJJDiagnostics.shared.snapshot()["events"] as? [BJJJSON] ?? []
+            print("Two-take regression step: \(step); preview stage: \(events.last(where: { $0.s("event") == "audioPreviewStage" })?.s("phase") ?? "none")")
+        }
         let videoURL = root.appendingPathComponent("two-take-video.mp4")
         try await silentVideo(videoURL, moving: true, duration: 8.17)
+        step = "generate source audio"
         let originalAudio = root.appendingPathComponent("original-44100.wav")
         try tone(originalAudio, frequency: 220, duration: 8.17, sampleRate: 44100)
         let sourceComposition = AVMutableComposition()
+        step = "assemble synthetic source"
         for (type, url) in [(AVMediaType.video, videoURL), (.audio, originalAudio)] {
-            let sources = try await AVURLAsset(url: url).loadTracks(withMediaType: type)
+            let asset = AVURLAsset(url: url)
+            let sources = try await asset.loadTracks(withMediaType: type)
             let source = try XCTUnwrap(sources.first)
             let track = try XCTUnwrap(sourceComposition.addMutableTrack(withMediaType: type, preferredTrackID: kCMPersistentTrackID_Invalid))
             try track.insertTimeRange(CMTimeRange(start: .zero, duration: CMTime(seconds: 8.17, preferredTimescale: 48000)), of: source, at: .zero)
         }
         let sourceURL = root.appendingPathComponent("two-take-source.mp4")
+        step = "export synthetic source"
         let export = try XCTUnwrap(AVAssetExportSession(asset: sourceComposition, presetName: AVAssetExportPresetHighestQuality))
         export.outputURL = sourceURL; export.outputFileType = .mp4
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in export.exportAsynchronously { continuation.resume() } }
         guard export.status == .completed else { throw export.error! }
+        step = "import synthetic source"
         let initial = try await BJJService(store: store).importFile(sourceURL, originalName: "synthetic-two-takes.mp4")
         let firstHold = UUID().uuidString.lowercased(), secondHold = UUID().uuidString.lowercased()
         let hold1: BJJJSON = ["id": firstHold, "sourceTicks": 183345, "durationTicks": 993281, "frozenPTS": 3.8016666666666667, "frameResolved": true]
@@ -321,13 +331,16 @@ import UniformTypeIdentifiers
         json["reviewTimeline"] = BJJReviewTimeline(sourceDuration: initial.duration, holds: [hold1]).json
         json["reviewNarration"] = [oldTake]
         let prior = try store.save(BJJProject(json))
+        step = "preview prior take"
         _ = try await BJJAudioComposition.preview(project: prior, store: store, target: root.appendingPathComponent("prior.caf"))
+        step = "recover second take"
         let receipt: BJJJSON = ["kind": "review-narration-v1", "operationId": UUID().uuidString.lowercased(),
             "baseRevision": prior.revision, "baseProject": prior.json, "take": newTake, "holds": [hold2]]
         try store.registerReviewReceipt(prior.id, receipt: receipt)
         let saved = try BJJStore(root: root).loadRecoveringRecordings(prior.id)
         XCTAssertEqual(saved.reviewNarration.count, 2)
         let mix = root.appendingPathComponent("second-take.caf")
+        step = "preview second take"
         do { _ = try await BJJAudioComposition.preview(project: saved, store: store, target: mix) }
         catch {
             let events = BJJDiagnostics.shared.snapshot()["events"] as? [BJJJSON] ?? []
@@ -341,12 +354,14 @@ import UniformTypeIdentifiers
         // Export shares the audio compositor and must retain the same saved take.
         let media = try await BJJMedia.inspect(store.asset(saved.id, saved.source.s("asset")), reference: saved.source.s("asset"), originalName: saved.name)
         let movie = root.appendingPathComponent("second-take-export.mp4")
+        step = "export second take"
         try await BJJRenderer().render(media: media, project: saved, store: store, output: movie) { _ in }
         let exported = try await BJJMedia.inspect(movie, reference: "exports/test.mp4", originalName: "test.mp4")
         XCTAssertEqual(exported.videoRange.duration.seconds, saved.outputDuration, accuracy: 1 / 30.0)
         let exportedEnergy = try await audioEnergy(movie, from: newSpan.output + 0.1, to: newSpan.end - 0.1)
         XCTAssertGreaterThan(exportedEnergy, 0.05)
         XCTAssertEqual(try store.load(saved.id).revision, saved.revision)
+        step = "complete"
     }
     func testMultipleNarrationHoldsIncludingFinalFrameOnSDRVFRAndDolby() async throws {
         executionTimeAllowance = 600
