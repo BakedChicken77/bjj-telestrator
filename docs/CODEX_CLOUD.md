@@ -6,6 +6,7 @@ This is the owner-facing setup and review runbook for reusable Codex Cloud tasks
 
 - Repository: `BakedChicken77/bjj-telestrator`. Default `main` branch is used for general development/configuration. As checked on October 28, 2026, it has the 2.1.0 frontend version.
 - `preview/native-iphone` carries the more recent shipping Fresh Frame iPhone implementation (2.1.2 at the same check). **It is not interchangeable with `main`.** Inspect both heads and the relevant PR/issue before selecting a feature base.
+- After this setup is merged into `main`, the guidance is **not automatically present** on `preview/native-iphone`. Until an explicitly authorized preview-branch PR carries it over, tell Codex to read `git show origin/main:AGENTS.md` and `git show origin/main:docs/CODEX_CLOUD.md` before changing preview-branch code. This read-only access does not trigger the release workflow.
 - CI runs for PRs to either branch; `.github/workflows/ci.yml` aggregates frontend/repository, backend/FFmpeg, Playwright browser, Docker, and native Xcode jobs into `CI gate`.
 - **A push/merge to `preview/native-iphone` triggers `.github/workflows/release.yml` and can result in internal TestFlight distribution.** Keep exploratory and setup PRs against `main`. Work targeting the preview branch needs an explicit owner release decision before merge.
 - Backlog issue #43 and UX-01–UX-32 issues describe potential work, not automatic authorization. Documentation is preserved on `docs/ux-backlog-2026-10` while its draft PR is pending.
