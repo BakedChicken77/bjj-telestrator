@@ -153,8 +153,11 @@ struct BJJNativeTransportState: Codable {
     var loopStart: Double = 0
     var loopEnd: Double = 0
     var loopEnabled = false
+    var reviewTime: Double? = nil
+    var projectRevision: Int? = nil
     func validated(duration: Double) -> BJJNativeTransportState {
         var result = self
+        if let reviewTime, !reviewTime.isFinite || reviewTime < 0 { result.reviewTime = nil }
         result.time = time.isFinite ? min(duration, max(0, time)) : 0
         result.speed = [Float(0.25), 0.5, 1, 2].contains(speed) ? speed : 1
         result.loopStart = loopStart.isFinite ? min(duration, max(0, loopStart)) : 0
@@ -249,6 +252,7 @@ enum BJJRecordingPresentation: Equatable {
     private var exportCancelled = false
     private var jobID: String?
     private var closed = false
+    private var pendingReviewPosition: Double?
     private var seekGeneration = 0
     init(project: BJJProject, store: BJJStore, service: BJJService? = nil, preferences: UserDefaults? = .standard) throws {
         BJJDiagnostics.shared.record(.editorOpen)
@@ -259,7 +263,7 @@ enum BJJRecordingPresentation: Equatable {
         player.volume = (project.settings["originalAudioMuted"] as? Bool) == true ? 0 : Float(min(1, project.settings.n("originalAudioGain")))
         observer = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 1.0 / 30, preferredTimescale: 600), queue: .main) { [weak self] value in
             Task { @MainActor in
-                guard let self, !self.closed, !self.seeking else { return }
+                guard let self, !self.closed, !self.seeking, self.pendingReviewPosition == nil else { return }
                 if self.recording { self.recordingLevel = self.capture.level; self.capture.checkClock() }
                 let seconds = value.seconds
                 if seconds.isFinite { self.outputTime = min(self.project.outputDuration, max(0, seconds)); self.time = self.playbackTimeline.source(at: self.outputTime) }
@@ -328,7 +332,10 @@ enum BJJRecordingPresentation: Equatable {
            let saved = try? JSONDecoder().decode(BJJNativeTransportState.self, from: data) {
             let state = saved.validated(duration: project.duration)
             speed = state.speed; loopStart = state.loopStart; loopEnd = state.loopEnd; loopEnabled = state.loopEnabled
-            seek(state.time)
+            let target = state.projectRevision == project.revision ? state.reviewTime : nil
+            if let target, target <= project.outputDuration {
+                pendingReviewPosition = target; outputTime = target; time = project.reviewTimeline.source(at: target)
+            } else { seek(state.time) }
         }
     }
     func pause() {
@@ -362,6 +369,7 @@ enum BJJRecordingPresentation: Equatable {
     }
     func seekOutput(_ seconds: Double, resume: Bool = false) {
         guard seconds.isFinite, !closed, !recording else { return }
+        pendingReviewPosition = nil
         pause(); seekGeneration += 1
         let generation = seekGeneration
         let target = min(project.outputDuration, max(0, seconds))
@@ -405,7 +413,7 @@ enum BJJRecordingPresentation: Equatable {
         catch { self.error = error.localizedDescription }
     }
     private func savePosition() {
-        let state = BJJNativeTransportState(time: time, speed: speed, loopStart: loopStart, loopEnd: loopEnd, loopEnabled: loopEnabled)
+        let state = BJJNativeTransportState(time: time, speed: speed, loopStart: loopStart, loopEnd: loopEnd, loopEnabled: loopEnabled, reviewTime: pendingReviewPosition ?? outputTime, projectRevision: project.revision)
         if let data = try? JSONEncoder().encode(state) { preferences?.set(data, forKey: "native-review.\(id)") }
     }
     private var documentState: BJJJSON {
@@ -462,6 +470,7 @@ enum BJJRecordingPresentation: Equatable {
            let span = project.reviewTimeline.spans.first(where: { $0.hold?["id"] as? String == id }) {
             position = span.output + min(span.duration, oldPosition - oldSpan.output)
         }
+        if let pendingReviewPosition { position = pendingReviewPosition }
         player.isMuted = true
         defer {
             preparingAudio = false

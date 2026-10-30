@@ -19,20 +19,22 @@ struct BJJCueProperties: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Timing · seconds") {
+                Section("Original video timing · seconds") {
+                    Text("Finished review: \(session.project.reviewTimeline.output(before: cue.n("startSec")), specifier: "%.2f") – \(session.project.reviewTimeline.output(before: cue.n("endSec")), specifier: "%.2f")s")
+                        .font(.caption)
                     BJJCueRangeBar(start: cue.n("startSec"), end: cue.n("endSec"),
                                    duration: session.project.duration, fps: session.project.exportSettings.n("fps"),
                                    change: changeBoundary)
                     Text("Drag either handle to set when the cue appears. The video follows the handle.").font(.caption)
                     Slider(value: Binding(get: { session.time }, set: { session.seek($0) }), in: 0...session.project.duration)
-                        .accessibilityLabel("Preview video position")
+                        .accessibilityLabel("Original video preview position")
                     DisclosureGroup("Precise timing") {
                         number("Start", "startSec", range: 0...session.project.duration)
                         number("End", "endSec", range: 0...session.project.duration)
                         Button("Start here") { changeBoundary(true, session.time) }
                         Button("End here") { changeBoundary(false, session.time) }
                     }
-                    Text("The cue appears at Start and disappears at End. Times are video seconds.").font(.footnote)
+                    Text("The cue appears at Start and disappears at End. Times are original-video seconds.").font(.footnote)
                 }
                 Section("Appearance") {
                     color("Stroke color", "strokeColor")
@@ -181,7 +183,7 @@ struct BJJCueRangeBar: View {
                 .onChanged { value in change(isStart, Double((value.location.x - 22) / width) * duration) })
             .accessibilityElement()
             .accessibilityLabel(isStart ? "Cue start" : "Cue end")
-            .accessibilityValue(String(format: "%.2f seconds", isStart ? start : end))
+            .accessibilityValue(String(format: "%.2f original-video seconds", isStart ? start : end))
             .accessibilityIdentifier(isStart ? "cue.range.start" : "cue.range.end")
             .accessibilityAdjustableAction { direction in
                 let delta = direction == .increment ? 1 / fps : -1 / fps

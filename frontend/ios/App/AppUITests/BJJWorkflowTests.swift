@@ -60,7 +60,7 @@ final class BJJWorkflowTests: XCTestCase {
         XCTAssertTrue(app.buttons["editor.export"].waitForExistence(timeout: 20))
         expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: app.buttons["editor.export"])
         waitForExpectations(timeout: 30)
-        let position = app.sliders["Video position"]
+        let position = app.sliders["editor.position"]
         position.adjust(toNormalizedSliderPosition: 0.5)
         let saved = position.value as? String
         app.buttons["editor.done"].tap()
