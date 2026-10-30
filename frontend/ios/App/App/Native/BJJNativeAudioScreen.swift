@@ -44,6 +44,7 @@ struct BJJNativeAudioScreen: View {
             }
             .disabled(session.preparingAudio)
             .overlay { if session.preparingAudio { ProgressView("Preparing audio preview…").padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12)) } }
+            .safeAreaInset(edge: .bottom) { BJJSaveFeedback(session: session) }
             .navigationTitle("Narration").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.accessibilityIdentifier("narration.done") } }
         }
@@ -81,11 +82,12 @@ struct BJJNativeTakeScreen: View {
                     Spacer()
                     Button("Later 0.05s") { nudge(0.05) }
                 }.buttonStyle(.borderless)
-                Text("Adjustments are saved immediately. Undo in the editor restores the previous mix or deleted take.").font(.footnote).foregroundStyle(.secondary)
+                Text("Adjustments are saved immediately. Undo below restores the previous mix or deleted take.").font(.footnote).foregroundStyle(.secondary)
             }
             Section { Button("Delete take", role: .destructive) { confirmDelete = true } }
         }
         .disabled(session.preparingAudio)
+        .safeAreaInset(edge: .bottom) { BJJSaveFeedback(session: session) }
         .navigationTitle("Take \(number)")
         .confirmationDialog("Delete this take?", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Delete take", role: .destructive) { session.updateAudio(removing: clip.s("id")); dismiss() }

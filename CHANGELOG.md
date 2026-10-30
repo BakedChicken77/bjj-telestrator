@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.1.3] - 2026-10-30
+
+- Show confirmed local save state, unsaved drawing drafts, and failed writes.
+- Keep descriptive Undo beside drawing, mix, take and pause changes, including narration screens.
+- Preserve existing save transactions, audio preparation and session history boundaries.
+
 ## [2.1.2] - 2026-10-20
 
 ### Narration playback reliability

@@ -221,6 +221,18 @@ enum BJJRecordingPresentation: Equatable {
     private var previewFiles: [URL] = []
     private var playbackTimeline: BJJReviewTimeline
     private var previewGeneration = 0
+    @Published private(set) var saveFailed = false
+    @Published private(set) var undoAction: String?
+    private var undoActions: [String] = []
+    private var redoActions: [String] = []
+    var saveStatus: String {
+        if saveFailed { return "Changes could not be saved" }
+        if recording { return "Recording in progress" }
+        if recordingPresentation == .saving { return "Saving narration" }
+        if cueEditDirty || (!inspectingCue && previewCue != nil) { return "Unsaved drawing changes" }
+        return "Saved on this iPhone"
+    }
+    var canUndo: Bool { undoCount > 0 && !exporting && !recording && !preparingAudio && !inspectingCue }
     private var undoStack: [BJJJSON] = []
     private var redoStack: [BJJJSON] = []
     private var observer: Any?
@@ -281,7 +293,7 @@ enum BJJRecordingPresentation: Equatable {
                     var json = self.project.json
                     if clip["kind"] as? String == "review-narration-v1" { json = try BJJReviewReceipt.apply(clip, to: json) }
                     else { json["voiceovers"] = self.project.voiceovers + [clip] }
-                    try self.commitDocument(json)
+                    try self.commitDocument(json, action: "Record narration")
                     self.notice = reason ?? "Take saved. Play it back to check the timing."
                     let take = clip["take"] as? BJJJSON ?? clip
                     let takeID = take.s("id")
@@ -400,19 +412,23 @@ enum BJJRecordingPresentation: Equatable {
         ["annotations": project.annotations, "voiceovers": project.voiceovers, "settings": project.settings,
          "requiredCapabilities": project.json["requiredCapabilities"]!, "reviewTimeline": project.json["reviewTimeline"] ?? NSNull(), "reviewNarration": project.json["reviewNarration"] ?? NSNull()]
     }
-    func commitDocument(_ json: BJJJSON) throws {
+    func commitDocument(_ json: BJJJSON, action: String = "Edit review") throws {
         guard !exporting, !recording, !preparingAudio else { throw BJJError.invalid("Finish the current operation before editing.") }
         let previous = documentState
-        let saved = try store.save(BJJProject(json))
+        let saved: BJJProject
+        do { saved = try store.save(BJJProject(json)); saveFailed = false }
+        catch { saveFailed = true; throw error }
         BJJDiagnostics.shared.record(.editSaved, value: Double(saved.revision))
         let audioChanged = !NSDictionary(dictionary: ["takes": project.allTakes, "holds": project.reviewTimeline.holds, "settings": project.settings]).isEqual(to: ["takes": saved.allTakes, "holds": saved.reviewTimeline.holds, "settings": saved.settings])
-        undoStack.append(previous); if undoStack.count > 50 { undoStack.removeFirst() }
-        redoStack.removeAll(); project = saved; cancelCueEdit(); syncHistory()
+        undoStack.append(previous); undoActions.append(action)
+        if undoStack.count > 50 { undoStack.removeFirst(); undoActions.removeFirst() }
+        redoStack.removeAll(); redoActions.removeAll(); project = saved; cancelCueEdit(); syncHistory()
         if audioChanged { Task { await self.prepareAudio() } }
     }
     func commit(_ annotations: [BJJJSON]) throws {
         var json = project.json; json["annotations"] = annotations
-        try commitDocument(json)
+        let action = annotations.count < project.annotations.count ? "Delete drawing" : annotations.count > project.annotations.count ? "Add drawing" : "Edit drawing"
+        try commitDocument(json, action: action)
         if !annotations.contains(where: { $0.s("id") == selectedID }) { selectedID = nil }
     }
     func updateAudio(clip: BJJJSON? = nil, removing: String? = nil, settings: BJJJSON? = nil) {
@@ -427,7 +443,7 @@ enum BJJRecordingPresentation: Equatable {
                 json["voiceovers"] = project.voiceovers.filter { $0.s("id") != removing }
                 if project.pauseAware { json["reviewNarration"] = project.reviewNarration.filter { $0.s("id") != removing } }
             }
-            try commitDocument(json)
+            try commitDocument(json, action: removing == nil ? "Change audio mix" : "Delete take")
         } catch { self.error = error.localizedDescription }
     }
     func prepareAudio() async {
@@ -566,7 +582,7 @@ enum BJJRecordingPresentation: Equatable {
             json["reviewNarration"] = project.reviewNarration.map { take -> BJJJSON in
                 var take = take; take["placements"] = (take["placements"] as! [BJJJSON]).filter { $0["holdId"] as? String != id }; return take
             }
-            try commitDocument(json)
+            try commitDocument(json, action: "Remove pause and its audio")
         } catch { self.error = error.localizedDescription }
     }
     func nudgeReviewTake(_ id: String, delta: Double) {
@@ -599,14 +615,19 @@ enum BJJRecordingPresentation: Equatable {
             var json = project.json
             for (key, value) in state { if value is NSNull { json.removeValue(forKey: key) } else { json[key] = value } }
             let previous = documentState
-            let saved = try store.save(BJJProject(json))
-            if redo { redoStack.removeLast(); undoStack.append(previous) }
-            else { undoStack.removeLast(); redoStack.append(previous) }
+            let saved: BJJProject
+            do { saved = try store.save(BJJProject(json)); saveFailed = false }
+            catch { saveFailed = true; throw error }
+            if redo {
+                redoStack.removeLast(); undoStack.append(previous); undoActions.append(redoActions.removeLast())
+            } else {
+                undoStack.removeLast(); redoStack.append(previous); redoActions.append(undoActions.removeLast())
+            }
             project = saved; syncHistory()
             Task { await self.prepareAudio() }
         } catch { self.error = error.localizedDescription }
     }
-    private func syncHistory() { undoCount = undoStack.count; redoCount = redoStack.count }
+    private func syncHistory() { undoCount = undoStack.count; redoCount = redoStack.count; undoAction = undoActions.last }
     func prepareThumbnails() async {
         guard thumbnails.isEmpty else { return }
         do {

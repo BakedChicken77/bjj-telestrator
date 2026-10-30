@@ -15,6 +15,35 @@ import UniformTypeIdentifiers
         store = try BJJStore(root: root)
     }
     override func tearDownWithError() throws { try? FileManager.default.removeItem(at: root) }
+    func testSaveFeedbackTracksDraftFailureDurableCommitAndUndo() throws {
+        let initial = try project()
+        var failWrites = false
+        let writer = try BJJStore(root: root, writeFile: { data, url in
+            if failWrites && url.lastPathComponent == "save-transaction.json" { throw BJJError.invalid("Injected write failure") }
+            try data.write(to: url, options: .atomic)
+        })
+        let editor = try BJJNativeEditorSession(project: initial, store: writer, preferences: nil)
+        defer { editor.close() }
+        XCTAssertEqual(editor.saveStatus, "Saved on this iPhone")
+        editor.select(initial.annotations[0].s("id")); editor.beginInspector()
+        var cue = initial.annotations[0]; cue["strokeColor"] = "#00FF00"; editor.stageCue(cue)
+        XCTAssertEqual(editor.saveStatus, "Unsaved drawing changes")
+        failWrites = true
+        XCTAssertThrowsError(try editor.saveInspector())
+        XCTAssertEqual(editor.saveStatus, "Changes could not be saved")
+        XCTAssertEqual(editor.undoCount, 0)
+        XCTAssertTrue(editor.cueEditDirty)
+        XCTAssertEqual(try store.load(initial.id).annotations[0].s("strokeColor"), initial.annotations[0].s("strokeColor"))
+        failWrites = false
+        try editor.saveInspector()
+        XCTAssertEqual(editor.saveStatus, "Saved on this iPhone")
+        XCTAssertEqual(editor.undoAction, "Edit drawing")
+        editor.history(redo: false)
+        XCTAssertEqual(try store.load(initial.id).annotations[0].s("strokeColor"), initial.annotations[0].s("strokeColor"))
+        let reopened = try BJJNativeEditorSession(project: store.load(initial.id), store: store, preferences: nil)
+        defer { reopened.close() }
+        XCTAssertEqual(reopened.saveStatus, "Saved on this iPhone"); XCTAssertNil(reopened.undoAction)
+    }
     func testCueRangeHandlesClampAndPreviewIsNotSavedUntilCommit() throws {
         let initial = try project()
         let editor = try BJJNativeEditorSession(project: initial, store: store, preferences: nil)
