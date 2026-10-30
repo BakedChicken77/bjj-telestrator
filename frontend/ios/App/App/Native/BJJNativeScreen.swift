@@ -65,6 +65,7 @@ struct BJJNativeEditorScreen: View {
                     }.frame(width: geometry.size.width, height: geometry.size.height)
                 }
             }
+            .safeAreaInset(edge: .bottom) { if !session.recordingDockVisible { BJJSaveFeedback(session: session) } }
             .background(Color(uiColor: .systemBackground))
             .navigationTitle(session.project.name)
             .navigationBarTitleDisplayMode(.inline)
@@ -610,5 +611,25 @@ final class BJJNativeCanvas: UIView, UIGestureRecognizerDelegate {
         let value = UInt32(hex.dropFirst(), radix: 16) ?? 0
         return UIColor(red: CGFloat((value >> 16) & 255) / 255, green: CGFloat((value >> 8) & 255) / 255,
                        blue: CGFloat(value & 255) / 255, alpha: 1)
+    }
+}
+
+/// Persistent local feedback remains reachable after sheets open and notices disappear.
+struct BJJSaveFeedback: View {
+    @ObservedObject var session: BJJNativeEditorSession
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack { status; Spacer(); undo }
+            VStack(alignment: .leading) { status; undo }
+        }
+        .font(.footnote).padding(.horizontal).padding(.vertical, 6).background(.bar)
+    }
+    private var status: some View {
+        Text(session.saveStatus).foregroundStyle(session.saveFailed ? Color.red : Color.secondary)
+            .accessibilityIdentifier("editor.saveState")
+    }
+    private var undo: some View {
+        Button(session.undoAction.map { "Undo: \($0)" } ?? "Undo", systemImage: "arrow.uturn.backward") { session.history(redo: false) }
+            .disabled(!session.canUndo).frame(minHeight: 44).accessibilityIdentifier("editor.localUndo")
     }
 }
