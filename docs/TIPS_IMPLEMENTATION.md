@@ -1,5 +1,32 @@
 # Fresh Frame optional tips
 
+## Current release status — October 30, 2026
+
+Tips are already implemented in the native app. The October 29 public Apple
+listing audit in [issue #80](https://github.com/BakedChicken77/bjj-telestrator/issues/80)
+reports free Fresh Frame 2.1.2 (app ID 6816524004) with whole-dollar $1–$10 tips.
+The existing Tip $5/Custom tip UI and product IDs below are the deployed design;
+do not create duplicate products or rebuild a first-IAP setup from this history.
+
+The 2.1.2 native source baseline is `6b2a6eb3eaaa9d92ae161dcf3616edaf5520ac96`. Its
+[Release run 42](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/39501785885)
+passed signing, all CI gates and TestFlight processing/distribution for 2.1.2
+(42.1). Public Apple metadata cannot prove which binary/source was promoted.
+App Store Connect build/source mapping and current agreements, banking/tax and
+product statuses still require authenticated verification. Earlier owner reports
+of completed banking/tax are historical evidence, not a current account audit.
+Later internal UX candidates and their source/release evidence are tracked in
+the [native release checkpoint](APP_STORE_RELEASE.md).
+
+Physical sandbox acceptance remains open in #80: repeated $5, custom $1/$10,
+cancel, pending approval after sheet dismissal, interrupted relaunch, offline and
+restricted purchases. Check device model/OS/date, actual catalog prices, VoiceOver,
+large text, appearance/rotation and free access to all editing/export functions.
+Simulator StoreKit tests do not establish real-device/account acceptance. Never
+use a production purchase as a test.
+
+## Historical implementation checkpoint — September 28, 2026
+
 Implementation branch: `feature/fresh-frame-tips`, based on main `a181f66`
 (2.0.7), September 28, 2026. Steve reports banking and tax setup completed.
 This branch implements the feature; it does not change the 2.0.7 release,
@@ -38,8 +65,8 @@ Suggested reference name: `Fresh Frame Tip USD N`. English display name:
 `Fresh Frame $N Tip`. Description: `Optional support for development. No features
 are unlocked.` Select the appropriate tax category and US availability in App
 Store Connect; verify exact customer prices there and through real StoreKit.
-Apple's whole-dollar pricing convention supports this design; this is not
-evidence that these particular products already exist in Steve's account.
+This table preserves the original product setup specification. The public catalog
+evidence and remaining authenticated checks are described above.
 
 ## Transaction lifecycle and privacy
 
@@ -109,7 +136,26 @@ saving/reopening, real export and the unsigned iPhone archive. CI evidence is
 recorded in the PR. Physical VoiceOver, largest accessibility text, light/dark
 mode and phone purchase-sheet acceptance remain explicit device checks.
 
-## Release gates
+## Remaining acceptance gates
+
+1. Confirm the public 2.1.2 build/source mapping and the current agreement,
+   banking/tax, US availability, product metadata and exact prices in App Store
+   Connect. Verify the existing products; do not recreate the ten consumables.
+2. On a real iPhone/TestFlight, load real catalog prices, buy $5 twice, buy
+   custom $1 and $10, cancel, test pending then approval with the sheet closed,
+   relaunch after interruption, and test unavailable/offline/restricted behavior.
+   Inspect Apple's sandbox purchase sheet for one matching purchase per action.
+3. Verify physical accessibility and free editing/export access; review final
+   support/privacy declarations. Record the exact build, device/OS/date and
+   results. Local StoreKit success does not satisfy these acceptance gates.
+
+Reviewer directions: Library → Support Fresh Frame → Tip $5 or Custom tip.
+Every function is free; tips are optional, repeatable one-time consumables.
+
+## Historical first-IAP release checklist — September 28, 2026
+
+The following checklist records the original rollout. The current shipped state
+and remaining acceptance gates above supersede its first-product/version steps.
 
 1. Verify the business setup is Active in App Store Connect (owner reports
    banking/tax complete; this implementation has not independently rechecked it).
@@ -124,9 +170,6 @@ mode and phone purchase-sheet acceptance remain explicit device checks.
 5. Verify all normal regressions and physical accessibility; review final
    support/privacy declarations. Local StoreKit success does not satisfy the
    live catalog or TestFlight acceptance gate.
-
-Reviewer directions: Library → Support Fresh Frame → Tip $5 or Custom tip.
-Every function is free; tips are optional, repeatable one-time consumables.
 
 ## Apple references
 

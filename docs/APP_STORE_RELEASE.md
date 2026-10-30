@@ -1,4 +1,51 @@
-# Current checkpoint — September 28, 2026
+# Current release checkpoint — October 30, 2026
+
+Fresh Frame 2.1.2 is publicly listed according to the October 29 Apple audit in
+[issue #80](https://github.com/BakedChicken77/bjj-telestrator/issues/80). App ID
+6816524004 is free; optional whole-dollar $1–$10 tips are already listed. The
+September statements below about a missing purchase implementation, first signing
+and first submission are historical and are superseded by this checkpoint.
+
+The 2.1.2 native baseline was `preview/native-iphone` at
+`6b2a6eb3eaaa9d92ae161dcf3616edaf5520ac96` before these UX candidates. Default
+`main` and GitHub v1.1.x prereleases do not identify the current native release.
+[Release run 42](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/39501785885)
+verified native/StoreKit/UI/archive and all CI gates, signing, upload, processing
+and internal distribution for TestFlight 2.1.2 (42.1). Public metadata does not
+prove the exact App Store binary/source mapping; confirm that in App Store Connect.
+
+The selected native UX implementations have separate internal release runs:
+
+| Item | Version | Native source | Release evidence |
+| --- | --- | --- | --- |
+| UX-13 save feedback and local Undo | 2.1.3 | `cb60613978b1c6cba170b9d9d0346893ba9d4fc7` | [Release 43](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/41103367148) |
+| UX-07 original/review clocks and reopen | 2.1.4 | `fc00242c957c46c4c7e26a43b81e71a0ae61f228` | [Release 44](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/41109098893) |
+| UX-11 shared-pause inspection and removal | 2.1.5 | `bebbbea39c40e15f7199c18edb6e80402fcd1f33` | [Release 45](https://github.com/BakedChicken77/bjj-telestrator/actions/runs/41113401203) |
+
+Each run's `testflight-receipt` artifact records the actual build number, source,
+upload, Apple processing and internal distribution. Verify `VALID`,
+`IN_BETA_TESTING`, the existing group/owner tester assignments and `available=true`
+before claiming delivery. These internal candidates do not establish physical
+acceptance or the public 2.1.2 build/source mapping.
+
+The existing Release workflow runs on pushes to `preview/native-iphone` as well
+as version tags. A preview merge triggers CI followed by protected signing/upload
+when configured. Its build number is the Release run number/attempt. Never merge
+the next candidate until the preceding requested TestFlight release is available,
+since branch releases use cancel-in-progress concurrency. Tags have additional
+main/version/publication requirements and are unnecessary for internal previews.
+
+The owner selected UX-02, #80, UX-13, UX-07 and UX-11 with separate TestFlight
+releases on October 30. This authorizes those internal candidate releases, not a
+production App Store submission. Physical acceptance and authenticated account
+checks remain explicit evidence gates; do not mark #45 or #80 complete based on
+another simulator run. See [tip status and acceptance](TIPS_IMPLEMENTATION.md).
+The saved September tip plan is historical; it is not present in this repository
+and could not be amended here. No credential, bank or tax details belong in source.
+
+---
+
+# Historical checkpoint — September 28, 2026
 
 Signing, TestFlight processing, and automatic internal tester distribution are operational through 2.0.4 (20.1). Steve reported device acceptance complete and requested Fresh Frame branding plus completion of App Store preparation, submission, and release. See [Fresh Frame submission package](app-store/fresh-frame.md). The September 26 checkpoint below is retained as historical context and is superseded where it describes pending signing or missing owner authorization.
 
