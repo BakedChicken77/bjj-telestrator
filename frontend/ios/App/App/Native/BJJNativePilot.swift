@@ -263,7 +263,7 @@ enum BJJRecordingPresentation: Equatable {
         player.volume = (project.settings["originalAudioMuted"] as? Bool) == true ? 0 : Float(min(1, project.settings.n("originalAudioGain")))
         observer = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 1.0 / 30, preferredTimescale: 600), queue: .main) { [weak self] value in
             Task { @MainActor in
-                guard let self, !self.closed, !self.seeking else { return }
+                guard let self, !self.closed, !self.seeking, self.pendingReviewPosition == nil else { return }
                 if self.recording { self.recordingLevel = self.capture.level; self.capture.checkClock() }
                 let seconds = value.seconds
                 if seconds.isFinite { self.outputTime = min(self.project.outputDuration, max(0, seconds)); self.time = self.playbackTimeline.source(at: self.outputTime) }
