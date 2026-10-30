@@ -226,7 +226,7 @@ struct BJJPauseActions: View {
                 Text("Remove pause…").frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             }
             .buttonStyle(.borderless).accessibilityIdentifier("pause.remove.\(hold.s("id"))")
-            .confirmationDialog("Remove pause and its audio?", isPresented: Binding(get: { showingRemoval && selectedID == hold.s("id") }, set: { showingRemoval = $0 }), titleVisibility: .visible) {
+            .alert("Remove pause and its audio?", isPresented: Binding(get: { showingRemoval && selectedID == hold.s("id") }, set: { showingRemoval = $0 })) {
                 Button("Remove pause and its audio", role: .destructive) {
                     if let selectedID { session.removeNarrationPause(selectedID, expectedRevision: revision) }
                     selectedID = nil
