@@ -218,7 +218,7 @@ struct BJJNativeEditorScreen: View {
                         if session.prepareRecordingRoute() { confirmRecord = true }
                     }.labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44).accessibilityIdentifier("narration.options")
                     Spacer()
-                    Button("Narration", systemImage: "waveform") { session.pause(); showAudio = true }
+                    Button("Narration", systemImage: "waveform") { session.pause(); showAudio = true }.accessibilityIdentifier("narration.open")
                 }.frame(minHeight: 44).disabled(session.preparingAudio || session.exporting)
                 if session.preparingAudio { ProgressView("Preparing audio preview…") }
                 if let notice = session.notice {

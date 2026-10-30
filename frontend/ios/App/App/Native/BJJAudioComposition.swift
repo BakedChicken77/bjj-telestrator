@@ -23,7 +23,12 @@ struct BJJAudioComposition {
         var audioParameters: [AVAudioMixInputParameters] = []
         let muted = project.map { $0.settings["originalAudioMuted"] as! Bool } ?? false
         let originalGain: Float = muted ? 0 : Float(project?.settings.n("originalAudioGain") ?? 1)
-        let totalVoiceGain = project.map { p in p.allTakes.filter { !($0["muted"] as! Bool) }.map { $0.n("gain") * p.settings.n("voiceoverMasterGain") }.reduce(0, +) } ?? 0
+        // A removed pause can leave a preserved take with no placements. Such
+        // takes contribute neither a track nor gain to the rendered mix.
+        let audibleTakes = project?.allTakes.filter {
+            !($0["muted"] as! Bool) && ($0["placements"] as? [BJJJSON])?.isEmpty != true
+        } ?? []
+        let totalVoiceGain = project.map { p in audibleTakes.map { $0.n("gain") * p.settings.n("voiceoverMasterGain") }.reduce(0, +) } ?? 0
         let mixScale = max(1, Double(originalGain) + totalVoiceGain)
         func track(gain: Double) throws -> AVMutableCompositionTrack {
             guard let track = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else { throw BJJError.invalid("Cannot prepare an audio track.") }
@@ -50,7 +55,7 @@ struct BJJAudioComposition {
             }
         }
         if let project {
-            for clip in project.allTakes where !(clip["muted"] as! Bool) && clip.n("gain") * project.settings.n("voiceoverMasterGain") > 0 {
+            for clip in audibleTakes where clip.n("gain") * project.settings.n("voiceoverMasterGain") > 0 {
                 let asset = AVURLAsset(url: try store.asset(project.id, clip.s("asset")))
                 guard let source = try await asset.loadTracks(withMediaType: .audio).first else { throw BJJError.invalid("A narration take cannot be decoded.") }
                 let sourceRange = try await source.load(.timeRange)
