@@ -177,11 +177,12 @@ import UniformTypeIdentifiers
         XCTAssertGreaterThan(try redPixels(output, time: 1), 20)
     }
     func testSharedPauseImpactRemovalUndoAndStaleConfirmation() async throws {
-        let initial = try project(), holdID = UUID().uuidString.lowercased()
+        let initial = try await BJJService(store: store).importFile(try await sourceVideo(audio: false), originalName: "shared-pause.mp4")
+        let holdID = UUID().uuidString.lowercased()
         let hold: BJJJSON = ["id": holdID, "sourceTicks": 48000, "durationTicks": 240000, "frozenPTS": 1.0]
         var document = initial.json
         document["requiredCapabilities"] = (initial.json["requiredCapabilities"] as! [String]) + [BJJReviewTimeline.capability]
-        document["reviewTimeline"] = BJJReviewTimeline(sourceDuration: 4, holds: [hold]).json
+        document["reviewTimeline"] = BJJReviewTimeline(sourceDuration: initial.duration, holds: [hold]).json
         var takes = [BJJJSON](), hashes = [String]()
         for frequency in [440.0, 880.0] {
             let id = UUID().uuidString.lowercased(), asset = "voiceover/\(UUID().uuidString.lowercased()).wav"
@@ -196,19 +197,30 @@ import UniformTypeIdentifiers
         document["reviewNarration"] = takes
         let saved = try store.save(BJJProject(document)), editor = try BJJNativeEditorSession(project: saved, store: store, preferences: nil)
         defer { editor.close() }
+        await editor.prepareAudio()
+        XCTAssertFalse(editor.audioPreviewFailed)
         XCTAssertTrue(editor.pauseImpact(holdID).contains("Take 1")); XCTAssertTrue(editor.pauseImpact(holdID).contains("Take 2"))
         editor.updateAudio(removing: takes[0].s("id")); await editor.prepareAudio()
+        XCTAssertFalse(editor.audioPreviewFailed)
         XCTAssertEqual(editor.project.reviewTimeline.holds.count, 1)
         editor.history(redo: false); await editor.prepareAudio()
+        XCTAssertFalse(editor.audioPreviewFailed)
         XCTAssertEqual(editor.project.reviewNarration.count, 2)
         let revision = editor.project.revision
         editor.removeNarrationPause(holdID, expectedRevision: revision - 1)
         XCTAssertEqual(editor.project.revision, revision)
         editor.removeNarrationPause(holdID, expectedRevision: revision); await editor.prepareAudio()
+        XCTAssertFalse(editor.audioPreviewFailed, "Preserved takes without placements must not create empty audio tracks")
         XCTAssertEqual(editor.project.reviewTimeline.holds.count, 0)
         XCTAssertTrue(editor.project.reviewNarration.allSatisfy { ($0["placements"] as? [BJJJSON])?.isEmpty == true })
         XCTAssertEqual(editor.undoAction, "Remove pause and its audio")
+        let media = try await BJJMedia.inspect(store.asset(initial.id, initial.source.s("asset")), reference: initial.source.s("asset"), originalName: initial.name)
+        let output = root.appendingPathComponent("removed-shared-pause.mp4")
+        try await BJJRenderer().render(media: media, project: editor.project, store: store, output: output) { _ in }
+        let rendered = try await BJJMedia.inspect(output, reference: "exports/removed-shared-pause.mp4", originalName: "removed-shared-pause.mp4")
+        XCTAssertEqual(rendered.videoRange.duration.seconds, initial.duration, accuracy: 1 / 30.0)
         editor.history(redo: false); await editor.prepareAudio()
+        XCTAssertFalse(editor.audioPreviewFailed, "Undo must restore a playable shared pause")
         let reopened = try store.load(initial.id)
         XCTAssertEqual(reopened.reviewTimeline.holds.count, 1)
         XCTAssertTrue(NSArray(array: reopened.reviewNarration).isEqual(to: takes))

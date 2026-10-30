@@ -17,6 +17,9 @@ recovery. Existing source/review clocks and media-rendering contracts are retain
 
 Native regression covers two takes sharing one hold, take deletion/Undo, stale
 confirmation refusal, pause removal/Undo, durable reload and unchanged WAV hashes.
+It uses real synthetic media and checks playable previews before/after removal
+and Undo, plus an MP4 export after removal. Preserved takes with no placements
+contribute no empty audio tracks or gain to the mix.
 A separate isolated synthetic-media UI workflow exercises the actual confirmation,
 Cancel and Undo controls and captures the restored shared-pause screen.
 Required macOS/native/StoreKit/UI/archive and all platform CI must pass before the

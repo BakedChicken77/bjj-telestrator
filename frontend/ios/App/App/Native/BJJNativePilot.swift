@@ -511,6 +511,7 @@ enum BJJRecordingPresentation: Equatable {
             }
         } catch {
             audioPreviewFailed = true
+            player.pause(); player.isMuted = true
             BJJDiagnostics.shared.record(.audioPreviewError, error: error)
             if recordingPresentation == .saving, recordingInterruption == nil {
                 notice = "Take saved. Tap Play to retry preparing playback."
