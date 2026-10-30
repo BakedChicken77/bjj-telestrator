@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.1.5] - 2026-10-30
+
+- Show narration-pause frame references, duration and all takes sharing each pause.
+- Confirm affected audio before removing a pause; reject stale confirmations.
+- Keep pauses when muting/deleting takes and expose pause inspection alongside each take; local Undo restores removed holds and placements.
+
+## [2.1.4] - 2026-10-30
+
+- Label original-video drawing times separately from finished-review playback and export times.
+- Announce the correct review clock and show elapsed/total duration plus frozen-frame anchors.
+- Restore the exact review position inside pauses after reopening, with legacy preference fallback.
+
+## [2.1.3] - 2026-10-30
+
+- Show confirmed local save state, unsaved drawing drafts, and failed writes.
+- Keep descriptive Undo beside drawing, mix, take and pause changes, including narration screens.
+- Preserve existing save transactions, audio preparation and session history boundaries.
+
 ## [2.1.2] - 2026-10-20
 
 ### Narration playback reliability

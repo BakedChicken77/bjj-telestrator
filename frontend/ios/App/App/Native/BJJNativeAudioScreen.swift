@@ -23,27 +23,23 @@ struct BJJNativeAudioScreen: View {
                         } label: {
                             VStack(alignment: .leading) {
                                 Text("Take \(index + 1)\((clip["muted"] as? Bool) == true ? " · Muted" : "")")
-                                Text(String(format: "%.2f – %.2f seconds", takeStart(clip), takeEnd(clip))).font(.caption).foregroundStyle(.secondary)
+                                Text(String(format: "Finished review %.2f – %.2f seconds", takeStart(clip), takeEnd(clip))).font(.caption).foregroundStyle(.secondary)
                             }
                         }
                     }
                 }
                 if !session.project.reviewTimeline.holds.isEmpty {
                     Section("Narration pauses") {
-                        ForEach(session.project.reviewTimeline.holds, id: \.holdID) { hold in
-                            HStack {
-                                Text("Video \(hold.n("sourceTicks") / 48000, specifier: "%.2f")s · pause \(hold.n("durationTicks") / 48000, specifier: "%.2f")s")
-                                Spacer()
-                                Button("Remove pause", role: .destructive) { session.removeNarrationPause(hold.s("id")) }
-                            }
-                        }
+                        BJJPauseActions(session: session, holds: session.project.reviewTimeline.holds)
                         Text("Deleting or muting a take keeps its video pauses. Removing a pause also removes audio placed inside it. Undo restores both.").font(.footnote)
                     }
                 }
                 Section { Text("Use headphones to keep playback out of the microphone. Bluetooth may switch to a lower-bandwidth microphone route while recording; the active route is shown with the take controls.").font(.footnote) }
             }
+            .accessibilityIdentifier("narration.form")
             .disabled(session.preparingAudio)
             .overlay { if session.preparingAudio { ProgressView("Preparing audio preview…").padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12)) } }
+            .safeAreaInset(edge: .bottom) { BJJSaveFeedback(session: session) }
             .navigationTitle("Narration").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.accessibilityIdentifier("narration.done") } }
         }
@@ -74,21 +70,30 @@ struct BJJNativeTakeScreen: View {
                 Toggle("Muted", isOn: Binding(get: { current["muted"] as? Bool ?? false }, set: { update("muted", $0) }))
                 Stepper("Volume: \(current.n("gain"), specifier: "%.1f")×", value: Binding(get: { current.n("gain") }, set: { update("gain", $0) }), in: 0...2, step: 0.1)
             }
-            Section("Timing") {
-                Text(String(format: "Starts at %.2f seconds", BJJTakeDisplay.start(current, project: session.project)))
+            Section("Finished review timing") {
+                Text(String(format: "Finished review starts at %.2f seconds", BJJTakeDisplay.start(current, project: session.project)))
                 HStack {
                     Button("Earlier 0.05s") { nudge(-0.05) }
                     Spacer()
                     Button("Later 0.05s") { nudge(0.05) }
                 }.buttonStyle(.borderless)
-                Text("Adjustments are saved immediately. Undo in the editor restores the previous mix or deleted take.").font(.footnote).foregroundStyle(.secondary)
+                Text("Adjustments are saved immediately. Undo below restores the previous mix or deleted take.").font(.footnote).foregroundStyle(.secondary)
+            }
+            if !session.holdsUsed(by: current).isEmpty {
+                Section("Pauses used by this take") {
+                    Text("Muting or deleting this take keeps these pauses. Other takes may also use them.").font(.footnote)
+                    BJJPauseActions(session: session, holds: session.holdsUsed(by: current))
+                }
             }
             Section { Button("Delete take", role: .destructive) { confirmDelete = true } }
         }
         .disabled(session.preparingAudio)
+        .safeAreaInset(edge: .bottom) { BJJSaveFeedback(session: session) }
         .navigationTitle("Take \(number)")
         .confirmationDialog("Delete this take?", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Delete take", role: .destructive) { session.updateAudio(removing: clip.s("id")); dismiss() }
+        } message: {
+            Text(session.holdsUsed(by: current).isEmpty ? "The recording remains available for Undo." : "Its video pauses remain in the review, including any shared with other takes. Inspect Pauses used by this take before deleting. Undo below can restore the take.")
         }
         .onDisappear { session.pause() }
     }
@@ -110,13 +115,13 @@ struct BJJNativeExportScreen: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Range") {
+                Section("Finished review range · includes pauses") {
                     Toggle("Selected range", isOn: $selectedRange)
                     if selectedRange {
-                        LabeledContent("Start (seconds)") { TextField("Start", value: $start, format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing).accessibilityLabel("Range start in seconds") }
-                        LabeledContent("End (seconds)") { TextField("End", value: $end, format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing).accessibilityLabel("Range end in seconds") }
+                        LabeledContent("Start (seconds)") { TextField("Start", value: $start, format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing).accessibilityLabel("Finished review range start in seconds") }
+                        LabeledContent("End (seconds)") { TextField("End", value: $end, format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing).accessibilityLabel("Finished review range end in seconds") }
                         Button("Use loop range") { start = session.project.reviewTimeline.output(before: session.loopStart); end = session.project.reviewTimeline.output(before: session.loopEnd) }
-                    } else { Text("Full video · \(session.project.outputDuration, specifier: "%.1f") seconds") }
+                    } else { Text("Full review · \(session.project.outputDuration, specifier: "%.1f") seconds") }
                 }
                 Section("Quality") {
                     Picker("Longest edge", selection: $maximum) {
@@ -194,5 +199,54 @@ enum BJJTakeDisplay {
     static func end(_ take: BJJJSON, project: BJJProject) -> Double {
         if let placements = take["placements"] as? [BJJJSON] { return placements.compactMap { p in project.reviewTimeline.position(p).map { $0 + p.n("durationTicks") / 48000 } }.max() ?? 0 }
         return project.reviewTimeline.output(before: take.n("endSec") + take.n("timingOffsetMs") / 1000)
+    }
+}
+
+/// Holds belong to the review, not to an individual take. Confirmation is revision-bound.
+struct BJJPauseActions: View {
+    @ObservedObject var session: BJJNativeEditorSession
+    let holds: [BJJJSON]
+    @State private var selectedID: String?
+    @State private var showingRemoval = false
+    @State private var revision: Int?
+    @State private var impact = ""
+    var body: some View {
+        ForEach(holds, id: \.holdID) { hold in
+            BJJPauseFrame(session: session, hold: hold)
+            ForEach(Array(session.project.allTakes.enumerated()).filter { _, take in
+                session.holdsUsed(by: take).contains { $0.s("id") == hold.s("id") }
+            }, id: \.offset) { index, take in
+                NavigationLink("Used by Take \(index + 1)") { BJJNativeTakeScreen(session: session, clip: take, number: index + 1) }
+            }
+            Button(role: .destructive) {
+                session.pause(); selectedID = hold.s("id"); revision = session.project.revision
+                impact = String(format: "Remove %.2fs paused at original %.2fs. ", hold.n("durationTicks") / 48000, hold.n("sourceTicks") / 48000) + session.pauseImpact(hold.s("id")) + " Original recordings are retained. Undo restores the pause and its audio placements."
+                showingRemoval = true
+            } label: {
+                Text("Remove pause…").frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            }
+            .buttonStyle(.borderless).accessibilityIdentifier("pause.remove.\(hold.s("id"))")
+            .alert("Remove pause and its audio?", isPresented: Binding(get: { showingRemoval && selectedID == hold.s("id") }, set: { showingRemoval = $0 })) {
+                Button("Remove pause and its audio", role: .destructive) {
+                    if let selectedID { session.removeNarrationPause(selectedID, expectedRevision: revision) }
+                    selectedID = nil
+                }
+                Button("Cancel", role: .cancel) { selectedID = nil }
+            } message: { Text(impact) }
+        }
+    }
+}
+
+private struct BJJPauseFrame: View {
+    @ObservedObject var session: BJJNativeEditorSession
+    let hold: BJJJSON
+    @State private var image: UIImage?
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let image { Image(uiImage: image).resizable().scaledToFit().frame(maxWidth: 160, maxHeight: 100).accessibilityHidden(true) }
+            Text("Paused at original \(hold.n("sourceTicks") / 48000, specifier: "%.2f")s · \(hold.n("durationTicks") / 48000, specifier: "%.2f")s freeze")
+            Text(session.pauseImpact(hold.s("id"))).font(.footnote).foregroundStyle(.secondary)
+        }
+        .task(id: hold.s("id")) { image = await session.pauseThumbnail(hold) }
     }
 }

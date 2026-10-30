@@ -153,8 +153,11 @@ struct BJJNativeTransportState: Codable {
     var loopStart: Double = 0
     var loopEnd: Double = 0
     var loopEnabled = false
+    var reviewTime: Double? = nil
+    var projectRevision: Int? = nil
     func validated(duration: Double) -> BJJNativeTransportState {
         var result = self
+        if let reviewTime, !reviewTime.isFinite || reviewTime < 0 { result.reviewTime = nil }
         result.time = time.isFinite ? min(duration, max(0, time)) : 0
         result.speed = [Float(0.25), 0.5, 1, 2].contains(speed) ? speed : 1
         result.loopStart = loopStart.isFinite ? min(duration, max(0, loopStart)) : 0
@@ -221,6 +224,18 @@ enum BJJRecordingPresentation: Equatable {
     private var previewFiles: [URL] = []
     private var playbackTimeline: BJJReviewTimeline
     private var previewGeneration = 0
+    @Published private(set) var saveFailed = false
+    @Published private(set) var undoAction: String?
+    private var undoActions: [String] = []
+    private var redoActions: [String] = []
+    var saveStatus: String {
+        if saveFailed { return "Changes could not be saved" }
+        if recording { return "Recording in progress" }
+        if recordingPresentation == .saving { return "Saving narration" }
+        if cueEditDirty || (!inspectingCue && previewCue != nil) { return "Unsaved drawing changes" }
+        return "Saved on this iPhone"
+    }
+    var canUndo: Bool { undoCount > 0 && !exporting && !recording && !preparingAudio && !inspectingCue }
     private var undoStack: [BJJJSON] = []
     private var redoStack: [BJJJSON] = []
     private var observer: Any?
@@ -237,6 +252,7 @@ enum BJJRecordingPresentation: Equatable {
     private var exportCancelled = false
     private var jobID: String?
     private var closed = false
+    private var pendingReviewPosition: Double?
     private var seekGeneration = 0
     init(project: BJJProject, store: BJJStore, service: BJJService? = nil, preferences: UserDefaults? = .standard) throws {
         BJJDiagnostics.shared.record(.editorOpen)
@@ -247,7 +263,7 @@ enum BJJRecordingPresentation: Equatable {
         player.volume = (project.settings["originalAudioMuted"] as? Bool) == true ? 0 : Float(min(1, project.settings.n("originalAudioGain")))
         observer = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 1.0 / 30, preferredTimescale: 600), queue: .main) { [weak self] value in
             Task { @MainActor in
-                guard let self, !self.closed, !self.seeking else { return }
+                guard let self, !self.closed, !self.seeking, self.pendingReviewPosition == nil else { return }
                 if self.recording { self.recordingLevel = self.capture.level; self.capture.checkClock() }
                 let seconds = value.seconds
                 if seconds.isFinite { self.outputTime = min(self.project.outputDuration, max(0, seconds)); self.time = self.playbackTimeline.source(at: self.outputTime) }
@@ -281,7 +297,7 @@ enum BJJRecordingPresentation: Equatable {
                     var json = self.project.json
                     if clip["kind"] as? String == "review-narration-v1" { json = try BJJReviewReceipt.apply(clip, to: json) }
                     else { json["voiceovers"] = self.project.voiceovers + [clip] }
-                    try self.commitDocument(json)
+                    try self.commitDocument(json, action: "Record narration")
                     self.notice = reason ?? "Take saved. Play it back to check the timing."
                     let take = clip["take"] as? BJJJSON ?? clip
                     let takeID = take.s("id")
@@ -316,7 +332,10 @@ enum BJJRecordingPresentation: Equatable {
            let saved = try? JSONDecoder().decode(BJJNativeTransportState.self, from: data) {
             let state = saved.validated(duration: project.duration)
             speed = state.speed; loopStart = state.loopStart; loopEnd = state.loopEnd; loopEnabled = state.loopEnabled
-            seek(state.time)
+            let target = state.projectRevision == project.revision ? state.reviewTime : nil
+            if let target, target <= project.outputDuration {
+                pendingReviewPosition = target; outputTime = target; time = project.reviewTimeline.source(at: target)
+            } else { seek(state.time) }
         }
     }
     func pause() {
@@ -350,6 +369,7 @@ enum BJJRecordingPresentation: Equatable {
     }
     func seekOutput(_ seconds: Double, resume: Bool = false) {
         guard seconds.isFinite, !closed, !recording else { return }
+        pendingReviewPosition = nil
         pause(); seekGeneration += 1
         let generation = seekGeneration
         let target = min(project.outputDuration, max(0, seconds))
@@ -393,26 +413,30 @@ enum BJJRecordingPresentation: Equatable {
         catch { self.error = error.localizedDescription }
     }
     private func savePosition() {
-        let state = BJJNativeTransportState(time: time, speed: speed, loopStart: loopStart, loopEnd: loopEnd, loopEnabled: loopEnabled)
+        let state = BJJNativeTransportState(time: time, speed: speed, loopStart: loopStart, loopEnd: loopEnd, loopEnabled: loopEnabled, reviewTime: pendingReviewPosition ?? outputTime, projectRevision: project.revision)
         if let data = try? JSONEncoder().encode(state) { preferences?.set(data, forKey: "native-review.\(id)") }
     }
     private var documentState: BJJJSON {
         ["annotations": project.annotations, "voiceovers": project.voiceovers, "settings": project.settings,
          "requiredCapabilities": project.json["requiredCapabilities"]!, "reviewTimeline": project.json["reviewTimeline"] ?? NSNull(), "reviewNarration": project.json["reviewNarration"] ?? NSNull()]
     }
-    func commitDocument(_ json: BJJJSON) throws {
+    func commitDocument(_ json: BJJJSON, action: String = "Edit review") throws {
         guard !exporting, !recording, !preparingAudio else { throw BJJError.invalid("Finish the current operation before editing.") }
         let previous = documentState
-        let saved = try store.save(BJJProject(json))
+        let saved: BJJProject
+        do { saved = try store.save(BJJProject(json)); saveFailed = false }
+        catch { saveFailed = true; throw error }
         BJJDiagnostics.shared.record(.editSaved, value: Double(saved.revision))
         let audioChanged = !NSDictionary(dictionary: ["takes": project.allTakes, "holds": project.reviewTimeline.holds, "settings": project.settings]).isEqual(to: ["takes": saved.allTakes, "holds": saved.reviewTimeline.holds, "settings": saved.settings])
-        undoStack.append(previous); if undoStack.count > 50 { undoStack.removeFirst() }
-        redoStack.removeAll(); project = saved; cancelCueEdit(); syncHistory()
+        undoStack.append(previous); undoActions.append(action)
+        if undoStack.count > 50 { undoStack.removeFirst(); undoActions.removeFirst() }
+        redoStack.removeAll(); redoActions.removeAll(); project = saved; cancelCueEdit(); syncHistory()
         if audioChanged { Task { await self.prepareAudio() } }
     }
     func commit(_ annotations: [BJJJSON]) throws {
         var json = project.json; json["annotations"] = annotations
-        try commitDocument(json)
+        let action = annotations.count < project.annotations.count ? "Delete drawing" : annotations.count > project.annotations.count ? "Add drawing" : "Edit drawing"
+        try commitDocument(json, action: action)
         if !annotations.contains(where: { $0.s("id") == selectedID }) { selectedID = nil }
     }
     func updateAudio(clip: BJJJSON? = nil, removing: String? = nil, settings: BJJJSON? = nil) {
@@ -427,7 +451,7 @@ enum BJJRecordingPresentation: Equatable {
                 json["voiceovers"] = project.voiceovers.filter { $0.s("id") != removing }
                 if project.pauseAware { json["reviewNarration"] = project.reviewNarration.filter { $0.s("id") != removing } }
             }
-            try commitDocument(json)
+            try commitDocument(json, action: removing == nil ? "Change audio mix" : "Delete take")
         } catch { self.error = error.localizedDescription }
     }
     func prepareAudio() async {
@@ -446,6 +470,7 @@ enum BJJRecordingPresentation: Equatable {
            let span = project.reviewTimeline.spans.first(where: { $0.hold?["id"] as? String == id }) {
             position = span.output + min(span.duration, oldPosition - oldSpan.output)
         }
+        if let pendingReviewPosition { position = pendingReviewPosition }
         player.isMuted = true
         defer {
             preparingAudio = false
@@ -486,6 +511,7 @@ enum BJJRecordingPresentation: Equatable {
             }
         } catch {
             audioPreviewFailed = true
+            player.pause(); player.isMuted = true
             BJJDiagnostics.shared.record(.audioPreviewError, error: error)
             if recordingPresentation == .saving, recordingInterruption == nil {
                 notice = "Take saved. Tap Play to retry preparing playback."
@@ -558,15 +584,40 @@ enum BJJRecordingPresentation: Equatable {
             notice = reason; pause(); capture.restorePlaybackRoute()
         }
     }
-    func removeNarrationPause(_ id: String) {
+    func holdsUsed(by take: BJJJSON) -> [BJJJSON] {
+        let ids = Set((take["placements"] as? [BJJJSON] ?? []).compactMap { $0["holdId"] as? String })
+        return project.reviewTimeline.holds.filter { ids.contains($0.s("id")) }
+    }
+    func pauseImpact(_ id: String) -> String {
+        let affected = project.allTakes.enumerated().compactMap { index, take -> String? in
+            let samples = (take["placements"] as? [BJJJSON] ?? []).filter { $0["holdId"] as? String == id }.reduce(0) { $0 + $1.n("durationTicks") }
+            return samples > 0 ? String(format: "Take %d (%.2fs)", index + 1, samples / 48000) : nil
+        }
+        return affected.isEmpty ? "No take currently uses this pause." : "Removing this pause removes audio from " + affected.joined(separator: ", ") + "."
+    }
+    func pauseThumbnail(_ hold: BJJJSON) async -> UIImage? {
+        guard let url = try? store.asset(id, project.proxy.s("asset")) else { return nil }
+        let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: 160, height: 100)
+        defer { generator.cancelAllCGImageGeneration() }
+        let seconds = min(max(0, project.duration - 1 / 30), hold.n("sourceTicks") / 48000)
+        guard let frame = try? await generator.image(at: CMTime(seconds: seconds, preferredTimescale: 48000)), !Task.isCancelled else { return nil }
+        return UIImage(cgImage: frame.image)
+    }
+    func removeNarrationPause(_ id: String, expectedRevision: Int? = nil) {
         do {
+            guard (expectedRevision == nil || expectedRevision == project.revision),
+                  project.reviewTimeline.holds.contains(where: { $0.s("id") == id }) else {
+                throw BJJError.invalid("This pause or review changed. Review its affected takes again before removing it.")
+            }
             var json = project.json
             var timeline = project.json["reviewTimeline"] as? BJJJSON ?? [:]
             timeline["holds"] = project.reviewTimeline.holds.filter { $0.s("id") != id }; json["reviewTimeline"] = timeline
             json["reviewNarration"] = project.reviewNarration.map { take -> BJJJSON in
                 var take = take; take["placements"] = (take["placements"] as! [BJJJSON]).filter { $0["holdId"] as? String != id }; return take
             }
-            try commitDocument(json)
+            try commitDocument(json, action: "Remove pause and its audio")
         } catch { self.error = error.localizedDescription }
     }
     func nudgeReviewTake(_ id: String, delta: Double) {
@@ -599,14 +650,19 @@ enum BJJRecordingPresentation: Equatable {
             var json = project.json
             for (key, value) in state { if value is NSNull { json.removeValue(forKey: key) } else { json[key] = value } }
             let previous = documentState
-            let saved = try store.save(BJJProject(json))
-            if redo { redoStack.removeLast(); undoStack.append(previous) }
-            else { undoStack.removeLast(); redoStack.append(previous) }
+            let saved: BJJProject
+            do { saved = try store.save(BJJProject(json)); saveFailed = false }
+            catch { saveFailed = true; throw error }
+            if redo {
+                redoStack.removeLast(); undoStack.append(previous); undoActions.append(redoActions.removeLast())
+            } else {
+                undoStack.removeLast(); redoStack.append(previous); redoActions.append(undoActions.removeLast())
+            }
             project = saved; syncHistory()
             Task { await self.prepareAudio() }
         } catch { self.error = error.localizedDescription }
     }
-    private func syncHistory() { undoCount = undoStack.count; redoCount = redoStack.count }
+    private func syncHistory() { undoCount = undoStack.count; redoCount = redoStack.count; undoAction = undoActions.last }
     func prepareThumbnails() async {
         guard thumbnails.isEmpty else { return }
         do {

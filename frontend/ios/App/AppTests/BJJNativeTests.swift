@@ -15,6 +15,35 @@ import UniformTypeIdentifiers
         store = try BJJStore(root: root)
     }
     override func tearDownWithError() throws { try? FileManager.default.removeItem(at: root) }
+    func testSaveFeedbackTracksDraftFailureDurableCommitAndUndo() throws {
+        let initial = try project()
+        var failWrites = false
+        let writer = try BJJStore(root: root, writeFile: { data, url in
+            if failWrites && url.lastPathComponent == "save-transaction.json" { throw BJJError.invalid("Injected write failure") }
+            try data.write(to: url, options: .atomic)
+        })
+        let editor = try BJJNativeEditorSession(project: initial, store: writer, preferences: nil)
+        defer { editor.close() }
+        XCTAssertEqual(editor.saveStatus, "Saved on this iPhone")
+        editor.select(initial.annotations[0].s("id")); editor.beginInspector()
+        var cue = initial.annotations[0]; cue["strokeColor"] = "#00FF00"; editor.stageCue(cue)
+        XCTAssertEqual(editor.saveStatus, "Unsaved drawing changes")
+        failWrites = true
+        XCTAssertThrowsError(try editor.saveInspector())
+        XCTAssertEqual(editor.saveStatus, "Changes could not be saved")
+        XCTAssertEqual(editor.undoCount, 0)
+        XCTAssertTrue(editor.cueEditDirty)
+        XCTAssertEqual(try store.load(initial.id).annotations[0].s("strokeColor"), initial.annotations[0].s("strokeColor"))
+        failWrites = false
+        try editor.saveInspector()
+        XCTAssertEqual(editor.saveStatus, "Saved on this iPhone")
+        XCTAssertEqual(editor.undoAction, "Edit drawing")
+        editor.history(redo: false)
+        XCTAssertEqual(try store.load(initial.id).annotations[0].s("strokeColor"), initial.annotations[0].s("strokeColor"))
+        let reopened = try BJJNativeEditorSession(project: store.load(initial.id), store: store, preferences: nil)
+        defer { reopened.close() }
+        XCTAssertEqual(reopened.saveStatus, "Saved on this iPhone"); XCTAssertNil(reopened.undoAction)
+    }
     func testCueRangeHandlesClampAndPreviewIsNotSavedUntilCommit() throws {
         let initial = try project()
         let editor = try BJJNativeEditorSession(project: initial, store: store, preferences: nil)
@@ -146,6 +175,82 @@ import UniformTypeIdentifiers
         let output = try XCTUnwrap(editor.exportURL)
         XCTAssertEqual(try redPixels(output, time: 29.0 / 30), 0)
         XCTAssertGreaterThan(try redPixels(output, time: 1), 20)
+    }
+    func testSharedPauseImpactRemovalUndoAndStaleConfirmation() async throws {
+        let initial = try await BJJService(store: store).importFile(try await sourceVideo(audio: false), originalName: "shared-pause.mp4")
+        let holdID = UUID().uuidString.lowercased()
+        let hold: BJJJSON = ["id": holdID, "sourceTicks": 48000, "durationTicks": 240000, "frozenPTS": 1.0]
+        var document = initial.json
+        document["requiredCapabilities"] = (initial.json["requiredCapabilities"] as! [String]) + [BJJReviewTimeline.capability]
+        document["reviewTimeline"] = BJJReviewTimeline(sourceDuration: initial.duration, holds: [hold]).json
+        var takes = [BJJJSON](), hashes = [String]()
+        for frequency in [440.0, 880.0] {
+            let id = UUID().uuidString.lowercased(), asset = "voiceover/\(UUID().uuidString.lowercased()).wav"
+            let path = try store.safeURL(initial.id, asset); try tone(path, frequency: frequency, duration: 1, pcm16: true)
+            hashes.append(try BJJAssets.digest(path))
+            let take: BJJJSON = ["id": id, "asset": asset, "durationSec": 1.0, "sampleCount": 48000,
+                "gain": 1.0, "muted": false, "recordedAt": BJJProject.now(), "codec": "pcm_s16le", "sampleRate": 48000, "channels": 1,
+                "placements": [["audioStartTicks": 0, "durationTicks": 48000, "holdId": holdID, "offsetTicks": 0]]]
+            takes.append(take)
+        }
+        try store.writeJSON(Dictionary(uniqueKeysWithValues: takes.map { ($0.s("id"), $0 as Any) }), to: store.safeURL(initial.id, "voiceover/assets.json"))
+        document["reviewNarration"] = takes
+        let saved = try store.save(BJJProject(document)), editor = try BJJNativeEditorSession(project: saved, store: store, preferences: nil)
+        defer { editor.close() }
+        await editor.prepareAudio()
+        XCTAssertFalse(editor.audioPreviewFailed)
+        XCTAssertTrue(editor.pauseImpact(holdID).contains("Take 1")); XCTAssertTrue(editor.pauseImpact(holdID).contains("Take 2"))
+        editor.updateAudio(removing: takes[0].s("id")); await editor.prepareAudio()
+        XCTAssertFalse(editor.audioPreviewFailed)
+        XCTAssertEqual(editor.project.reviewTimeline.holds.count, 1)
+        editor.history(redo: false); await editor.prepareAudio()
+        XCTAssertFalse(editor.audioPreviewFailed)
+        XCTAssertEqual(editor.project.reviewNarration.count, 2)
+        let revision = editor.project.revision
+        editor.removeNarrationPause(holdID, expectedRevision: revision - 1)
+        XCTAssertEqual(editor.project.revision, revision)
+        editor.removeNarrationPause(holdID, expectedRevision: revision); await editor.prepareAudio()
+        XCTAssertFalse(editor.audioPreviewFailed, "Preserved takes without placements must not create empty audio tracks")
+        XCTAssertEqual(editor.project.reviewTimeline.holds.count, 0)
+        XCTAssertTrue(editor.project.reviewNarration.allSatisfy { ($0["placements"] as? [BJJJSON])?.isEmpty == true })
+        XCTAssertEqual(editor.undoAction, "Remove pause and its audio")
+        let media = try await BJJMedia.inspect(store.asset(initial.id, initial.source.s("asset")), reference: initial.source.s("asset"), originalName: initial.name)
+        let output = root.appendingPathComponent("removed-shared-pause.mp4")
+        try await BJJRenderer().render(media: media, project: editor.project, store: store, output: output) { _ in }
+        let rendered = try await BJJMedia.inspect(output, reference: "exports/removed-shared-pause.mp4", originalName: "removed-shared-pause.mp4")
+        XCTAssertEqual(rendered.videoRange.duration.seconds, initial.duration, accuracy: 1 / 30.0)
+        editor.history(redo: false); await editor.prepareAudio()
+        XCTAssertFalse(editor.audioPreviewFailed, "Undo must restore a playable shared pause")
+        let reopened = try store.load(initial.id)
+        XCTAssertEqual(reopened.reviewTimeline.holds.count, 1)
+        XCTAssertTrue(NSArray(array: reopened.reviewNarration).isEqual(to: takes))
+        for (index, take) in takes.enumerated() { XCTAssertEqual(try BJJAssets.digest(store.asset(initial.id, take.s("asset"))), hashes[index]) }
+    }
+    func testReviewPositionInsideHoldSurvivesPreparationAndReopen() async throws {
+        let service = try BJJService(store: store)
+        let initial = try await service.importFile(try await sourceVideo(audio: false, moving: true), originalName: "clock.mp4")
+        let hold: BJJJSON = ["id": UUID().uuidString.lowercased(), "sourceTicks": 48000, "durationTicks": 240000, "frozenPTS": 1.0]
+        var document = initial.json
+        document["requiredCapabilities"] = (initial.json["requiredCapabilities"] as! [String]) + [BJJReviewTimeline.capability]
+        document["reviewTimeline"] = BJJReviewTimeline(sourceDuration: initial.duration, holds: [hold]).json
+        document["reviewNarration"] = [BJJJSON]()
+        let project = try store.save(BJJProject(document))
+        let suite = "clock-\(UUID().uuidString)", defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let editor = try BJJNativeEditorSession(project: project, store: store, preferences: defaults)
+        await editor.prepareAudio()
+        editor.seekOutput(3.25)
+        try await Task.sleep(nanoseconds: 500_000_000)
+        editor.close()
+        let reopened = try BJJNativeEditorSession(project: store.load(project.id), store: store, preferences: defaults)
+        defer { reopened.close() }
+        XCTAssertEqual(reopened.outputTime, 3.25, accuracy: 0.02)
+        await reopened.prepareAudio()
+        try await Task.sleep(nanoseconds: 500_000_000)
+        XCTAssertEqual(reopened.outputTime, 3.25, accuracy: 0.02)
+        XCTAssertEqual(reopened.time, 1, accuracy: 0.02)
+        XCTAssertEqual(try store.load(project.id).revision, project.revision)
+        XCTAssertEqual(reopened.undoCount, 0)
     }
     func testReviewTimelineBoundariesPlacementsAndCompatibility() throws {
         let hold: BJJJSON = ["id": UUID().uuidString.lowercased(), "sourceTicks": 4 * 48000, "durationTicks": 5 * 48000, "frozenPTS": 4.0]

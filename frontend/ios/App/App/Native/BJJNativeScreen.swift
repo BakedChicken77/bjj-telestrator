@@ -49,7 +49,13 @@ struct BJJNativeEditorScreen: View {
                     layout {
                         videoSurface.frame(height: landscape || propertiesCollapsed ? nil : geometry.size.height * 0.60)
                         VStack(spacing: 0) {
-                            Button(propertiesCollapsed ? "Expand properties" : "Collapse properties", systemImage: propertiesCollapsed ? "chevron.up" : "chevron.down") { propertiesCollapsed.toggle() }
+                            Button { propertiesCollapsed.toggle() } label: {
+                                VStack(spacing: 2) {
+                                    Label(propertiesCollapsed ? "Expand properties" : "Collapse properties", systemImage: propertiesCollapsed ? "chevron.up" : "chevron.down")
+                                    Text(session.saveStatus).font(.caption).foregroundStyle(session.saveFailed ? Color.red : Color.secondary)
+                                        .accessibilityIdentifier("editor.saveState")
+                                }
+                            }
                                 .frame(minHeight: 44).accessibilityIdentifier("cue.properties.collapse")
                             properties(cue).frame(maxHeight: propertiesCollapsed ? 0 : .infinity)
                                 .clipped().opacity(propertiesCollapsed ? 0 : 1).accessibilityHidden(propertiesCollapsed)
@@ -60,7 +66,13 @@ struct BJJNativeEditorScreen: View {
                         videoSurface
                         if !landscape { filmstrip.disabled(session.recording || session.preparingAudio) }
                         if session.drawing && !landscape { cueStrip }
-                        transport.disabled(session.recording || session.preparingAudio)
+                        VStack(spacing: 2) {
+                            if let span = session.project.reviewTimeline.span(at: session.outputTime), span.hold != nil {
+                                Text("Paused at original \(span.source, specifier: "%.1f")s").font(.caption)
+                                    .accessibilityIdentifier("editor.holdAnchor")
+                            }
+                            transport
+                        }.disabled(session.recording || session.preparingAudio)
                         controls
                     }.frame(width: geometry.size.width, height: geometry.size.height)
                 }
@@ -176,7 +188,7 @@ struct BJJNativeEditorScreen: View {
                     Button { session.seek(session.project.duration * Double(index) / 8) } label: {
                         Image(uiImage: image).resizable().scaledToFill().frame(width: width, height: 44).clipped()
                     }.buttonStyle(.plain)
-                        .accessibilityLabel("Seek to \(Int(session.project.duration * Double(index) / 8)) seconds")
+                        .accessibilityLabel(String(format: "Seek to original video %.1f seconds, finished review %.1f seconds", session.project.duration * Double(index) / 8, session.project.reviewTimeline.output(before: session.project.duration * Double(index) / 8)))
                 }
             }
         }.frame(height: session.thumbnails.isEmpty ? 0 : 44).clipped().padding(.horizontal, 12)
@@ -186,12 +198,13 @@ struct BJJNativeEditorScreen: View {
             Button(session.playing ? "Pause" : "Play", systemImage: session.playing ? "pause.fill" : "play.fill") { session.togglePlayback() }
                 .labelStyle(.iconOnly).font(.title2).frame(width: 44, height: 44)
             Slider(value: Binding(get: { session.outputTime }, set: { session.seekOutput($0) }), in: 0...session.project.outputDuration)
-                .accessibilityLabel("Video position").accessibilityValue("\(Int(session.time)) seconds")
-            Text(String(format: "%02d:%02d", Int(session.outputTime) / 60, Int(session.outputTime) % 60))
+                .accessibilityIdentifier("editor.position").accessibilityLabel("Finished review position").accessibilityValue(Text("\(session.outputTime, specifier: "%.1f") of \(session.project.outputDuration, specifier: "%.1f") seconds"))
+            Text("\(session.outputTime, specifier: "%.1f") / \(session.project.outputDuration, specifier: "%.1f")s")
                 .monospacedDigit().font(.caption)
             Button("Fit video", systemImage: "arrow.down.right.and.arrow.up.left") { zoomReset += 1 }
                 .labelStyle(.iconOnly).frame(width: 44, height: 44)
         }.padding(.horizontal, 12)
+        .accessibilityHint("Finished review time includes narration pauses.")
     }
     private var controls: some View {
         VStack(spacing: 8) {
@@ -205,7 +218,7 @@ struct BJJNativeEditorScreen: View {
                         if session.prepareRecordingRoute() { confirmRecord = true }
                     }.labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44).accessibilityIdentifier("narration.options")
                     Spacer()
-                    Button("Narration", systemImage: "waveform") { session.pause(); showAudio = true }
+                    Button("Narration", systemImage: "waveform") { session.pause(); showAudio = true }.accessibilityIdentifier("narration.open")
                 }.frame(minHeight: 44).disabled(session.preparingAudio || session.exporting)
                 if session.preparingAudio { ProgressView("Preparing audio preview…") }
                 if let notice = session.notice {
@@ -220,9 +233,14 @@ struct BJJNativeEditorScreen: View {
                     Text("Review").tag(false)
                     Text("Draw").tag(true)
                 }.pickerStyle(.segmented).frame(maxWidth: 240).disabled(session.recording || session.preparingAudio)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(session.saveStatus).accessibilityIdentifier("editor.saveState")
+                    if let action = session.undoAction { Text("Undo: \(action)").foregroundStyle(.secondary) }
+                }.font(.caption).frame(maxWidth: .infinity, alignment: .leading)
                 Spacer(minLength: 0)
                 Button("Undo", systemImage: "arrow.uturn.backward") { session.history(redo: false) }
-                    .disabled(session.undoCount == 0 || session.recording || session.preparingAudio).labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44)
+                    .disabled(!session.canUndo).labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44)
+                    .accessibilityIdentifier("Undo").accessibilityLabel(session.undoAction.map { "Undo: \($0)" } ?? "Undo")
                 Button("Redo", systemImage: "arrow.uturn.forward") { session.history(redo: true) }
                     .disabled(session.redoCount == 0 || session.recording || session.preparingAudio).labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44)
             }
@@ -263,7 +281,8 @@ struct BJJNativeEditorScreen: View {
                         Button("Start here") { session.markLoop(start: true) }
                         Button("End here") { session.markLoop(start: false) }
                         Button(session.loopEnabled ? "Turn loop off" : "Turn loop on") { session.toggleLoop() }
-                        Text(String(format: "%.1f – %.1f seconds", session.loopStart, session.loopEnd))
+                        Text(String(format: "Original video %.1f – %.1fs", session.loopStart, session.loopEnd))
+                        Text(String(format: "Finished review %.1f – %.1fs", session.project.reviewTimeline.output(before: session.loopStart), session.project.reviewTimeline.output(before: session.loopEnd)))
                     } label: { Label(session.loopEnabled ? "Loop on" : "Loop", systemImage: "repeat").frame(minHeight: 44) }
                 }
             }
@@ -276,7 +295,7 @@ struct BJJNativeEditorScreen: View {
                 ForEach(session.project.annotations.sorted { $0.n("startSec") < $1.n("startSec") }, id: \.selfID) { cue in
                     Button { openProperties(cue.s("id")) } label: {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("\(cue.s("type").capitalized) · \(cue.n("startSec"), specifier: "%.1f")–\(cue.n("endSec"), specifier: "%.1f")s").font(.caption)
+                            Text("\(cue.s("type").capitalized) · Original video \(cue.n("startSec"), specifier: "%.1f")–\(cue.n("endSec"), specifier: "%.1f")s").font(.caption)
                             GeometryReader { geo in
                                 Capsule().fill(.secondary.opacity(0.2))
                                 Capsule().fill(session.selectedID == cue.s("id") ? Color.accentColor : Color.secondary)
@@ -302,7 +321,7 @@ struct BJJNativeEditorScreen: View {
                         } label: {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(cue.s("type") == "text" ? (cue["geometry"] as! BJJJSON).s("text") : cue.s("type").capitalized)
-                                Text(String(format: "%.1f – %.1f seconds", cue.n("startSec"), cue.n("endSec")))
+                                Text(String(format: "Original video %.1f – %.1f seconds", cue.n("startSec"), cue.n("endSec")))
                                     .font(.caption).foregroundStyle(.secondary)
                             }.frame(minHeight: 44)
                         }
@@ -610,5 +629,25 @@ final class BJJNativeCanvas: UIView, UIGestureRecognizerDelegate {
         let value = UInt32(hex.dropFirst(), radix: 16) ?? 0
         return UIColor(red: CGFloat((value >> 16) & 255) / 255, green: CGFloat((value >> 8) & 255) / 255,
                        blue: CGFloat(value & 255) / 255, alpha: 1)
+    }
+}
+
+/// Persistent local feedback remains reachable after sheets open and notices disappear.
+struct BJJSaveFeedback: View {
+    @ObservedObject var session: BJJNativeEditorSession
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack { status; Spacer(); undo }
+            VStack(alignment: .leading) { status; undo }
+        }
+        .font(.footnote).padding(.horizontal).padding(.vertical, 6).background(.bar)
+    }
+    private var status: some View {
+        Text(session.saveStatus).foregroundStyle(session.saveFailed ? Color.red : Color.secondary)
+            .accessibilityIdentifier("editor.saveState")
+    }
+    private var undo: some View {
+        Button(session.undoAction.map { "Undo: \($0)" } ?? "Undo", systemImage: "arrow.uturn.backward") { session.history(redo: false) }
+            .disabled(!session.canUndo).frame(minHeight: 44).accessibilityIdentifier("editor.localUndo")
     }
 }
