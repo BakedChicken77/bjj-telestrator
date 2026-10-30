@@ -3,7 +3,8 @@
 Original-video seconds anchor drawings and the existing loop preferences. Finished
 review seconds include inserted narration holds and drive playback, take display
 and export ranges. The transport and VoiceOver now agree on finished-review time;
-drawing controls and the existing loop menu explicitly label original-video time.
+drawing controls, cue lists, thumbnail accessibility values and the existing loop
+menu explicitly identify original-video time. Take summaries identify review time.
 A source lasting 10 seconds plus a 5-second hold is a 15-second review.
 
 All spans are half-open [start, end). At a hold's review start the frozen picture

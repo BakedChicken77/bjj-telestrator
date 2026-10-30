@@ -23,7 +23,7 @@ struct BJJNativeAudioScreen: View {
                         } label: {
                             VStack(alignment: .leading) {
                                 Text("Take \(index + 1)\((clip["muted"] as? Bool) == true ? " · Muted" : "")")
-                                Text(String(format: "%.2f – %.2f seconds", takeStart(clip), takeEnd(clip))).font(.caption).foregroundStyle(.secondary)
+                                Text(String(format: "Finished review %.2f – %.2f seconds", takeStart(clip), takeEnd(clip))).font(.caption).foregroundStyle(.secondary)
                             }
                         }
                     }
@@ -75,8 +75,8 @@ struct BJJNativeTakeScreen: View {
                 Toggle("Muted", isOn: Binding(get: { current["muted"] as? Bool ?? false }, set: { update("muted", $0) }))
                 Stepper("Volume: \(current.n("gain"), specifier: "%.1f")×", value: Binding(get: { current.n("gain") }, set: { update("gain", $0) }), in: 0...2, step: 0.1)
             }
-            Section("Timing") {
-                Text(String(format: "Starts at %.2f seconds", BJJTakeDisplay.start(current, project: session.project)))
+            Section("Finished review timing") {
+                Text(String(format: "Finished review starts at %.2f seconds", BJJTakeDisplay.start(current, project: session.project)))
                 HStack {
                     Button("Earlier 0.05s") { nudge(-0.05) }
                     Spacer()

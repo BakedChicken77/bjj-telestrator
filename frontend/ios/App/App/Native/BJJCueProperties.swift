@@ -27,7 +27,7 @@ struct BJJCueProperties: View {
                                    change: changeBoundary)
                     Text("Drag either handle to set when the cue appears. The video follows the handle.").font(.caption)
                     Slider(value: Binding(get: { session.time }, set: { session.seek($0) }), in: 0...session.project.duration)
-                        .accessibilityLabel("Preview video position")
+                        .accessibilityLabel("Original video preview position")
                     DisclosureGroup("Precise timing") {
                         number("Start", "startSec", range: 0...session.project.duration)
                         number("End", "endSec", range: 0...session.project.duration)
@@ -183,7 +183,7 @@ struct BJJCueRangeBar: View {
                 .onChanged { value in change(isStart, Double((value.location.x - 22) / width) * duration) })
             .accessibilityElement()
             .accessibilityLabel(isStart ? "Cue start" : "Cue end")
-            .accessibilityValue(String(format: "%.2f seconds", isStart ? start : end))
+            .accessibilityValue(String(format: "%.2f original-video seconds", isStart ? start : end))
             .accessibilityIdentifier(isStart ? "cue.range.start" : "cue.range.end")
             .accessibilityAdjustableAction { direction in
                 let delta = direction == .increment ? 1 / fps : -1 / fps

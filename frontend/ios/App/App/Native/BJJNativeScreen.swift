@@ -188,7 +188,7 @@ struct BJJNativeEditorScreen: View {
                     Button { session.seek(session.project.duration * Double(index) / 8) } label: {
                         Image(uiImage: image).resizable().scaledToFill().frame(width: width, height: 44).clipped()
                     }.buttonStyle(.plain)
-                        .accessibilityLabel("Seek to \(Int(session.project.duration * Double(index) / 8)) seconds")
+                        .accessibilityLabel(String(format: "Seek to original video %.1f seconds, finished review %.1f seconds", session.project.duration * Double(index) / 8, session.project.reviewTimeline.output(before: session.project.duration * Double(index) / 8)))
                 }
             }
         }.frame(height: session.thumbnails.isEmpty ? 0 : 44).clipped().padding(.horizontal, 12)
@@ -295,7 +295,7 @@ struct BJJNativeEditorScreen: View {
                 ForEach(session.project.annotations.sorted { $0.n("startSec") < $1.n("startSec") }, id: \.selfID) { cue in
                     Button { openProperties(cue.s("id")) } label: {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("\(cue.s("type").capitalized) · \(cue.n("startSec"), specifier: "%.1f")–\(cue.n("endSec"), specifier: "%.1f")s").font(.caption)
+                            Text("\(cue.s("type").capitalized) · Original video \(cue.n("startSec"), specifier: "%.1f")–\(cue.n("endSec"), specifier: "%.1f")s").font(.caption)
                             GeometryReader { geo in
                                 Capsule().fill(.secondary.opacity(0.2))
                                 Capsule().fill(session.selectedID == cue.s("id") ? Color.accentColor : Color.secondary)
@@ -321,7 +321,7 @@ struct BJJNativeEditorScreen: View {
                         } label: {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(cue.s("type") == "text" ? (cue["geometry"] as! BJJJSON).s("text") : cue.s("type").capitalized)
-                                Text(String(format: "%.1f – %.1f seconds", cue.n("startSec"), cue.n("endSec")))
+                                Text(String(format: "Original video %.1f – %.1f seconds", cue.n("startSec"), cue.n("endSec")))
                                     .font(.caption).foregroundStyle(.secondary)
                             }.frame(minHeight: 44)
                         }
