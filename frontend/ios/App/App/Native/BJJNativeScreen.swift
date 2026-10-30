@@ -49,7 +49,13 @@ struct BJJNativeEditorScreen: View {
                     layout {
                         videoSurface.frame(height: landscape || propertiesCollapsed ? nil : geometry.size.height * 0.60)
                         VStack(spacing: 0) {
-                            Button(propertiesCollapsed ? "Expand properties" : "Collapse properties", systemImage: propertiesCollapsed ? "chevron.up" : "chevron.down") { propertiesCollapsed.toggle() }
+                            Button { propertiesCollapsed.toggle() } label: {
+                                VStack(spacing: 2) {
+                                    Label(propertiesCollapsed ? "Expand properties" : "Collapse properties", systemImage: propertiesCollapsed ? "chevron.up" : "chevron.down")
+                                    Text(session.saveStatus).font(.caption).foregroundStyle(session.saveFailed ? Color.red : Color.secondary)
+                                        .accessibilityIdentifier("editor.saveState")
+                                }
+                            }
                                 .frame(minHeight: 44).accessibilityIdentifier("cue.properties.collapse")
                             properties(cue).frame(maxHeight: propertiesCollapsed ? 0 : .infinity)
                                 .clipped().opacity(propertiesCollapsed ? 0 : 1).accessibilityHidden(propertiesCollapsed)
@@ -65,7 +71,6 @@ struct BJJNativeEditorScreen: View {
                     }.frame(width: geometry.size.width, height: geometry.size.height)
                 }
             }
-            .safeAreaInset(edge: .bottom) { if !session.recordingDockVisible { BJJSaveFeedback(session: session) } }
             .background(Color(uiColor: .systemBackground))
             .navigationTitle(session.project.name)
             .navigationBarTitleDisplayMode(.inline)
@@ -221,9 +226,14 @@ struct BJJNativeEditorScreen: View {
                     Text("Review").tag(false)
                     Text("Draw").tag(true)
                 }.pickerStyle(.segmented).frame(maxWidth: 240).disabled(session.recording || session.preparingAudio)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(session.saveStatus).accessibilityIdentifier("editor.saveState")
+                    if let action = session.undoAction { Text("Undo: \(action)").foregroundStyle(.secondary) }
+                }.font(.caption).frame(maxWidth: .infinity, alignment: .leading)
                 Spacer(minLength: 0)
                 Button("Undo", systemImage: "arrow.uturn.backward") { session.history(redo: false) }
-                    .disabled(session.undoCount == 0 || session.recording || session.preparingAudio).labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44)
+                    .disabled(!session.canUndo).labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44)
+                    .accessibilityIdentifier("Undo").accessibilityLabel(session.undoAction.map { "Undo: \($0)" } ?? "Undo")
                 Button("Redo", systemImage: "arrow.uturn.forward") { session.history(redo: true) }
                     .disabled(session.redoCount == 0 || session.recording || session.preparingAudio).labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44)
             }
