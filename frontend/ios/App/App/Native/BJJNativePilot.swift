@@ -592,7 +592,7 @@ enum BJJRecordingPresentation: Equatable {
             let samples = (take["placements"] as? [BJJJSON] ?? []).filter { $0["holdId"] as? String == id }.reduce(0) { $0 + $1.n("durationTicks") }
             return samples > 0 ? String(format: "Take %d (%.2fs)", index + 1, samples / 48000) : nil
         }
-        return affected.isEmpty ? "No take currently uses this pause." : "Audio inside this pause from " + affected.joined(separator: ", ") + " will be removed."
+        return affected.isEmpty ? "No take currently uses this pause." : "Removing this pause removes audio from " + affected.joined(separator: ", ") + "."
     }
     func pauseThumbnail(_ hold: BJJJSON) async -> UIImage? {
         guard let url = try? store.asset(id, project.proxy.s("asset")) else { return nil }
