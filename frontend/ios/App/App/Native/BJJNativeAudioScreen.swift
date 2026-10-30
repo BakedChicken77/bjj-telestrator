@@ -112,13 +112,13 @@ struct BJJNativeExportScreen: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Range") {
+                Section("Finished review range · includes pauses") {
                     Toggle("Selected range", isOn: $selectedRange)
                     if selectedRange {
-                        LabeledContent("Start (seconds)") { TextField("Start", value: $start, format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing).accessibilityLabel("Range start in seconds") }
-                        LabeledContent("End (seconds)") { TextField("End", value: $end, format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing).accessibilityLabel("Range end in seconds") }
+                        LabeledContent("Start (seconds)") { TextField("Start", value: $start, format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing).accessibilityLabel("Finished review range start in seconds") }
+                        LabeledContent("End (seconds)") { TextField("End", value: $end, format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing).accessibilityLabel("Finished review range end in seconds") }
                         Button("Use loop range") { start = session.project.reviewTimeline.output(before: session.loopStart); end = session.project.reviewTimeline.output(before: session.loopEnd) }
-                    } else { Text("Full video · \(session.project.outputDuration, specifier: "%.1f") seconds") }
+                    } else { Text("Full review · \(session.project.outputDuration, specifier: "%.1f") seconds") }
                 }
                 Section("Quality") {
                     Picker("Longest edge", selection: $maximum) {

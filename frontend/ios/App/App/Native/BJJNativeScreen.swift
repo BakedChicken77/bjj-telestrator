@@ -66,7 +66,13 @@ struct BJJNativeEditorScreen: View {
                         videoSurface
                         if !landscape { filmstrip.disabled(session.recording || session.preparingAudio) }
                         if session.drawing && !landscape { cueStrip }
-                        transport.disabled(session.recording || session.preparingAudio)
+                        VStack(spacing: 2) {
+                            if let span = session.project.reviewTimeline.span(at: session.outputTime), span.hold != nil {
+                                Text("Paused at original \(span.source, specifier: "%.1f")s").font(.caption)
+                                    .accessibilityIdentifier("editor.holdAnchor")
+                            }
+                            transport
+                        }.disabled(session.recording || session.preparingAudio)
                         controls
                     }.frame(width: geometry.size.width, height: geometry.size.height)
                 }
@@ -192,12 +198,13 @@ struct BJJNativeEditorScreen: View {
             Button(session.playing ? "Pause" : "Play", systemImage: session.playing ? "pause.fill" : "play.fill") { session.togglePlayback() }
                 .labelStyle(.iconOnly).font(.title2).frame(width: 44, height: 44)
             Slider(value: Binding(get: { session.outputTime }, set: { session.seekOutput($0) }), in: 0...session.project.outputDuration)
-                .accessibilityLabel("Video position").accessibilityValue("\(Int(session.time)) seconds")
-            Text(String(format: "%02d:%02d", Int(session.outputTime) / 60, Int(session.outputTime) % 60))
+                .accessibilityLabel("Finished review position").accessibilityValue("\(session.outputTime, specifier: "%.1f") of \(session.project.outputDuration, specifier: "%.1f") seconds")
+            Text("\(session.outputTime, specifier: "%.1f") / \(session.project.outputDuration, specifier: "%.1f")s")
                 .monospacedDigit().font(.caption)
             Button("Fit video", systemImage: "arrow.down.right.and.arrow.up.left") { zoomReset += 1 }
                 .labelStyle(.iconOnly).frame(width: 44, height: 44)
         }.padding(.horizontal, 12)
+        .accessibilityHint("Finished review time includes narration pauses.")
     }
     private var controls: some View {
         VStack(spacing: 8) {
@@ -274,7 +281,8 @@ struct BJJNativeEditorScreen: View {
                         Button("Start here") { session.markLoop(start: true) }
                         Button("End here") { session.markLoop(start: false) }
                         Button(session.loopEnabled ? "Turn loop off" : "Turn loop on") { session.toggleLoop() }
-                        Text(String(format: "%.1f – %.1f seconds", session.loopStart, session.loopEnd))
+                        Text(String(format: "Original video %.1f – %.1fs", session.loopStart, session.loopEnd))
+                        Text(String(format: "Finished review %.1f – %.1fs", session.project.reviewTimeline.output(before: session.loopStart), session.project.reviewTimeline.output(before: session.loopEnd)))
                     } label: { Label(session.loopEnabled ? "Loop on" : "Loop", systemImage: "repeat").frame(minHeight: 44) }
                 }
             }

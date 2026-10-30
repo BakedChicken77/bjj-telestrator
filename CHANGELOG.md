@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.1.4] - 2026-10-30
+
+- Label original-video drawing times separately from finished-review playback and export times.
+- Announce the correct review clock and show elapsed/total duration plus frozen-frame anchors.
+- Restore the exact review position inside pauses after reopening, with legacy preference fallback.
+
 ## [2.1.3] - 2026-10-30
 
 - Show confirmed local save state, unsaved drawing drafts, and failed writes.

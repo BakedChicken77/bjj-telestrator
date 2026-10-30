@@ -19,7 +19,9 @@ struct BJJCueProperties: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Timing · seconds") {
+                Section("Original video timing · seconds") {
+                    Text("Finished review: \(session.project.reviewTimeline.output(before: cue.n("startSec")), specifier: "%.2f") – \(session.project.reviewTimeline.output(before: cue.n("endSec")), specifier: "%.2f")s")
+                        .font(.caption)
                     BJJCueRangeBar(start: cue.n("startSec"), end: cue.n("endSec"),
                                    duration: session.project.duration, fps: session.project.exportSettings.n("fps"),
                                    change: changeBoundary)
@@ -32,7 +34,7 @@ struct BJJCueProperties: View {
                         Button("Start here") { changeBoundary(true, session.time) }
                         Button("End here") { changeBoundary(false, session.time) }
                     }
-                    Text("The cue appears at Start and disappears at End. Times are video seconds.").font(.footnote)
+                    Text("The cue appears at Start and disappears at End. Times are original-video seconds.").font(.footnote)
                 }
                 Section("Appearance") {
                     color("Stroke color", "strokeColor")

@@ -176,6 +176,32 @@ import UniformTypeIdentifiers
         XCTAssertEqual(try redPixels(output, time: 29.0 / 30), 0)
         XCTAssertGreaterThan(try redPixels(output, time: 1), 20)
     }
+    func testReviewPositionInsideHoldSurvivesPreparationAndReopen() async throws {
+        let service = try BJJService(store: store)
+        let initial = try await service.importFile(try await sourceVideo(audio: false, moving: true), originalName: "clock.mp4")
+        let hold: BJJJSON = ["id": UUID().uuidString.lowercased(), "sourceTicks": 48000, "durationTicks": 240000, "frozenPTS": 1.0]
+        var document = initial.json
+        document["requiredCapabilities"] = (initial.json["requiredCapabilities"] as! [String]) + [BJJReviewTimeline.capability]
+        document["reviewTimeline"] = BJJReviewTimeline(sourceDuration: initial.duration, holds: [hold]).json
+        document["reviewNarration"] = [BJJJSON]()
+        let project = try store.save(BJJProject(document))
+        let suite = "clock-\(UUID().uuidString)", defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let editor = try BJJNativeEditorSession(project: project, store: store, preferences: defaults)
+        await editor.prepareAudio()
+        editor.seekOutput(3.25)
+        try await Task.sleep(nanoseconds: 500_000_000)
+        editor.close()
+        let reopened = try BJJNativeEditorSession(project: store.load(project.id), store: store, preferences: defaults)
+        defer { reopened.close() }
+        XCTAssertEqual(reopened.outputTime, 3.25, accuracy: 0.02)
+        await reopened.prepareAudio()
+        try await Task.sleep(nanoseconds: 500_000_000)
+        XCTAssertEqual(reopened.outputTime, 3.25, accuracy: 0.02)
+        XCTAssertEqual(reopened.time, 1, accuracy: 0.02)
+        XCTAssertEqual(try store.load(project.id).revision, project.revision)
+        XCTAssertEqual(reopened.undoCount, 0)
+    }
     func testReviewTimelineBoundariesPlacementsAndCompatibility() throws {
         let hold: BJJJSON = ["id": UUID().uuidString.lowercased(), "sourceTicks": 4 * 48000, "durationTicks": 5 * 48000, "frozenPTS": 4.0]
         let timeline = BJJReviewTimeline(sourceDuration: 10, holds: [hold])
