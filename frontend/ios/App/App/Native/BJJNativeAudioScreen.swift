@@ -36,6 +36,7 @@ struct BJJNativeAudioScreen: View {
                 }
                 Section { Text("Use headphones to keep playback out of the microphone. Bluetooth may switch to a lower-bandwidth microphone route while recording; the active route is shown with the take controls.").font(.footnote) }
             }
+            .accessibilityIdentifier("narration.form")
             .disabled(session.preparingAudio)
             .overlay { if session.preparingAudio { ProgressView("Preparing audio preview…").padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12)) } }
             .safeAreaInset(edge: .bottom) { BJJSaveFeedback(session: session) }
@@ -211,27 +212,28 @@ struct BJJPauseActions: View {
     @State private var impact = ""
     var body: some View {
         ForEach(holds, id: \.holdID) { hold in
-            VStack(alignment: .leading, spacing: 8) {
-                BJJPauseFrame(session: session, hold: hold)
-                ForEach(Array(session.project.allTakes.enumerated()).filter { _, take in
-                    session.holdsUsed(by: take).contains { $0.s("id") == hold.s("id") }
-                }, id: \.offset) { index, take in
-                    NavigationLink("Used by Take \(index + 1)") { BJJNativeTakeScreen(session: session, clip: take, number: index + 1) }
-                }
-                Button("Remove pause…", role: .destructive) {
-                    session.pause(); selectedID = hold.s("id"); revision = session.project.revision
-                    impact = String(format: "Remove %.2fs paused at original %.2fs. ", hold.n("durationTicks") / 48000, hold.n("sourceTicks") / 48000) + session.pauseImpact(hold.s("id")) + " Original recordings are retained. Undo restores the pause and its audio placements."
-                    showingRemoval = true
-                }.accessibilityIdentifier("pause.remove.\(hold.s("id"))")
-            }.padding(.vertical, 4)
-        }
-        .confirmationDialog("Remove pause and its audio?", isPresented: $showingRemoval, titleVisibility: .visible) {
-            Button("Remove pause and its audio", role: .destructive) {
-                if let selectedID { session.removeNarrationPause(selectedID, expectedRevision: revision) }
-                selectedID = nil
+            BJJPauseFrame(session: session, hold: hold)
+            ForEach(Array(session.project.allTakes.enumerated()).filter { _, take in
+                session.holdsUsed(by: take).contains { $0.s("id") == hold.s("id") }
+            }, id: \.offset) { index, take in
+                NavigationLink("Used by Take \(index + 1)") { BJJNativeTakeScreen(session: session, clip: take, number: index + 1) }
             }
-            Button("Cancel", role: .cancel) { selectedID = nil }
-        } message: { Text(impact) }
+            Button(role: .destructive) {
+                session.pause(); selectedID = hold.s("id"); revision = session.project.revision
+                impact = String(format: "Remove %.2fs paused at original %.2fs. ", hold.n("durationTicks") / 48000, hold.n("sourceTicks") / 48000) + session.pauseImpact(hold.s("id")) + " Original recordings are retained. Undo restores the pause and its audio placements."
+                showingRemoval = true
+            } label: {
+                Text("Remove pause…").frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            }
+            .buttonStyle(.borderless).accessibilityIdentifier("pause.remove.\(hold.s("id"))")
+            .confirmationDialog("Remove pause and its audio?", isPresented: Binding(get: { showingRemoval && selectedID == hold.s("id") }, set: { showingRemoval = $0 }), titleVisibility: .visible) {
+                Button("Remove pause and its audio", role: .destructive) {
+                    if let selectedID { session.removeNarrationPause(selectedID, expectedRevision: revision) }
+                    selectedID = nil
+                }
+                Button("Cancel", role: .cancel) { selectedID = nil }
+            } message: { Text(impact) }
+        }
     }
 }
 

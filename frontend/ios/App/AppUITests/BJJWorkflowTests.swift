@@ -94,8 +94,13 @@ final class BJJWorkflowTests: XCTestCase {
         app.launch(); openReview()
         app.buttons["narration.open"].tap()
         let remove = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "pause.remove.")).firstMatch
-        for _ in 0..<5 { if remove.isHittable { break }; app.swipeUp() }
-        XCTAssertTrue(remove.waitForExistence(timeout: 15)); remove.tap()
+        let form = app.descendants(matching: .any)["narration.form"].firstMatch
+        XCTAssertTrue(form.waitForExistence(timeout: 10))
+        for _ in 0..<8 {
+            if remove.isHittable && remove.frame.maxY < app.buttons["editor.localUndo"].frame.minY { break }
+            form.swipeUp()
+        }
+        XCTAssertTrue(remove.isHittable); remove.tap()
         XCTAssertTrue(app.buttons["Remove pause and its audio"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", "Take 1", "Take 2")).firstMatch.exists)
         app.buttons["Cancel"].tap()
