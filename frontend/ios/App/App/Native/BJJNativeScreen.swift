@@ -198,7 +198,7 @@ struct BJJNativeEditorScreen: View {
             Button(session.playing ? "Pause" : "Play", systemImage: session.playing ? "pause.fill" : "play.fill") { session.togglePlayback() }
                 .labelStyle(.iconOnly).font(.title2).frame(width: 44, height: 44)
             Slider(value: Binding(get: { session.outputTime }, set: { session.seekOutput($0) }), in: 0...session.project.outputDuration)
-                .accessibilityLabel("Finished review position").accessibilityValue(Text("\(session.outputTime, specifier: "%.1f") of \(session.project.outputDuration, specifier: "%.1f") seconds"))
+                .accessibilityIdentifier("editor.position").accessibilityLabel("Finished review position").accessibilityValue(Text("\(session.outputTime, specifier: "%.1f") of \(session.project.outputDuration, specifier: "%.1f") seconds"))
             Text("\(session.outputTime, specifier: "%.1f") / \(session.project.outputDuration, specifier: "%.1f")s")
                 .monospacedDigit().font(.caption)
             Button("Fit video", systemImage: "arrow.down.right.and.arrow.up.left") { zoomReset += 1 }
