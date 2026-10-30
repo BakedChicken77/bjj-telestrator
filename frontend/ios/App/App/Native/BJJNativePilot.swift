@@ -583,8 +583,33 @@ enum BJJRecordingPresentation: Equatable {
             notice = reason; pause(); capture.restorePlaybackRoute()
         }
     }
-    func removeNarrationPause(_ id: String) {
+    func holdsUsed(by take: BJJJSON) -> [BJJJSON] {
+        let ids = Set((take["placements"] as? [BJJJSON] ?? []).compactMap { $0["holdId"] as? String })
+        return project.reviewTimeline.holds.filter { ids.contains($0.s("id")) }
+    }
+    func pauseImpact(_ id: String) -> String {
+        let affected = project.allTakes.enumerated().compactMap { index, take -> String? in
+            let samples = (take["placements"] as? [BJJJSON] ?? []).filter { $0["holdId"] as? String == id }.reduce(0) { $0 + $1.n("durationTicks") }
+            return samples > 0 ? String(format: "Take %d (%.2fs)", index + 1, samples / 48000) : nil
+        }
+        return affected.isEmpty ? "No take currently uses this pause." : "Audio inside this pause from " + affected.joined(separator: ", ") + " will be removed."
+    }
+    func pauseThumbnail(_ hold: BJJJSON) async -> UIImage? {
+        guard let url = try? store.asset(id, project.proxy.s("asset")) else { return nil }
+        let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: 160, height: 100)
+        defer { generator.cancelAllCGImageGeneration() }
+        let seconds = min(max(0, project.duration - 1 / 30), hold.n("sourceTicks") / 48000)
+        guard let frame = try? await generator.image(at: CMTime(seconds: seconds, preferredTimescale: 48000)), !Task.isCancelled else { return nil }
+        return UIImage(cgImage: frame.image)
+    }
+    func removeNarrationPause(_ id: String, expectedRevision: Int? = nil) {
         do {
+            guard (expectedRevision == nil || expectedRevision == project.revision),
+                  project.reviewTimeline.holds.contains(where: { $0.s("id") == id }) else {
+                throw BJJError.invalid("This pause or review changed. Review its affected takes again before removing it.")
+            }
             var json = project.json
             var timeline = project.json["reviewTimeline"] as? BJJJSON ?? [:]
             timeline["holds"] = project.reviewTimeline.holds.filter { $0.s("id") != id }; json["reviewTimeline"] = timeline

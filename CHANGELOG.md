@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.1.5] - 2026-10-30
+
+- Show narration-pause frame references, duration and all takes sharing each pause.
+- Confirm affected audio before removing a pause; reject stale confirmations.
+- Keep pauses when muting/deleting takes and expose pause inspection alongside each take; local Undo restores removed holds and placements.
+
 ## [2.1.4] - 2026-10-30
 
 - Label original-video drawing times separately from finished-review playback and export times.
