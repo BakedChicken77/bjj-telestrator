@@ -89,6 +89,28 @@ final class BJJWorkflowTests: XCTestCase {
         XCTAssertTrue(app.buttons["editor.done"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["editor.done"].isEnabled)
     }
+    func testSharedPauseConfirmationCancelAndUndo() throws {
+        app.launchEnvironment["BJJ_UI_TEST_PAUSES"] = "1"
+        app.launch(); openReview()
+        app.buttons["narration.open"].tap()
+        let remove = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "pause.remove.")).firstMatch
+        for _ in 0..<5 { if remove.isHittable { break }; app.swipeUp() }
+        XCTAssertTrue(remove.waitForExistence(timeout: 15)); remove.tap()
+        XCTAssertTrue(app.buttons["Remove pause and its audio"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", "Take 1", "Take 2")).firstMatch.exists)
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(remove.exists, "Cancel must retain the shared hold")
+        remove.tap(); app.buttons["Remove pause and its audio"].tap()
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: remove)
+        waitForExpectations(timeout: 15)
+        let undo = app.buttons["editor.localUndo"]
+        expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: undo)
+        waitForExpectations(timeout: 30)
+        XCTAssertTrue(undo.label.contains("Remove pause")); undo.tap()
+        XCTAssertTrue(remove.waitForExistence(timeout: 15))
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "shared-pause-restored"; screenshot.lifetime = .keepAlways; add(screenshot)
+    }
     func testOptionalTipsCustomValidationAndLandscapeDismissal() throws {
         app.launchEnvironment["BJJ_UI_TEST_TIPS"] = "1"
         app.launch()

@@ -206,6 +206,7 @@ struct BJJPauseActions: View {
     @ObservedObject var session: BJJNativeEditorSession
     let holds: [BJJJSON]
     @State private var selectedID: String?
+    @State private var showingRemoval = false
     @State private var revision: Int?
     @State private var impact = ""
     var body: some View {
@@ -220,10 +221,11 @@ struct BJJPauseActions: View {
                 Button("Remove pause…", role: .destructive) {
                     session.pause(); selectedID = hold.s("id"); revision = session.project.revision
                     impact = String(format: "Remove %.2fs paused at original %.2fs. ", hold.n("durationTicks") / 48000, hold.n("sourceTicks") / 48000) + session.pauseImpact(hold.s("id")) + " Original recordings are retained. Undo restores the pause and its audio placements."
+                    showingRemoval = true
                 }.accessibilityIdentifier("pause.remove.\(hold.s("id"))")
             }.padding(.vertical, 4)
         }
-        .confirmationDialog("Remove pause and its audio?", isPresented: Binding(get: { selectedID != nil }, set: { if !$0 { selectedID = nil } }), titleVisibility: .visible) {
+        .confirmationDialog("Remove pause and its audio?", isPresented: $showingRemoval, titleVisibility: .visible) {
             Button("Remove pause and its audio", role: .destructive) {
                 if let selectedID { session.removeNarrationPause(selectedID, expectedRevision: revision) }
                 selectedID = nil

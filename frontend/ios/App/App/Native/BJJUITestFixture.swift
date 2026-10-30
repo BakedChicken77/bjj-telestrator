@@ -22,6 +22,28 @@ import AVFoundation
             defer { try? FileManager.default.removeItem(at: source) }
             try await video(source)
             await library.importFile(source, openWhenReady: false)
+            if ProcessInfo.processInfo.environment["BJJ_UI_TEST_PAUSES"] == "1", let review = library.continuation {
+                let store = try BJJStore(root: library.root), initial = try store.load(review.id)
+                let holdID = UUID().uuidString.lowercased()
+                var document = initial.json, takes = [BJJJSON]()
+                document["requiredCapabilities"] = (initial.json["requiredCapabilities"] as! [String]) + [BJJReviewTimeline.capability]
+                document["reviewTimeline"] = BJJReviewTimeline(sourceDuration: initial.duration, holds: [["id": holdID, "sourceTicks": 48000, "durationTicks": 48000, "frozenPTS": 1.0]]).json
+                for _ in 0..<2 {
+                    let id = UUID().uuidString.lowercased(), asset = "voiceover/\(UUID().uuidString.lowercased()).wav"
+                    let format = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 1)!
+                    let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 24000)!
+                    buffer.frameLength = 24000
+                    for frame in 0..<24000 { buffer.floatChannelData![0][frame] = Float(sin(Double(frame) * 2 * .pi * 440 / 48000) * 0.1) }
+                    let file = try AVAudioFile(forWriting: store.safeURL(initial.id, asset), settings: format.settings)
+                    try file.write(from: buffer)
+                    takes.append(["id": id, "asset": asset, "durationSec": 0.5, "sampleCount": 24000,
+                        "gain": 1.0, "muted": false, "recordedAt": BJJProject.now(), "codec": "pcm_f32le", "sampleRate": 48000, "channels": 1,
+                        "placements": [["audioStartTicks": 0, "durationTicks": 24000, "holdId": holdID, "offsetTicks": 0]]])
+                }
+                try store.writeJSON(Dictionary(uniqueKeysWithValues: takes.map { ($0.s("id"), $0 as Any) }), to: store.safeURL(initial.id, "voiceover/assets.json"))
+                document["reviewNarration"] = takes
+                _ = try store.save(BJJProject(document)); await library.refresh()
+            }
         } catch { library.error = error.localizedDescription }
     }
     private static func video(_ url: URL) async throws {
