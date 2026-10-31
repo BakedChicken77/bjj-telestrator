@@ -1948,7 +1948,7 @@ import UniformTypeIdentifiers
             _ = try await BJJNativeRecording.waitForMicrophone(isCurrent: { clock < 0.1 },
                 sample: { (false, 0) }, now: { clock }, sleep: { clock += 0.01 })
             XCTFail("Cancelled startup must not reach capturing")
-        } catch { XCTAssertEqual((error as? BJJError)?.code, "CANCELLED") }
+        } catch { XCTAssertEqual((error as? BJJError)?.code, "JOB_CANCELLED") }
         let result = BJJCaptureCompletion(clip: nil, error: nil, cause: .routeChanged, outcome: .noAudio, reason: "The microphone connection changed.")
         XCTAssertEqual(result.message, "The microphone connection changed. No narration was saved.")
         XCTAssertTrue(result.interrupted)
