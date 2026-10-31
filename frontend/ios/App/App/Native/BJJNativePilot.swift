@@ -289,7 +289,7 @@ enum BJJRecordingPresentation: Equatable {
             let clip = result.clip, failure = result.error, reason = result.message
             guard let self else { return }
             self.recordingRequest = nil
-            self.recordingInterruption = reason
+            self.recordingInterruption = result.interrupted ? reason : nil
             self.recordingPresentation = .saving
             self.recording = false; self.recordingVideoPaused = false; self.playing = false
             if let failure { self.recordingPresentation = .interrupted; self.error = reason ?? failure.localizedDescription; return }
@@ -320,7 +320,7 @@ enum BJJRecordingPresentation: Equatable {
                     self.recordingPresentation = .interrupted
                     self.error = "The audio was preserved, but the review could not save. Reopen it to recover the take. \(error.localizedDescription)"
                 }
-            } else { self.notice = reason; self.recordingPresentation = reason == nil ? .idle : .interrupted }
+            } else { self.notice = reason; self.recordingPresentation = result.interrupted ? .interrupted : .idle }
         }
         capture.meterChanged = { [weak self] value in
             guard let self else { return }

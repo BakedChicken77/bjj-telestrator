@@ -23,6 +23,7 @@ struct BJJCaptureCompletion {
     let cause: BJJCaptureStopCause
     let outcome: Outcome
     let reason: String?
+    var interrupted: Bool { cause != .userStop }
     var message: String? {
         if outcome == .noAudio {
             return reason.map { $0 + " No narration was saved." } ?? "Recording cancelled. No narration was saved."
@@ -303,11 +304,11 @@ struct BJJCaptureCompletion {
         let holds = newHolds
         capture?.delegate = nil; capture?.stop(); player?.pause()
         reset(); url = nil
-        guard let capture, let path, let document, let storage else { finished?(BJJCaptureCompletion(clip: nil, error: nil, cause: cause, outcome: .noAudio, reason: reason)); return }
         guard started else {
-            try? FileManager.default.removeItem(at: path)
+            if let path { try? FileManager.default.removeItem(at: path) }
             finished?(BJJCaptureCompletion(clip: nil, error: nil, cause: cause, outcome: .noAudio, reason: reason)); return
         }
+        guard let capture, let path, let document, let storage else { finished?(BJJCaptureCompletion(clip: nil, error: nil, cause: cause, outcome: .noAudio, reason: reason)); return }
         do {
             var audio = try AVAudioFile(forReading: path)
             if holds.isEmpty && !document.pauseAware {

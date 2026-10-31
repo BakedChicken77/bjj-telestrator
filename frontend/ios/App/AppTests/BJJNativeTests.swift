@@ -1951,6 +1951,10 @@ import UniformTypeIdentifiers
         } catch { XCTAssertEqual((error as? BJJError)?.code, "CANCELLED") }
         let result = BJJCaptureCompletion(clip: nil, error: nil, cause: .routeChanged, outcome: .noAudio, reason: "The microphone connection changed.")
         XCTAssertEqual(result.message, "The microphone connection changed. No narration was saved.")
+        XCTAssertTrue(result.interrupted)
+        let cancelled = BJJCaptureCompletion(clip: nil, error: nil, cause: .userStop, outcome: .noAudio, reason: nil)
+        XCTAssertFalse(cancelled.interrupted)
+        XCTAssertEqual(cancelled.message, "Recording cancelled. No narration was saved.")
         var readiness = BJJMicrophoneReadiness()
         XCTAssertFalse(readiness.observe(isRecording: true, time: .nan))
         XCTAssertFalse(readiness.observe(isRecording: true, time: 0.01))
