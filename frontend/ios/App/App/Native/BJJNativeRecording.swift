@@ -2,10 +2,42 @@ import Foundation
 import AVFoundation
 import UIKit
 
+
+/// Value-only startup policy is also exercised with delayed hardware clocks.
+struct BJJMicrophoneReadiness {
+    private var previous = 0.0
+    mutating func observe(isRecording: Bool, time: Double) -> Bool {
+        guard isRecording, time.isFinite, time > 0 else { return false }
+        defer { previous = time }
+        return previous > 0 && time > previous
+    }
+}
+
+enum BJJCaptureStopCause: String {
+    case userStop, routeChanged, audioInterrupted, backgrounded, startupTimeout, clockDrift, recorderFailed, interrupted
+}
+struct BJJCaptureCompletion {
+    enum Outcome: String { case saved, noAudio, preservedFailure }
+    let clip: BJJJSON?
+    let error: Error?
+    let cause: BJJCaptureStopCause
+    let outcome: Outcome
+    let reason: String?
+    var message: String? {
+        if outcome == .noAudio {
+            return reason.map { $0 + " No narration was saved." } ?? "Recording cancelled. No narration was saved."
+        }
+        return reason
+    }
+}
+
 /// Capture has one owner, fenced permission callbacks, and a durable take receipt.
 @MainActor final class BJJNativeRecording: NSObject, AVAudioRecorderDelegate {
     private var lifecycle = BJJRecordingLifecycle()
     private var recorder: AVAudioRecorder?
+    private var captureStarted = false
+    private var preparedRoute = ""
+    private var preparedSampleRate = 0.0
     private var url: URL?
     private var start = 0.0
     private var newHolds: [BJJJSON] = []
@@ -59,7 +91,7 @@ import UIKit
     private weak var player: AVPlayer?
     private var observations: [NSObjectProtocol] = []
     var meterChanged: ((Float) -> Void)?
-    var finished: ((BJJJSON?, Error?, String?) -> Void)?
+    var finished: ((BJJCaptureCompletion) -> Void)?
     var active: Bool { lifecycle.phase != .idle }
     var elapsed: Double { recorder?.currentTime ?? 0 }
     var level: Float { recorder?.updateMeters(); return recorder?.averagePower(forChannel: 0) ?? -160 }
@@ -77,7 +109,9 @@ import UIKit
     /// Permission and recorder creation remain in begin(), with its existing token fence.
     func prepareInputRoute() throws {
         let audio = AVAudioSession.sharedInstance()
-        try audio.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
+        if audio.category != .playAndRecord || audio.mode != .default || !audio.categoryOptions.contains(.allowBluetooth) {
+            try audio.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
+        }
         try audio.setPreferredSampleRate(48000)
         try audio.setActive(true)
         guard audio.isInputAvailable else { throw BJJError.invalid("No microphone is available. Check your audio connection and try again.") }
@@ -99,15 +133,31 @@ import UIKit
             observations.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
                 if note.name == AVAudioSession.interruptionNotification,
                    note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt != AVAudioSession.InterruptionType.began.rawValue { return }
-                Task { @MainActor in
-                    guard let self, self.recorder != nil else { return }
-                    self.stop(reason: "Recording stopped because the audio route or app state changed. Review the saved take before continuing.")
+                MainActor.assumeIsolated {
+                    guard let self, self.active else { return }
+                    // Handle on the delivery queue, without a deferred Task that could
+                    // apply an old setup notification to a later recording attempt.
+                    if note.name == AVAudioSession.routeChangeNotification {
+                        let audio = AVAudioSession.sharedInstance()
+                        guard !self.preparedRoute.isEmpty else { return }
+                        let reason = (note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? NSNumber)?.doubleValue ?? 0
+                        BJJDiagnostics.shared.record(.recordingState, operation: self.lifecycle.sessionID, phase: "routeObserved", capture: ["routeReason": reason, "sampleRate": audio.sampleRate])
+                        guard Self.routeDisrupted(expected: self.preparedRoute, current: self.routeSignature,
+                            inputAvailable: audio.isInputAvailable, categoryValid: audio.category == .playAndRecord,
+                            capturing: self.lifecycle.phase == .recording,
+                            expectedRate: self.preparedSampleRate, currentRate: audio.sampleRate) else { return }
+                        self.stop(reason: "The microphone connection changed. Check the input before trying again.", cause: .routeChanged)
+                    } else if note.name == UIApplication.didEnterBackgroundNotification {
+                        self.stop(reason: "Recording stopped when the app moved to the background.", cause: .backgrounded)
+                    } else {
+                        self.stop(reason: "Another audio session interrupted recording.", cause: .audioInterrupted)
+                    }
                 }
             })
         }
     }
     deinit { observations.forEach(NotificationCenter.default.removeObserver) }
-    func begin(project: BJJProject, store: BJJStore, player: AVPlayer) async throws {
+    func prepare(project: BJJProject, store: BJJStore, player: AVPlayer) async throws {
         let token = UUID().uuidString
         try lifecycle.begin(token)
         self.project = project; self.store = store; self.player = player
@@ -120,6 +170,8 @@ import UIKit
             guard permission else { throw BJJError.invalid("Allow microphone access in Settings to record narration.") }
             try store.checkSpace(required: Int64(min(86400, project.outputDuration + 3600) * 96000) + 100_000_000)
             try prepareInputRoute()
+            preparedRoute = routeSignature
+            preparedSampleRate = AVAudioSession.sharedInstance().sampleRate
             try lifecycle.advance(token, from: .preparing, to: .prepared)
             let path = try store.safeURL(project.id, "voiceover/\(UUID().uuidString.lowercased()).wav")
             url = path
@@ -127,6 +179,19 @@ import UIKit
                 AVSampleRateKey: 48000, AVNumberOfChannelsKey: 1, AVLinearPCMBitDepthKey: 16,
                 AVLinearPCMIsFloatKey: false, AVLinearPCMIsBigEndianKey: false])
             guard capture.prepareToRecord() else { throw BJJError.invalid("The microphone could not prepare a take.") }
+            recorder = capture
+            capture.isMeteringEnabled = true; capture.delegate = self
+            trace("prepared")
+        } catch {
+            if lifecycle.sessionID == token { reset(); if let url { try? FileManager.default.removeItem(at: url) }; url = nil }
+            throw error
+        }
+    }
+    func begin() async throws {
+        guard let token = lifecycle.sessionID, lifecycle.phase == .prepared,
+              let capture = recorder, let player, let project else { throw BJJError.cancelled }
+        do {
+            guard routeSignature == preparedRoute else { throw BJJError.invalid("The microphone connection changed before recording started.") }
             // Start capture only after the media clock actually advances, not at the button press.
             let position = player.currentTime().seconds
             guard position.isFinite, position < project.outputDuration - 0.2 else { throw BJJError.invalid("Move before the end of the video to record.") }
@@ -140,17 +205,50 @@ import UIKit
                 throw BJJError.invalid("Video playback did not start. Try recording again.")
             }
             guard capture.record() else { throw BJJError.invalid("The microphone could not start.") }
+            captureStarted = true
             start = max(0, player.currentTime().seconds - capture.currentTime)
-            capture.isMeteringEnabled = true; capture.delegate = self; recorder = capture
+            trace("starting")
+            let ready = try await Self.waitForMicrophone(isCurrent: { self.lifecycle.sessionID == token },
+                sample: { (capture.isRecording, capture.currentTime) })
+            start = max(0, (player.currentTime().seconds * 48000).rounded() / 48000 - capture.currentTime)
+            guard ready else {
+                stop(reason: "The microphone did not start in time. Check the audio connection and try again.", cause: .startupTimeout)
+                throw BJJError.cancelled
+            }
+            preparedSampleRate = AVAudioSession.sharedInstance().sampleRate
+            trace("capturing")
             try lifecycle.advance(token, from: .prepared, to: .recording)
             newHolds = []; pausedDuration = 0; pauseStart = nil; lastSpaceCheck = -5; peakPower = -160
             clockTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
                 Task { @MainActor in self?.checkClock() }
             }
         } catch {
-            if lifecycle.sessionID == token { reset(); if let url { try? FileManager.default.removeItem(at: url) }; url = nil }
+            if lifecycle.sessionID == token { stop(reason: error.localizedDescription, cause: .recorderFailed) }
             throw error
         }
+    }
+    static func routeDisrupted(expected: String, current: String, inputAvailable: Bool,
+        categoryValid: Bool, capturing: Bool, expectedRate: Double, currentRate: Double) -> Bool {
+        expected != current || !inputAvailable || !categoryValid || (capturing && expectedRate != currentRate)
+    }
+    /// The production startup loop accepts clock adapters for deterministic hardware-delay tests.
+    static func waitForMicrophone(isCurrent: () -> Bool, sample: () -> (Bool, Double),
+        now: () -> Double = { ProcessInfo.processInfo.systemUptime },
+        sleep: () async throws -> Void = { try await Task.sleep(nanoseconds: 10_000_000) }) async throws -> Bool {
+        var readiness = BJJMicrophoneReadiness()
+        let deadline = now() + 2
+        repeat {
+            guard isCurrent() else { throw BJJError.cancelled }
+            let value = sample()
+            if readiness.observe(isRecording: value.0, time: value.1) { return true }
+            try await sleep()
+        } while now() < deadline
+        return false
+    }
+    private func trace(_ phase: String) {
+        BJJDiagnostics.shared.record(.recordingState, operation: lifecycle.sessionID, phase: phase,
+            capture: ["playerSeconds": player?.currentTime().seconds ?? 0, "recorderSeconds": recorder?.currentTime ?? 0,
+                      "sampleRate": AVAudioSession.sharedInstance().sampleRate])
     }
     func checkClock() {
         guard lifecycle.phase == .recording, let player, let recorder else { return }
@@ -167,12 +265,16 @@ import UIKit
         }
         guard pauseStart == nil, !pausePreparing else { return }
         if abs(player.currentTime().seconds - start + pausedDuration - recorder.currentTime) > 0.2 {
-            stop(reason: "Video playback stalled. The take was stopped to protect its timing.")
+            stop(reason: "Recording stopped to keep narration in sync with the video.", cause: .clockDrift)
         }
     }
-    func stop(reason: String? = nil) {
+    func stop(reason: String? = nil, cause: BJJCaptureStopCause = .interrupted) {
         guard active else { return }
-        BJJDiagnostics.shared.record(.recordingStop, value: reason == nil ? 0 : 1)
+        let cause = reason == nil ? BJJCaptureStopCause.userStop : cause
+        trace(cause.rawValue)
+        BJJDiagnostics.shared.record(.recordingStop, operation: lifecycle.sessionID, phase: cause.rawValue, value: reason == nil ? 0 : 1)
+        let attempt = lifecycle.sessionID
+        let started = captureStarted
         let capture = recorder, path = url, document = project, storage = store
         let lastPower = level
         if lastPower.isFinite { peakPower = max(peakPower, lastPower) }
@@ -185,7 +287,11 @@ import UIKit
         let holds = newHolds
         capture?.delegate = nil; capture?.stop(); player?.pause()
         reset(); url = nil
-        guard let capture, let path, let document, let storage else { finished?(nil, nil, reason); return }
+        guard let capture, let path, let document, let storage else { finished?(BJJCaptureCompletion(clip: nil, error: nil, cause: cause, outcome: .noAudio, reason: reason)); return }
+        guard started else {
+            try? FileManager.default.removeItem(at: path)
+            finished?(BJJCaptureCompletion(clip: nil, error: nil, cause: cause, outcome: .noAudio, reason: reason)); return
+        }
         do {
             var audio = try AVAudioFile(forReading: path)
             if holds.isEmpty && !document.pauseAware {
@@ -195,8 +301,9 @@ import UIKit
                     audio = try AVAudioFile(forReading: path)
                 }
             }
+            BJJDiagnostics.shared.record(.recordingState, operation: attempt, phase: "completed", capture: ["frames": Double(audio.length)])
             let duration = Double(audio.length) / audio.fileFormat.sampleRate
-            guard duration >= 0.05 else { try? FileManager.default.removeItem(at: path); finished?(nil, nil, "The take was too short to save."); return }
+            guard duration >= 0.05 else { try? FileManager.default.removeItem(at: path); finished?(BJJCaptureCompletion(clip: nil, error: nil, cause: cause, outcome: .noAudio, reason: reason)); return }
             let id = path.deletingPathExtension().lastPathComponent
             if holds.isEmpty && !document.pauseAware {
                 let length = min(duration, document.duration - startSec)
@@ -204,7 +311,7 @@ import UIKit
                     "durationSec": length, "endSec": startSec + length, "gain": 1.0, "muted": false,
                     "timingOffsetMs": 0.0, "recordedAt": BJJProject.now(), "codec": "pcm_s16le",
                     "sampleRate": Int(audio.fileFormat.sampleRate), "channels": Int(audio.fileFormat.channelCount)]
-                try storage.registerClip(document.id, clip: clip); finished?(clip, nil, reason)
+                try storage.registerClip(document.id, clip: clip); finished?(BJJCaptureCompletion(clip: clip, error: nil, cause: cause, outcome: .saved, reason: reason))
             } else {
                 let ordered = (document.reviewTimeline.holds + holds).enumerated().sorted {
                     $0.element.n("sourceTicks") == $1.element.n("sourceTicks") ? $0.offset < $1.offset : $0.element.n("sourceTicks") < $1.element.n("sourceTicks")
@@ -217,10 +324,10 @@ import UIKit
                 let receipt: BJJJSON = ["kind": "review-narration-v1", "operationId": UUID().uuidString.lowercased(),
                     "baseRevision": document.revision, "baseProject": document.json, "take": take, "holds": holds]
                 try storage.registerReviewReceipt(document.id, receipt: receipt)
-                finished?(receipt, nil, reason)
+                finished?(BJJCaptureCompletion(clip: receipt, error: nil, cause: cause, outcome: .saved, reason: reason))
             }
             _ = capture // retain until the file has closed and its metadata was read
-        } catch { finished?(nil, error, "The take could not be committed. Its audio file was preserved.") }
+        } catch { finished?(BJJCaptureCompletion(clip: nil, error: error, cause: cause, outcome: .preservedFailure, reason: "The take could not be committed. Its audio file was preserved.")) }
     }
     /// A delayed source-end callback may capture a few extra microphone samples.
     /// Trim only an ordinary, unregistered take; pause-aware takes retain every
@@ -245,7 +352,7 @@ import UIKit
     private func reset() {
         clockTimer?.invalidate(); clockTimer = nil; pauseStart = nil; pausePreparing = false
         recorder?.delegate = nil; recorder?.stop(); recorder = nil; player?.pause()
-        lifecycle.reset()
+        lifecycle.reset(); captureStarted = false; preparedRoute = ""
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
         try? AVAudioSession.sharedInstance().setActive(true)
     }

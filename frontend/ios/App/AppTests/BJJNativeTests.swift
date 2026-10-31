@@ -1917,6 +1917,47 @@ import UniformTypeIdentifiers
              "annotations": [annotation()], "voiceovers": [BJJJSON]()])
         return try store.save(result, creating: true)
     }
+    func testRecordingRoutePolicyKeepsSetupButStopsRealConfigurationLoss() {
+        XCTAssertFalse(BJJNativeRecording.routeDisrupted(expected: "headset", current: "headset", inputAvailable: true,
+            categoryValid: true, capturing: false, expectedRate: 48000, currentRate: 24000))
+        XCTAssertFalse(BJJNativeRecording.routeDisrupted(expected: "headset", current: "headset", inputAvailable: true,
+            categoryValid: true, capturing: true, expectedRate: 24000, currentRate: 24000))
+        XCTAssertTrue(BJJNativeRecording.routeDisrupted(expected: "headset", current: "speaker", inputAvailable: true,
+            categoryValid: true, capturing: true, expectedRate: 24000, currentRate: 24000))
+        XCTAssertTrue(BJJNativeRecording.routeDisrupted(expected: "headset", current: "headset", inputAvailable: false,
+            categoryValid: true, capturing: true, expectedRate: 24000, currentRate: 24000))
+        XCTAssertTrue(BJJNativeRecording.routeDisrupted(expected: "headset", current: "headset", inputAvailable: true,
+            categoryValid: true, capturing: true, expectedRate: 24000, currentRate: 48000))
+    }
+
+    func testMicrophoneStartupWaitsForRealClockAndCancelsStaleAttempt() async throws {
+        for delay in [0.0, 0.7, 1.5] {
+            var clock = 0.0
+            let ready = try await BJJNativeRecording.waitForMicrophone(isCurrent: { true },
+                sample: { (true, max(0, clock - delay)) }, now: { clock }, sleep: { clock += 0.01 })
+            XCTAssertTrue(ready)
+            XCTAssertGreaterThan(clock, delay)
+            XCTAssertLessThan(clock, delay + 0.04)
+        }
+        var clock = 0.0
+        let failed = try await BJJNativeRecording.waitForMicrophone(isCurrent: { true },
+            sample: { (true, 0) }, now: { clock }, sleep: { clock += 0.01 })
+        XCTAssertFalse(failed); XCTAssertGreaterThanOrEqual(clock, 2)
+        clock = 0
+        do {
+            _ = try await BJJNativeRecording.waitForMicrophone(isCurrent: { clock < 0.1 },
+                sample: { (false, 0) }, now: { clock }, sleep: { clock += 0.01 })
+            XCTFail("Cancelled startup must not reach capturing")
+        } catch { XCTAssertEqual((error as? BJJError)?.code, "CANCELLED") }
+        let result = BJJCaptureCompletion(clip: nil, error: nil, cause: .routeChanged, outcome: .noAudio, reason: "The microphone connection changed.")
+        XCTAssertEqual(result.message, "The microphone connection changed. No narration was saved.")
+        var readiness = BJJMicrophoneReadiness()
+        XCTAssertFalse(readiness.observe(isRecording: true, time: .nan))
+        XCTAssertFalse(readiness.observe(isRecording: true, time: 0.01))
+        XCTAssertFalse(readiness.observe(isRecording: true, time: 0.01))
+        XCTAssertTrue(readiness.observe(isRecording: true, time: 0.02), "No amplitude threshold: valid quiet capture must start")
+    }
+
     func testRecordingLifecycleFencesCancelledPermissionAndStaleCalls() throws {
         var state = BJJRecordingLifecycle()
         try state.begin("first")
