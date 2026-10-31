@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.1.6] - 2026-10-31
+
+- Prepare Bluetooth recording before countdown and confirm the microphone clock before announcing capture.
+- Keep expected setup notifications from interrupting takes; preserve the cause when no audio was captured.
+- Add bounded capture-clock diagnostics for device acceptance.
+
 ## [2.1.5] - 2026-10-30
 
 - Show narration-pause frame references, duration and all takes sharing each pause.

@@ -285,13 +285,14 @@ enum BJJRecordingPresentation: Equatable {
             let exports = (try? service.listExports(id)) ?? []
             retryExportID = exports.first { ["failed", "cancelled"].contains($0["status"] as? String ?? "") }?["jobId"] as? String
         }
-        capture.finished = { [weak self] clip, failure, reason in
+        capture.finished = { [weak self] result in
+            let clip = result.clip, failure = result.error, reason = result.message
             guard let self else { return }
             self.recordingRequest = nil
-            self.recordingInterruption = reason
+            self.recordingInterruption = result.interrupted ? reason : nil
             self.recordingPresentation = .saving
             self.recording = false; self.recordingVideoPaused = false; self.playing = false
-            if let failure { self.recordingPresentation = .interrupted; self.error = failure.localizedDescription; return }
+            if let failure { self.recordingPresentation = .interrupted; self.error = reason ?? failure.localizedDescription; return }
             if let clip {
                 do {
                     var json = self.project.json
@@ -319,7 +320,7 @@ enum BJJRecordingPresentation: Equatable {
                     self.recordingPresentation = .interrupted
                     self.error = "The audio was preserved, but the review could not save. Reopen it to recover the take. \(error.localizedDescription)"
                 }
-            } else { self.notice = reason; self.recordingPresentation = reason == nil ? .idle : .interrupted }
+            } else { self.notice = reason; self.recordingPresentation = result.interrupted ? .interrupted : .idle }
         }
         capture.meterChanged = { [weak self] value in
             guard let self else { return }
@@ -542,9 +543,9 @@ enum BJJRecordingPresentation: Equatable {
         recordingInterruption = nil; notice = nil
         BJJDiagnostics.shared.record(.recordingStart)
         do {
-            try await capture.requestPermission()
+            try await capture.prepare(project: project, store: store, player: player)
             guard recordingRequest == request, !closed, recording else { return }
-            try capture.prepareInputRoute(); audioRoute = capture.route
+            audioRoute = capture.route
             let route = capture.routeSignature
             if countdown > 0 {
                 for remaining in stride(from: min(3, countdown), through: 1, by: -1) {
@@ -557,12 +558,13 @@ enum BJJRecordingPresentation: Equatable {
                 throw BJJError.invalid("The microphone connection changed. Tap Record to check the new input before starting.")
             }
             recordingPresentation = .preparing
-            try await capture.begin(project: project, store: store, player: player)
+            try await capture.begin()
             guard recordingRequest == request, !closed, recording else { return }
             preferences?.set(capture.routeSignature, forKey: "native-recording.acknowledged-route")
             audioRoute = capture.route; recordingPresentation = .capturing; playing = true
         } catch {
             guard recordingRequest == request else { return }
+            capture.stop(reason: "Recording could not start. Check the microphone connection.", cause: .recorderFailed)
             recordingRequest = nil; recording = false; pause(); capture.restorePlaybackRoute()
             recordingPresentation = .interrupted
             BJJDiagnostics.shared.record(.recordingError, error: error)
