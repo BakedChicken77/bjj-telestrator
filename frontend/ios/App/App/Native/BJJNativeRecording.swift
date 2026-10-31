@@ -139,7 +139,7 @@ struct BJJCaptureCompletion {
                     // apply an old setup notification to a later recording attempt.
                     if note.name == AVAudioSession.routeChangeNotification {
                         let audio = AVAudioSession.sharedInstance()
-                        guard !self.preparedRoute.isEmpty else { return }
+                        guard self.lifecycle.phase != .preparing, !self.preparedRoute.isEmpty else { return }
                         let reason = (note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? NSNumber)?.doubleValue ?? 0
                         BJJDiagnostics.shared.record(.recordingState, operation: self.lifecycle.sessionID, phase: "routeObserved", capture: ["routeReason": reason, "sampleRate": audio.sampleRate])
                         guard Self.routeDisrupted(expected: self.preparedRoute, current: self.routeSignature,
@@ -170,15 +170,16 @@ struct BJJCaptureCompletion {
             guard permission else { throw BJJError.invalid("Allow microphone access in Settings to record narration.") }
             try store.checkSpace(required: Int64(min(86400, project.outputDuration + 3600) * 96000) + 100_000_000)
             try prepareInputRoute()
-            preparedRoute = routeSignature
-            preparedSampleRate = AVAudioSession.sharedInstance().sampleRate
-            try lifecycle.advance(token, from: .preparing, to: .prepared)
             let path = try store.safeURL(project.id, "voiceover/\(UUID().uuidString.lowercased()).wav")
             url = path
             let capture = try AVAudioRecorder(url: path, settings: [AVFormatIDKey: kAudioFormatLinearPCM,
                 AVSampleRateKey: 48000, AVNumberOfChannelsKey: 1, AVLinearPCMBitDepthKey: 16,
                 AVLinearPCMIsFloatKey: false, AVLinearPCMIsBigEndianKey: false])
             guard capture.prepareToRecord() else { throw BJJError.invalid("The microphone could not prepare a take.") }
+            guard lifecycle.sessionID == token else { throw BJJError.cancelled }
+            preparedRoute = routeSignature
+            preparedSampleRate = AVAudioSession.sharedInstance().sampleRate
+            try lifecycle.advance(token, from: .preparing, to: .prepared)
             recorder = capture
             capture.isMeteringEnabled = true; capture.delegate = self
             trace("prepared")
