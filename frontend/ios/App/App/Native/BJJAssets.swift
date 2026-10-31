@@ -49,7 +49,7 @@ final class BJJDiagnostics: @unchecked Sendable {
         if let phase, ["unknown", "active", "foreground_inactive", "background", "waiting_for_photos", "queued", "running", "failed", "completed", "cancelled", "copying", "inspecting", "preparing_preview", "validating", "ready", "backup", "restore", "import", "repair", "preview_source", "preview_audio_tracks", "preview_video_holds", "preview_audio_mix", "preview_audio_attach", "routeObserved", "prepared", "starting", "capturing", "userStop", "routeChanged", "audioInterrupted", "backgrounded", "startupTimeout", "clockDrift", "recorderFailed", "interrupted"].contains(phase) { row["phase"] = phase }
         if let value, value.isFinite { row["value"] = value }
         if let capture {
-            let allowed = ["playerSeconds", "recorderSeconds", "sampleRate", "frames", "routeReason"]
+            let allowed = ["playerSeconds", "recorderSeconds", "sampleRate", "frames", "routeReason", "inputChannels", "inputPort", "outputPort", "playAndRecord"]
             row["capture"] = capture.filter { allowed.contains($0.key) && $0.value.isFinite && abs($0.value) <= 10_000_000 }
         }
         if let error { row["errors"] = Self.errors(error) }

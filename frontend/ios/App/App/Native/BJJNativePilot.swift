@@ -292,7 +292,7 @@ enum BJJRecordingPresentation: Equatable {
             self.recordingInterruption = reason
             self.recordingPresentation = .saving
             self.recording = false; self.recordingVideoPaused = false; self.playing = false
-            if let failure { self.recordingPresentation = .interrupted; self.error = failure.localizedDescription; return }
+            if let failure { self.recordingPresentation = .interrupted; self.error = reason ?? failure.localizedDescription; return }
             if let clip {
                 do {
                     var json = self.project.json

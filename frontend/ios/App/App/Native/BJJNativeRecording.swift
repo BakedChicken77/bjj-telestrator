@@ -247,9 +247,24 @@ struct BJJCaptureCompletion {
         return false
     }
     private func trace(_ phase: String) {
+        let audio = AVAudioSession.sharedInstance()
+        func port(_ type: AVAudioSession.Port?) -> Double {
+            switch type {
+            case .builtInMic, .builtInSpeaker, .builtInReceiver: return 1
+            case .bluetoothHFP: return 2
+            case .headsetMic, .headphones: return 3
+            case .usbAudio: return 4
+            case .bluetoothA2DP: return 5
+            case .bluetoothLE: return 6
+            default: return 0
+            }
+        }
         BJJDiagnostics.shared.record(.recordingState, operation: lifecycle.sessionID, phase: phase,
             capture: ["playerSeconds": player?.currentTime().seconds ?? 0, "recorderSeconds": recorder?.currentTime ?? 0,
-                      "sampleRate": AVAudioSession.sharedInstance().sampleRate])
+                      "sampleRate": audio.sampleRate, "inputChannels": Double(audio.inputNumberOfChannels),
+                      "inputPort": port(audio.currentRoute.inputs.first?.portType),
+                      "outputPort": port(audio.currentRoute.outputs.first?.portType),
+                      "playAndRecord": audio.category == .playAndRecord ? 1 : 0])
     }
     func checkClock() {
         guard lifecycle.phase == .recording, let player, let recorder else { return }
