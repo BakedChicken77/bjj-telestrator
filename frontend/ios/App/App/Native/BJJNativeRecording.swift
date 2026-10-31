@@ -370,6 +370,7 @@ struct BJJCaptureCompletion {
         clockTimer?.invalidate(); clockTimer = nil; pauseStart = nil; pausePreparing = false
         recorder?.delegate = nil; recorder?.stop(); recorder = nil; player?.pause()
         lifecycle.reset(); captureStarted = false; preparedRoute = ""
+        newHolds = []; pausedDuration = 0; start = 0; peakPower = -160
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
         try? AVAudioSession.sharedInstance().setActive(true)
     }
