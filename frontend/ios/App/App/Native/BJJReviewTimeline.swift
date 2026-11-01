@@ -144,11 +144,13 @@ struct BJJReviewTimeline {
                 guard let sample = pictureSample() else { throw reader.error ?? BJJError.invalid("The paused frame is unavailable.") }
                 let first = CMSampleBufferGetPresentationTimeStamp(sample)
                 var nextPTS: CMTime?
-                // Decoder preroll/repeated timestamps are not a frame boundary.
-                // Keep reading until a strictly later picture or real EOF.
+                // The reader can emit the requested nanosecond PTS and then the
+                // same picture on the track clock. Their rational timestamps
+                // compare unequal, but subtract to zero after CMTime rounding.
+                // Keep reading through these duplicates to a real next picture.
                 while let next = pictureSample() {
                     let time = CMSampleBufferGetPresentationTimeStamp(next)
-                    if time.isNumeric, CMTimeCompare(time, first) > 0 { nextPTS = time; break }
+                    if Self.isLaterPicture(time, than: first) { nextPTS = time; break }
                 }
                 if cancelled() { throw BJJError.cancelled }
                 if reader.status == .failed { throw reader.error ?? BJJError.invalid("Cannot decode the paused frame.") }
@@ -163,6 +165,13 @@ struct BJJReviewTimeline {
             }
         }
     }
+    /// The saved PTS is reconstructed at nanosecond precision above. Differences
+    /// within that precision are the same boundary, not a separate video frame.
+    static func isLaterPicture(_ candidate: CMTime, than first: CMTime) -> Bool {
+        guard first.isNumeric, candidate.isNumeric, candidate.epoch == first.epoch else { return false }
+        let difference = CMTimeSubtract(candidate, first)
+        return difference.isNumeric && difference.seconds > 0.000000001
+    }
     /// Use observed picture boundaries, not nominal FPS or a trimmed output
     /// duration. A final picture lasts only to the validated track end.
     static func pausedFrameRange(first: CMTime, next: CMTime?, sampleDuration: CMTime,
@@ -173,9 +182,9 @@ struct BJJReviewTimeline {
             throw BJJError.domain("MEDIA_PAUSED_FRAME_INVALID", "The paused frame is outside the video. Your review and narration were preserved.")
         }
         let boundary: CMTime
-        if let next, next.isNumeric, CMTimeCompare(next, first) > 0 {
+        if let next, Self.isLaterPicture(next, than: first) {
             boundary = CMTimeMinimum(next, end)
-        } else if sampleDuration.isNumeric, sampleDuration.seconds > 0 {
+        } else if sampleDuration.isNumeric, sampleDuration.seconds > 0.000000001 {
             boundary = CMTimeMinimum(CMTimeAdd(first, sampleDuration), end)
         } else { boundary = end }
         let duration = CMTimeSubtract(boundary, first)

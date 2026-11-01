@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.1.7] - 2026-11-01
+
+- Treat rounded duplicate video timestamps as one frame when rebuilding narration pauses.
+- Restore playback and export of saved reviews affected by a zero-length paused-frame range.
+
 ## [2.1.6] - 2026-10-31
 
 - Prepare Bluetooth recording before countdown and confirm the microphone clock before announcing capture.
