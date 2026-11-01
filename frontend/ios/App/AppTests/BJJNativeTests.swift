@@ -395,6 +395,22 @@ import UniformTypeIdentifiers
             sampleDuration: CMTime(value: 1, timescale: 30), range: range)
         XCTAssertEqual(frame.duration.seconds, 1 / 30.0, accuracy: 0.0000001)
     }
+    func testPausedFrameBoundaryToleranceRetainsRealFrames() throws {
+        let first = CMTime(value: 1_833_333_333, timescale: 1_000_000_000)
+        for duplicate in [first, CMTime(value: 1100, timescale: 600),
+                          CMTime(value: 1_833_333_334, timescale: 1_000_000_000), .invalid] {
+            XCTAssertFalse(BJJReviewTimeline.isLaterPicture(duplicate, than: first))
+        }
+        let next = CMTime(value: 224, timescale: 120) // 1/30 second later
+        XCTAssertTrue(BJJReviewTimeline.isLaterPicture(next, than: first))
+        XCTAssertTrue(BJJReviewTimeline.isLaterPicture(CMTimeAdd(first, CMTime(value: 1, timescale: 240)), than: first))
+        XCTAssertFalse(BJJReviewTimeline.isLaterPicture(CMTime(value: 2, timescale: 1, flags: .valid, epoch: 1), than: first))
+        let end = CMTime(value: 56, timescale: 30)
+        let range = CMTimeRange(start: .zero, end: end)
+        let finalFrame = try BJJReviewTimeline.pausedFrameRange(first: first, next: nil,
+            sampleDuration: CMTime(value: 1, timescale: 1_000_000_000), range: range)
+        XCTAssertEqual(CMTimeRangeGetEnd(finalFrame).seconds, end.seconds, accuracy: 0.000000001)
+    }
     func testSavedNarrationWithFractionalFramePauseCanReopenPreviewAndExport() async throws {
         executionTimeAllowance = 300
         let original = try await sourceVideo(audio: true, moving: true)
