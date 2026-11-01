@@ -382,6 +382,59 @@ import UniformTypeIdentifiers
             XCTAssertThrowsError(try BJJReviewTimeline.pausedFrameRange(first: first, next: nil, sampleDuration: .invalid, range: range))
         }
     }
+    func testPausedFrameIgnoresRoundedDuplicateTimestamp() throws {
+        // A saved Double is requested on a nanosecond clock; the decoder can
+        // return that clipped PTS followed by the same picture on its own clock.
+        // 55/30 seconds is 1/3 ns later than 1_833_333_333/1_000_000_000.
+        let first = CMTime(value: 1_833_333_333, timescale: 1_000_000_000)
+        let duplicate = CMTime(value: 1100, timescale: 600)
+        let difference = CMTimeSubtract(duplicate, first)
+        print("Rounded pause PTS: first=\(first), next=\(duplicate), difference=\(difference)")
+        let range = CMTimeRange(start: .zero, duration: CMTime(value: 4, timescale: 1))
+        let frame = try BJJReviewTimeline.pausedFrameRange(first: first, next: duplicate,
+            sampleDuration: CMTime(value: 1, timescale: 30), range: range)
+        XCTAssertEqual(frame.duration.seconds, 1 / 30.0, accuracy: 0.0000001)
+    }
+    func testSavedNarrationWithFractionalFramePauseCanReopenPreviewAndExport() async throws {
+        executionTimeAllowance = 300
+        let original = try await sourceVideo(audio: true, moving: true)
+        let initial = try await BJJService(store: store).importFile(original, originalName: "fractional-pause.mp4")
+        let originalHash = try BJJAssets.digest(original)
+        let hold: BJJJSON = ["id": UUID().uuidString.lowercased(), "sourceTicks": 88416,
+            "durationTicks": 69539, "frozenPTS": 55 / 30.0, "frameResolved": true]
+        let timeline = BJJReviewTimeline(sourceDuration: initial.duration, holds: [hold])
+        let id = UUID().uuidString.lowercased(), reference = "voiceover/\(id).wav"
+        let wave = try store.safeURL(initial.id, reference)
+        try tone(wave, frequency: 880, duration: 188052 / 48000.0, pcm16: true)
+        let count = try AVAudioFile(forReading: wave).length
+        let duration = Double(count) / 48000
+        let take: BJJJSON = ["id": id, "asset": reference, "durationSec": duration, "sampleCount": count,
+            "gain": 1.0, "muted": false, "recordedAt": BJJProject.now(), "codec": "pcm_s16le", "sampleRate": 48000,
+            "channels": 1, "placements": timeline.placements(start: 0, duration: duration)]
+        try store.registerReviewReceipt(initial.id, receipt: ["kind": "review-narration-v1",
+            "operationId": UUID().uuidString.lowercased(), "baseRevision": initial.revision, "take": take, "holds": [hold]])
+        let reopened = try BJJStore(root: root).loadRecoveringRecordings(initial.id)
+        let waveHash = try BJJAssets.digest(wave)
+        let editor = try BJJNativeEditorSession(project: reopened, store: store, preferences: nil)
+        defer { editor.close() }
+        await editor.prepareAudio()
+        XCTAssertFalse(editor.audioPreviewFailed, editor.error ?? "Playback must prepare the saved paused take")
+        let media = try await BJJMedia.inspect(original, reference: initial.source.s("asset"), originalName: "fractional-pause.mp4")
+        let movie = root.appendingPathComponent("fractional-pause-export.mp4")
+        try await BJJRenderer().render(media: media, project: reopened, store: store, output: movie) { _ in }
+        let result = try await BJJMedia.inspect(movie, reference: "exports/test.mp4", originalName: "test.mp4")
+        XCTAssertEqual(result.videoRange.duration.seconds, timeline.duration, accuracy: 1 / 30.0)
+        let span = try XCTUnwrap(timeline.spans.first(where: { $0.hold != nil }))
+        let frames = try decodedTimingFrames(result).filter { $0.time > span.output + 0.1 && $0.time < span.end - 0.1 }
+        XCTAssertGreaterThan(frames.count, 20)
+        let first = try XCTUnwrap(frames.first)
+        XCTAssertTrue(frames.allSatisfy { abs($0.rgb[2] - first.rgb[2]) < 5 }, "A pause must repeat one frame")
+        let energy = try await audioEnergy(movie, from: span.output + 0.1, to: span.end - 0.1)
+        XCTAssertGreaterThan(energy, 0.05)
+        XCTAssertEqual(try BJJAssets.digest(original), originalHash)
+        XCTAssertEqual(try BJJAssets.digest(wave), waveHash)
+        XCTAssertEqual(try store.load(initial.id).revision, reopened.revision)
+    }
     func testSecondNarrationAcrossExistingLongHoldAndNewFractionalHold() async throws {
         executionTimeAllowance = 300
         // Synthetic media, with the timing topology from the reported 41.1 failure.
